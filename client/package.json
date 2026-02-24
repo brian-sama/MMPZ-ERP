@@ -1,0 +1,30 @@
+{
+    "version": "0.0.0",
+    "name": "mmpz-client",
+    "scripts": {
+        "preview": "vite preview",
+        "build": "vite build",
+        "dev": "vite --strictPort"
+    },
+    "type": "module",
+    "dependencies": {
+        "axios": "^1.5.0",
+        "framer-motion": "^12.26.2",
+        "localforage": "^1.10.0",
+        "lucide-react": "^0.563.0",
+        "react": "^18.2.0",
+        "react-dom": "^18.2.0",
+        "recharts": "^3.6.0",
+        "vite-plugin-pwa": "^1.2.0",
+        "workbox-window": "^7.4.0"
+    },
+    "devDependencies": {
+        "@types/react": "^18.2.15",
+        "@types/react-dom": "^18.2.7",
+        "@vitejs/plugin-react": "^4.0.3",
+        "autoprefixer": "^10.4.23",
+        "postcss": "^8.5.6",
+        "tailwindcss": "^3.4.1",
+        "vite": "^4.4.5"
+    }
+}

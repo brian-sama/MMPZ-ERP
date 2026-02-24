@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment variables (USE WITH CAUTION - Netlify Dashboard is preferred)
+.env
+.env.local
+.env.production
+
+# Build output
+client/dist/
+.netlify/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*

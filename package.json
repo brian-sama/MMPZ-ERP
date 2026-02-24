@@ -1,0 +1,24 @@
+{
+    "name": "mmpz-system-root",
+    "version": "1.0.0",
+    "description": "MMPZ System with unified development environment",
+    "type": "module",
+    "scripts": {
+        "start": "node server.js",
+        "client": "cd client && npm run dev",
+        "build": "cd client && npm run build",
+        "dev": "concurrently \"npm run client\" \"netlify dev\" --names \"VITE,NETLIFY\" --prefix-colors \"magenta,cyan\""
+    },
+    "devDependencies": {
+        "concurrently": "^8.2.2",
+        "netlify-cli": "^23.13.0"
+    },
+    "dependencies": {
+        "postgres": "^3.4.3",
+        "axios": "^1.6.2",
+        "bcryptjs": "^3.0.3",
+        "cors": "^2.8.6",
+        "dotenv": "^17.2.3",
+        "express": "^5.2.1"
+    }
+}

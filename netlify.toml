@@ -1,0 +1,165 @@
+[build]
+  command = "npm install && cd client && npm install && npm run build"
+  publish = "client/dist"
+  functions = "netlify/functions"
+
+[dev]
+  # command = "npm run dev --prefix client" # Run manually in separate terminal
+  targetPort = 5173
+  port = 8888
+  autoLaunch = false
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["netlify/functions/utils/**"]
+  
+# Redirect API calls to Netlify Functions
+
+# Health check
+[[redirects]]
+  from = "/api/health"
+  to = "/.netlify/functions/health"
+  status = 200
+
+[[redirects]]
+  from = "/api/login"
+  to = "/.netlify/functions/login"
+  status = 200
+
+# Indicators
+[[redirects]]
+  from = "/api/indicators"
+  to = "/.netlify/functions/indicators"
+  status = 200
+
+[[redirects]]
+  from = "/api/indicators/:id"
+  to = "/.netlify/functions/indicators"
+  status = 200
+
+[[redirects]]
+  from = "/api/indicators/:id/complete"
+  to = "/.netlify/functions/indicators"
+  status = 200
+
+# Activities
+[[redirects]]
+  from = "/api/activities"
+  to = "/.netlify/functions/activities"
+  status = 200
+
+[[redirects]]
+  from = "/api/activities/:id"
+  to = "/.netlify/functions/activities"
+  status = 200
+
+[[redirects]]
+  from = "/api/indicators/:id/activities"
+  to = "/.netlify/functions/activities"
+  status = 200
+
+# Users
+[[redirects]]
+  from = "/api/users"
+  to = "/.netlify/functions/users"
+  status = 200
+
+[[redirects]]
+  from = "/api/users/:id"
+  to = "/.netlify/functions/users"
+  status = 200
+
+[[redirects]]
+  from = "/api/users/:id/role"
+  to = "/.netlify/functions/users"
+  status = 200
+
+# Progress Updates
+[[redirects]]
+  from = "/api/indicators/:id/progress"
+  to = "/.netlify/functions/progress"
+  status = 200
+
+[[redirects]]
+  from = "/api/progress-updates"
+  to = "/.netlify/functions/progress"
+  status = 200
+
+[[redirects]]
+  from = "/api/approvals/pending"
+  to = "/.netlify/functions/approvals"
+  status = 200
+
+[[redirects]]
+  from = "/api/progress/:id/approve"
+  to = "/.netlify/functions/approvals"
+  status = 200
+
+# Notifications
+[[redirects]]
+  from = "/api/notifications"
+  to = "/.netlify/functions/notifications"
+  status = 200
+
+[[redirects]]
+  from = "/api/notifications/mark-all-read"
+  to = "/.netlify/functions/notifications"
+  status = 200
+
+[[redirects]]
+  from = "/api/notifications/:id/read"
+  to = "/.netlify/functions/notifications"
+  status = 200
+
+# KoboToolbox Integration
+[[redirects]]
+  from = "/api/kobo/config"
+  to = "/.netlify/functions/kobo-config"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/disconnect"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/forms"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/link"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/links"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/link/:id"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/sync/:id"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+[[redirects]]
+  from = "/api/kobo/sync-all"
+  to = "/.netlify/functions/kobo-actions"
+  status = 200
+
+# Catch-all for other API routes
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# SPA fallback
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
