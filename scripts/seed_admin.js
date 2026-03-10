@@ -16,7 +16,7 @@ async function seedAdmin() {
     const name = 'Brian Magagula';
     const email = 'brianmagagula5@gmail.com';
     const password = 'Brian7350$@#';
-    const role = 'admin';
+    const roleCode = 'DIRECTOR';
 
     try {
         console.log(`Checking if user ${email} exists...`);
@@ -25,20 +25,41 @@ async function seedAdmin() {
         const password_hash = await bcrypt.hash(password, 10);
 
         if (existing.length > 0) {
-            console.log(`User ${email} already exists. Updating password and role to admin...`);
+            console.log(`User ${email} already exists. Updating password and role to Director...`);
             await sql`
                 UPDATE users 
-                SET password_hash = ${password_hash}, role = ${role}, require_password_reset = false 
+                SET
+                    password_hash = ${password_hash},
+                    role_code = ${roleCode},
+                    role_assignment_status = 'confirmed',
+                    role_confirmed_at = CURRENT_TIMESTAMP,
+                    require_password_reset = false 
                 WHERE email = ${email}
             `;
-            console.log('Admin account updated successfully.');
+            console.log('Super admin account updated successfully.');
         } else {
             console.log(`Creating admin account ${email}...`);
             await sql`
-                INSERT INTO users (name, email, password_hash, role, require_password_reset)
-                VALUES (${name}, ${email}, ${password_hash}, ${role}, false)
+                INSERT INTO users (
+                    name,
+                    email,
+                    password_hash,
+                    role_code,
+                    role_assignment_status,
+                    role_confirmed_at,
+                    require_password_reset
+                )
+                VALUES (
+                    ${name},
+                    ${email},
+                    ${password_hash},
+                    ${roleCode},
+                    'confirmed',
+                    CURRENT_TIMESTAMP,
+                    false
+                )
             `;
-            console.log('Admin account created successfully.');
+            console.log('Super admin account created successfully.');
         }
     } catch (error) {
         console.error('Error seeding admin:', error);

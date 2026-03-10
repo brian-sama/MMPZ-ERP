@@ -21,7 +21,7 @@ const Approvals = ({ user }) => {
     const fetchApprovals = async () => {
         try {
             const res = await axios.get(`${API_BASE}/approvals`, {
-                params: { role: user.role }
+                params: { role: user.role, userId: user.id }
             });
             // Handle both legacy array (if backend not deployed yet) and new object
             if (Array.isArray(res.data)) {

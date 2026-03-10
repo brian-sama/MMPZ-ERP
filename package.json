@@ -5,13 +5,20 @@
     "type": "module",
     "scripts": {
         "start": "node server.js",
+        "api": "node server.js",
         "client": "cd client && npm run dev",
         "build": "cd client && npm run build",
-        "dev": "concurrently \"npm run client\" \"netlify dev\" --names \"VITE,NETLIFY\" --prefix-colors \"magenta,cyan\""
+        "dev": "npm run db:dev && concurrently --kill-others-on-fail \"npm run api\" \"npm run client\" --names \"API,VITE\" --prefix-colors \"cyan,magenta\"",
+        "dev:app": "concurrently --kill-others-on-fail \"npm run api\" \"npm run client\" --names \"API,VITE\" --prefix-colors \"cyan,magenta\"",
+        "db:dev": "node scripts/db_ensure.js",
+        "db:up": "node scripts/docker_compose.js up -d",
+        "db:down": "node scripts/docker_compose.js down",
+        "db:migrate": "node scripts/db_migrate.js",
+        "db:seed": "node scripts/db_seed.js",
+        "db:reset": "node scripts/db_reset.js"
     },
     "devDependencies": {
-        "concurrently": "^8.2.2",
-        "netlify-cli": "^23.13.0"
+        "concurrently": "^8.2.2"
     },
     "dependencies": {
         "postgres": "^3.4.3",

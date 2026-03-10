@@ -4,87 +4,146 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { netlifyToExpress } from './netlify-adapter.js';
+import { functionToExpress } from './server/function-adapter.js';
 
-// Import Netlify Functions
-import { handler as indicatorsHandler } from './netlify/functions/indicators.js';
-import { handler as activitiesHandler } from './netlify/functions/activities.js';
-import { handler as approvalsHandler } from './netlify/functions/approvals.js';
-import { handler as notificationsHandler } from './netlify/functions/notifications.js';
-import { handler as usersHandler } from './netlify/functions/users.js';
-import { handler as loginHandler } from './netlify/functions/login.js';
-import { handler as koboConfigHandler } from './netlify/functions/kobo-config.js';
-import { handler as koboActionsHandler } from './netlify/functions/kobo-actions.js';
-import { handler as progressHandler } from './netlify/functions/progress.js';
-import { handler as volunteerHandler } from './netlify/functions/volunteer.js';
+// API handlers
+import { handler as healthHandler } from './server/api/health.js';
+import { handler as loginHandler } from './server/api/login.js';
+import { handler as indicatorsHandler } from './server/api/indicators.js';
+import { handler as activitiesHandler } from './server/api/activities.js';
+import { handler as progressHandler } from './server/api/progress.js';
+import { handler as approvalsHandler } from './server/api/approvals.js';
+import { handler as notificationsHandler } from './server/api/notifications.js';
+import { handler as usersHandler } from './server/api/users.js';
+import { handler as volunteerHandler } from './server/api/volunteer.js';
+import { handler as koboConfigHandler } from './server/api/kobo-config.js';
+import { handler as koboActionsHandler } from './server/api/kobo-actions.js';
+import { handler as rolesHandler } from './server/api/roles.js';
+import { handler as pendingRoleAssignmentsHandler } from './server/api/governance-pending-role-assignments.js';
+import { handler as financeThresholdHandler } from './server/api/settings-finance-threshold.js';
+import { handler as programsHandler } from './server/api/programs.js';
+import { handler as projectsHandler } from './server/api/projects.js';
+import { handler as expensesHandler } from './server/api/expenses.js';
+import { handler as governanceApprovalsHandler } from './server/api/governance-approvals.js';
+import { handler as reportsHandler } from './server/api/reports.js';
+import { handler as dashboardHandler } from './server/api/dashboard.js';
+import { handler as outputsHandler } from './server/api/outputs.js';
+import { handler as facilitatorsHandler } from './server/api/facilitators.js';
+import { handler as facilitatorAssignmentsHandler } from './server/api/facilitator-assignments.js';
+import { handler as facilitatorAttendanceHandler } from './server/api/facilitator-attendance.js';
+import { handler as financeCoreHandler } from './server/api/finance-core.js';
+import { handler as procurementHandler } from './server/api/procurement.js';
+import { handler as meHandler } from './server/api/me.js';
+import { handler as governanceHandler } from './server/api/governance.js';
 
-// __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files from the React frontend build
 const clientBuildPath = path.join(__dirname, 'client', 'dist');
 if (fs.existsSync(clientBuildPath)) {
     app.use(express.static(clientBuildPath));
 } else {
-    console.warn('⚠️  Client build not found. Run "npm run build" in client/ directory.');
+    console.warn('Client build not found. Run `npm run build` to serve frontend from this server.');
 }
 
-/**
- * Route Mapping
- * In Express 5, app.use(path, handler) acts as a prefix matcher.
- * This is the safest way to map API routes to Netlify functions.
- */
+// Health
+app.use('/api/health', functionToExpress(healthHandler));
 
-// Indicators
-app.use('/api/indicators', netlifyToExpress(indicatorsHandler));
+// Auth
+app.use('/api/login', functionToExpress(loginHandler));
 
-// Activities
-app.use('/api/activities', netlifyToExpress(activitiesHandler));
-
-// Progress
-app.use('/api/progress', netlifyToExpress(progressHandler));
-
-// Users
-app.use('/api/users', netlifyToExpress(usersHandler));
-
-// Login (Exact match is fine for app.use too)
-app.use('/api/login', netlifyToExpress(loginHandler));
+// Indicators + Progress + Activities
+app.use('/api/indicators/:id/progress', functionToExpress(progressHandler));
+app.use('/api/indicators/:id/activities', functionToExpress(activitiesHandler));
+app.use('/api/indicators', functionToExpress(indicatorsHandler));
+app.use('/api/progress-updates', functionToExpress(progressHandler));
+app.use('/api/activities/:id/outputs', functionToExpress(outputsHandler));
+app.use('/api/activities', functionToExpress(activitiesHandler));
+app.use('/api/outputs', functionToExpress(outputsHandler));
 
 // Approvals
-app.use('/api/approvals', netlifyToExpress(approvalsHandler));
+app.use('/api/approvals/pending', functionToExpress(approvalsHandler));
+app.use('/api/approvals', functionToExpress(approvalsHandler));
+app.use('/api/progress/:id/approve', functionToExpress(approvalsHandler));
 
 // Notifications
-app.use('/api/notifications', netlifyToExpress(notificationsHandler));
+app.use('/api/notifications', functionToExpress(notificationsHandler));
+
+// Users and roles
+app.use('/api/users/:id/confirm-role', functionToExpress(usersHandler));
+app.use('/api/users/:id/role', functionToExpress(usersHandler));
+app.use('/api/users', functionToExpress(usersHandler));
+app.use('/api/roles', functionToExpress(rolesHandler));
+app.use('/api/governance/pending-role-assignments', functionToExpress(pendingRoleAssignmentsHandler));
+
+// Dashboard
+app.use('/api/dashboard/executive-summary', functionToExpress(dashboardHandler));
+
+// Finance & Procurement
+app.use('/api/finance/summary', functionToExpress(financeCoreHandler));
+app.use('/api/finance/grants', functionToExpress(financeCoreHandler));
+app.use('/api/finance/budgets', functionToExpress(financeCoreHandler));
+app.use('/api/procurement/:id', functionToExpress(procurementHandler));
+app.use('/api/procurement', functionToExpress(procurementHandler));
+
+app.use('/api/me/summary', functionToExpress(meHandler));
+app.use('/api/me/progress', functionToExpress(meHandler));
+app.use('/api/me', functionToExpress(meHandler));
+
+app.use('/api/governance/queue', functionToExpress(governanceHandler));
+app.use('/api/governance/action', functionToExpress(governanceHandler));
+app.use('/api/governance/:id', functionToExpress(governanceHandler));
+
+// Programs/projects/expenses/governance
+app.use('/api/settings/finance-threshold', functionToExpress(financeThresholdHandler));
+app.use('/api/programs', functionToExpress(programsHandler));
+app.use('/api/projects/:id', functionToExpress(projectsHandler));
+app.use('/api/projects', functionToExpress(projectsHandler));
+app.use('/api/expenses/:id', functionToExpress(expensesHandler));
+app.use('/api/expenses', functionToExpress(expensesHandler));
+app.use('/api/governance/approvals/:id', functionToExpress(governanceApprovalsHandler));
+app.use('/api/governance/approvals', functionToExpress(governanceApprovalsHandler));
+app.use('/api/reports/pdf', functionToExpress(reportsHandler));
+app.use('/api/reports/excel', functionToExpress(reportsHandler));
+app.use('/api/export/indicators', functionToExpress(reportsHandler));
 
 // Kobo
-app.use('/api/kobo/config', netlifyToExpress(koboConfigHandler));
-app.use('/api/kobo/links', netlifyToExpress(koboActionsHandler));
-app.use('/api/kobo/actions', netlifyToExpress(koboActionsHandler));
-app.use('/api/kobo/sync', netlifyToExpress(koboActionsHandler));
+app.use('/api/kobo/config', functionToExpress(koboConfigHandler));
+app.use('/api/kobo/disconnect', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/forms', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/link/:id', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/link', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/links', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/sync/:id', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/sync-all', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/import-participants', functionToExpress(koboActionsHandler));
+app.use('/api/kobo/fields/:uid', functionToExpress(koboActionsHandler));
+
+// Facilitators
+app.use('/api/facilitators/:id', functionToExpress(facilitatorsHandler));
+app.use('/api/facilitators', functionToExpress(facilitatorsHandler));
+app.use('/api/facilitator-assignments', functionToExpress(facilitatorAssignmentsHandler));
+app.use('/api/facilitator-attendance', functionToExpress(facilitatorAttendanceHandler));
 
 // Volunteer
-app.use('/api/volunteer', netlifyToExpress(volunteerHandler));
+app.use('/api/volunteer', functionToExpress(volunteerHandler));
 
-// Catch-all for other /api routes
 app.use('/api', (req, res) => {
     res.status(404).json({ error: 'API route not found' });
 });
 
-// SPA routing for non-API requests
 app.use((req, res) => {
     if (fs.existsSync(clientBuildPath)) {
         res.sendFile(path.join(clientBuildPath, 'index.html'));
     } else {
-        res.send('MMPZ System API Server. Frontend not built.');
+        res.send('MMPZ ERP API server is running.');
     }
 });
 

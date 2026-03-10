@@ -1,0 +1,26 @@
+from django.urls import include, path
+
+urlpatterns = [
+    path("", include("core.search.urls")),
+    path("", include("core.authentication.urls")),
+    path("", include("core.users.urls")),
+    path("", include("core.roles.urls")),
+    path("", include("core.permissions.urls")),
+    path("", include("core.notifications.urls")),
+    path("", include("membership.urls")),
+    path("", include("finance.urls")),
+    path("", include("inventory.urls")),
+    path("", include("assets.urls")),
+    path("", include("reporting.urls")),
+    path("", include("intranet.announcements.urls")),
+    path("", include("intranet.documents.urls")),
+    path("", include("intranet.messaging.urls")),
+    path("", include("intranet.events.urls")),
+    path("", include("intranet.directory.urls")),
+    path("", include("integrations.chatbot.urls")),
+    path("", include("integrations.email_sender.urls")),
+    path("", include("integrations.payments.urls")),
+    path("", include("infrastructure.cache.urls")),
+    path("", include("infrastructure.storage.urls")),
+    path("", include("infrastructure.queues.urls")),
+]

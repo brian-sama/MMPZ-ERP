@@ -64,7 +64,9 @@ const VolunteerPortal = ({ user }) => {
 
     const fetchKoboForms = async () => {
         try {
-            const res = await axios.get(`${API_BASE}/kobo/forms`);
+            const res = await axios.get(`${API_BASE}/kobo/forms`, {
+                params: { userId: user.id }
+            });
             setKoboForms(res.data);
         } catch (err) { console.error(err); }
     };

@@ -68,7 +68,9 @@ const VolunteerAdmin = ({ user }) => {
         setShowImportModal(true);
         setImportStep(1);
         try {
-            const res = await axios.get(`${API_BASE}/kobo/links`);
+            const res = await axios.get(`${API_BASE}/kobo/links`, {
+                params: { userId: user.id }
+            });
             setLinkedForms(Array.isArray(res.data) ? res.data : []);
         } catch (err) {
             console.error(err);
@@ -81,7 +83,9 @@ const VolunteerAdmin = ({ user }) => {
         setSelectedForm(form);
         // Fetch fields
         try {
-            const res = await axios.get(`${API_BASE}/kobo/fields/${uid}`);
+            const res = await axios.get(`${API_BASE}/kobo/fields/${uid}`, {
+                params: { userId: user.id }
+            });
             setFormFields(res.data);
             setImportStep(2);
         } catch (err) {
@@ -95,7 +99,8 @@ const VolunteerAdmin = ({ user }) => {
         try {
             const res = await axios.post(`${API_BASE}/kobo/import-participants`, {
                 kobo_form_uid: selectedForm.kobo_form_uid,
-                mapping
+                mapping,
+                userId: user.id
             });
             alert(res.data.message);
             setShowImportModal(false);

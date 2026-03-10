@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: mmpz_erp_local_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mmpz_erp_local
+      POSTGRES_USER: mmpz
+      POSTGRES_PASSWORD: mmpz
+    ports:
+      - "5432:5432"
+    volumes:
+      - mmpz_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mmpz -d mmpz_erp_local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mmpz_postgres_data:

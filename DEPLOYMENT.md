@@ -79,11 +79,10 @@ Create a `.env` file in the root directory:
 nano .env
 ```
 
-Paste your Supabase credentials:
+Paste your PostgreSQL connection URL:
 
 ```env
-SUPABASE_URL=your_supabase_project_url
-SUPABASE_ANON_KEY=your_supabase_anon_key
+DATABASE_URL=postgresql://username:password@host:5432/database_name
 PORT=3000
 ```
 

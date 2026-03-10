@@ -2,15 +2,39 @@
 node_modules/
 client/node_modules/
 server/node_modules/
+platform/frontend/node_modules/
+platform/backend/venv/
+platform/backend/.venv/
 
 # Environment variables (USE WITH CAUTION - Netlify Dashboard is preferred)
 .env
 .env.local
 .env.production
+platform/backend/.env
+platform/backend/.env.*
+!platform/backend/.env.example
+platform/frontend/.env
+platform/frontend/.env.*
+!platform/frontend/.env.example
 
 # Build output
 client/dist/
 .netlify/
+platform/frontend/dist/
+platform/backend/staticfiles/
+
+# Python cache and tooling artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pyc.*
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # OS files
 .DS_Store
@@ -23,3 +47,15 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Runtime data
+platform/uploads/*
+!platform/uploads/documents/
+!platform/uploads/avatars/
+!platform/uploads/exports/
+platform/uploads/documents/*
+platform/uploads/avatars/*
+platform/uploads/exports/*
+!platform/uploads/documents/.gitkeep
+!platform/uploads/avatars/.gitkeep
+!platform/uploads/exports/.gitkeep
