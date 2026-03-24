@@ -15,6 +15,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import MyPortalPage from './pages/MyPortalPage';
 import UserManagementPage from './pages/UserManagementPage';
+import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
 
 // Intranet Placeholders
 import IntranetDashboardPage from './pages/intranet/IntranetDashboardPage.jsx';
@@ -47,6 +48,7 @@ export default function AppRouter() {
             }>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
+                <Route path="/analytics" element={<ProtectedRoute allowedRoles={['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER']}><AnalyticsDashboardPage /></ProtectedRoute>} />
                 <Route path="/programs" element={<ProgramsPage />} />
                 <Route path="/facilitators" element={<FacilitatorsPage />} />
                 <Route path="/me" element={<MonitoringEvaluationPage />} />

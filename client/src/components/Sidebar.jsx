@@ -8,7 +8,7 @@ import {
     LayoutDashboard, FolderKanban, Users, BarChart3,
     DollarSign, ShieldCheck, FileText, Settings,
     Bell, LogOut, Menu, X, ChevronRight,
-    Sun, Moon, Radio, Contact, BookOpen, Calendar
+    Sun, Moon, Radio, Contact, BookOpen, Calendar, LineChart
 } from 'lucide-react';
 
 /* ── Role-based nav visibility ── */
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
         group: 'Executive',
         items: [
             { to: '/dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, roles: ['DIRECTOR'] },
+            { to: '/analytics', label: 'Advanced Analytics', icon: LineChart, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER'] },
         ],
     },
     {
