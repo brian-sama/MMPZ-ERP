@@ -6,7 +6,7 @@ import PageHeader from '../components/PageHeader';
 import {
     BarChart3, Target, TrendingUp, Filter, Search,
     ExternalLink, Clock, Plus, Download, AlertCircle,
-    ChevronRight, Calendar
+    ChevronRight, Calendar, RefreshCw, Info, Database
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -21,13 +21,42 @@ export default function MonitoringEvaluationPage() {
     const [selectedInd, setSelectedInd] = useState(null);
     const [showReportForm, setShowReportForm] = useState(false);
 
+    // KoBo State
+    const [koboLinks, setKoboLinks] = useState([]);
+    const [syncing, setSyncing] = useState(false);
+
     // Form State
     const [reportValue, setReportValue] = useState('');
     const [reportNotes, setReportNotes] = useState('');
 
     useEffect(() => {
         fetchMEData();
+        fetchKoboLinks();
     }, []);
+
+    const fetchKoboLinks = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/kobo/links`, { params: { userId: user.id } });
+            setKoboLinks(res.data);
+        } catch (err) {
+            console.error('Failed to fetch KoBo links');
+        }
+    };
+
+    const handleSync = async (linkId = null) => {
+        setSyncing(true);
+        try {
+            const endpoint = linkId ? `${API_BASE}/kobo/sync/${linkId}` : `${API_BASE}/kobo/sync-all`;
+            const res = await axios.post(endpoint, { userId: user.id });
+            alert(res.data.message || 'Sync successful');
+            fetchMEData();
+            fetchKoboLinks();
+        } catch (err) {
+            alert('Sync failed: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setSyncing(false);
+        }
+    };
 
     const fetchMEData = async () => {
         setLoading(true);
@@ -111,6 +140,48 @@ export default function MonitoringEvaluationPage() {
                             Actual Reached vs Targets (Last 6 Months)
                         </div>
                     </div>
+
+                    <div className="panel" style={{ borderTop: '4px solid var(--brand-primary)' }}>
+                        <div className="panel-header" style={{ border: 'none', paddingBottom: '0' }}>
+                            <h2 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <RefreshCw size={16} className={syncing ? 'spin' : ''} /> External Data Sync
+                            </h2>
+                        </div>
+                        <div style={{ padding: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                <div>
+                                    <div style={{ fontSize: '13px', fontWeight: 600 }}>KoBoToolbox Connection</div>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{koboLinks.length} active form bridges</div>
+                                </div>
+                                <button 
+                                    className="btn btn-secondary btn-sm" 
+                                    onClick={() => handleSync()} 
+                                    disabled={syncing || koboLinks.length === 0}
+                                >
+                                    {syncing ? 'Syncing...' : 'Sync All'}
+                                </button>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {koboLinks.slice(0, 3).map(link => (
+                                    <div key={link.id} style={{ fontSize: '12px', padding: '10px', background: 'var(--bg-app)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
+                                            <div style={{ fontWeight: 600 }}>{link.kobo_form_name}</div>
+                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Linked to: {link.indicator_title}</div>
+                                        </div>
+                                        <button className="btn btn-ghost btn-sm" onClick={() => handleSync(link.id)} disabled={syncing}>
+                                            <RefreshCw size={12} />
+                                        </button>
+                                    </div>
+                                ))}
+                                {koboLinks.length === 0 && (
+                                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '8px' }}>
+                                        No KoBo forms linked.
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="panel">
@@ -160,9 +231,16 @@ export default function MonitoringEvaluationPage() {
                                             <div style={{ fontSize: '11px', fontWeight: 600 }}>{ind.progress_percentage}% achieved</div>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
-                                            <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedInd(ind); setShowReportForm(true); }}>
-                                                Report
-                                            </button>
+                                            <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>
+                                                {koboLinks.some(l => l.indicator_id === ind.id) && (
+                                                    <div title="Synced with KoBo" style={{ color: 'var(--brand-primary)', display: 'flex', alignItems: 'center' }}>
+                                                        <Database size={14} />
+                                                    </div>
+                                                )}
+                                                <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedInd(ind); setShowReportForm(true); }}>
+                                                    Report
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}

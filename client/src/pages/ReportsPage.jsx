@@ -13,7 +13,36 @@ const REPORT_TEMPLATES = [
 ];
 
 export default function ReportsPage() {
+    const { user } = useAuth();
     const [selectedReport, setSelectedReport] = useState(null);
+    const [generating, setGenerating] = useState(false);
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [format, setFormat] = useState('pdf');
+
+    const handleGenerate = async () => {
+        setGenerating(true);
+        try {
+            const endpoint = format === 'pdf' ? '/reports/pdf' : '/reports/excel';
+            const url = `${API_BASE}${endpoint}?userId=${user.id}&from=${dateFrom}&to=${dateTo}&type=${selectedReport.id}`;
+            
+            if (format === 'pdf') {
+                window.open(url, '_blank');
+            } else {
+                // For CSV, we can trigger a download
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `report_${selectedReport.id}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            }
+        } catch (err) {
+            alert('Failed to generate report');
+        } finally {
+            setGenerating(false);
+        }
+    };
 
     return (
         <div className="fade-in">
@@ -71,27 +100,32 @@ export default function ReportsPage() {
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
                                     <label className="form-label">Select Date Range</label>
                                     <div style={{ display: 'flex', gap: '12px' }}>
-                                        <input type="date" className="form-input" />
-                                        <input type="date" className="form-input" />
+                                        <input type="date" className="form-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+                                        <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} />
                                     </div>
                                 </div>
 
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
                                     <label className="form-label">Output Format</label>
                                     <div style={{ display: 'flex', gap: '12px' }}>
-                                        <label style={{ flex: 1, padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input type="radio" name="format" defaultChecked />
+                                        <label style={{ flex: 1, padding: '12px', border: format === 'pdf' ? '2px solid var(--brand-primary)' : '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: format === 'pdf' ? 'var(--brand-primary-light)' : 'transparent' }}>
+                                            <input type="radio" name="format" checked={format === 'pdf'} onChange={() => setFormat('pdf')} />
                                             <span>PDF Document</span>
                                         </label>
-                                        <label style={{ flex: 1, padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <input type="radio" name="format" />
+                                        <label style={{ flex: 1, padding: '12px', border: format === 'excel' ? '2px solid var(--brand-primary)' : '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: format === 'excel' ? 'var(--brand-primary-light)' : 'transparent' }}>
+                                            <input type="radio" name="format" checked={format === 'excel'} onChange={() => setFormat('excel')} />
                                             <span>Excel Spreadsheet</span>
                                         </label>
                                     </div>
                                 </div>
 
-                                <button className="btn btn-primary" style={{ width: '100%', padding: '12px', height: '48px' }}>
-                                    <Download size={18} style={{ marginRight: '8px' }} /> Generate & Download Report
+                                <button 
+                                    className="btn btn-primary" 
+                                    style={{ width: '100%', padding: '12px', height: '48px' }}
+                                    onClick={handleGenerate}
+                                    disabled={generating}
+                                >
+                                    <Download size={18} style={{ marginRight: '8px' }} /> {generating ? 'Generating...' : 'Generate & Download Report'}
                                 </button>
                             </div>
                         </div>

@@ -22,9 +22,11 @@ const sanitizeUser = (user) => ({
     name: user.name,
     email: user.email,
     role_code: user.role_code,
+    system_role: user.system_role || 'INTERN',
+    job_title: user.job_title || user.role_code || 'Intern',
     role_assignment_status: user.role_assignment_status,
     role_confirmed_at: user.role_confirmed_at,
-    role: toLegacyRole(user.role_code),
+    role: toLegacyRole(user.role_code, user.system_role),
     require_password_reset: user.require_password_reset,
     last_login: user.last_login,
     created_at: user.created_at,
@@ -63,6 +65,8 @@ export const handler = async (event) => {
                     name,
                     email,
                     role_code,
+                    system_role,
+                    job_title,
                     role_assignment_status,
                     role_confirmed_at,
                     require_password_reset,
@@ -84,6 +88,9 @@ export const handler = async (event) => {
             }
 
             const roleCode = resolveIncomingRole(body);
+            const systemRole = body.system_role || body.systemRole || 'INTERN';
+            const jobTitle = body.job_title || body.jobTitle || roleCode;
+
             assertCanAssignRole(actor, roleCode);
 
             const passwordHash = await hashPassword(password);
@@ -102,6 +109,8 @@ export const handler = async (event) => {
                         email,
                         password_hash,
                         role_code,
+                        system_role,
+                        job_title,
                         role_assignment_status,
                         role_confirmed_by_user_id,
                         role_confirmed_at,
@@ -113,6 +122,8 @@ export const handler = async (event) => {
                         ${email},
                         ${passwordHash},
                         ${roleCode},
+                        ${systemRole},
+                        ${jobTitle},
                         ${roleStatus},
                         ${roleStatus === 'confirmed' ? actor.id : null},
                         ${roleStatus === 'confirmed' ? new Date().toISOString() : null},
@@ -124,6 +135,8 @@ export const handler = async (event) => {
                         name,
                         email,
                         role_code,
+                        system_role,
+                        job_title,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,
@@ -300,6 +313,9 @@ export const handler = async (event) => {
             const nextRoleCode = body.role || body.role_code
                 ? resolveIncomingRole(body)
                 : existing.role_code;
+            const nextSystemRole = body.system_role || body.systemRole || existing.system_role || 'INTERN';
+            const nextJobTitle = body.job_title || body.jobTitle || existing.job_title || nextRoleCode;
+            
             assertCanAssignRole(actor, nextRoleCode);
 
             const requireReset =
@@ -316,6 +332,8 @@ export const handler = async (event) => {
                             name = ${name},
                             email = ${email},
                             role_code = ${nextRoleCode},
+                            system_role = ${nextSystemRole},
+                            job_title = ${nextJobTitle},
                             role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
                             role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
                             role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
@@ -330,6 +348,8 @@ export const handler = async (event) => {
                             name = ${name},
                             email = ${email},
                             role_code = ${nextRoleCode},
+                            system_role = ${nextSystemRole},
+                            job_title = ${nextJobTitle},
                             role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
                             role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
                             role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
@@ -344,6 +364,8 @@ export const handler = async (event) => {
                         name,
                         email,
                         role_code,
+                        system_role,
+                        job_title,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,

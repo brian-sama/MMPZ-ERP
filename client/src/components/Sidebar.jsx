@@ -11,45 +11,45 @@ import {
     Sun, Moon, Radio, Contact, BookOpen, Calendar, LineChart
 } from 'lucide-react';
 
-/* ── Role-based nav visibility ── */
+/* ── Role-based nav visibility (SYSTEM ROLES) ── */
 const NAV_ITEMS = [
     {
         group: 'Executive',
         items: [
-            { to: '/dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, roles: ['DIRECTOR'] },
-            { to: '/analytics', label: 'Advanced Analytics', icon: LineChart, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER'] },
+            { to: '/dashboard', label: 'Executive Dashboard', icon: LayoutDashboard, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT'] },
+            { to: '/analytics', label: 'Advanced Analytics', icon: LineChart, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF'] },
         ],
     },
     {
         group: 'Programs',
         items: [
-            { to: '/programs', label: 'Programs', icon: FolderKanban, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'LOGISTICS_ASSISTANT'] },
-            { to: '/facilitators', label: 'Development Facilitators', icon: Users, roles: ['DIRECTOR', 'ADMIN_ASSISTANT', 'COMMUNITY_DEVELOPMENT_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER'] },
-            { to: '/me', label: 'Monitoring & Evaluation', icon: BarChart3, roles: ['DIRECTOR', 'ME_INTERN_ACTING_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'FINANCE_ADMIN_OFFICER'] },
-            { to: '/finance', label: 'Finance & Administration', icon: DollarSign, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'LOGISTICS_ASSISTANT'] },
+            { to: '/programs', label: 'Programs', icon: FolderKanban, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS', 'INTERN'] },
+            { to: '/facilitators', label: 'Development Facilitators', icon: Users, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF'] },
+            { to: '/me', label: 'Monitoring & Evaluation', icon: BarChart3, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'INTERN'] },
+            { to: '/finance', label: 'Finance & Administration', icon: DollarSign, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS'] },
         ],
     },
     {
         group: 'Governance',
         items: [
-            { to: '/governance', label: 'Governance & Approvals', icon: ShieldCheck, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'ME_INTERN_ACTING_OFFICER'] },
-            { to: '/reports', label: 'Reports', icon: FileText, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'ADMIN_ASSISTANT'] },
+            { to: '/governance', label: 'Governance & Approvals', icon: ShieldCheck, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF'] },
+            { to: '/reports', label: 'Reports', icon: FileText, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'INTERN'] },
         ],
     },
     {
         group: 'System',
         items: [
-            { to: '/settings', label: 'Settings', icon: Settings, roles: ['DIRECTOR', 'ADMIN_ASSISTANT'] },
-            { to: '/users', label: 'User Management', icon: Users, roles: ['DIRECTOR'] },
+            { to: '/settings', label: 'Settings', icon: Settings, systemRoles: ['SUPER_ADMIN'] },
+            { to: '/users', label: 'User Management', icon: Users, systemRoles: ['SUPER_ADMIN'] },
         ],
     },
     {
         group: 'Workspace (Intranet)',
         items: [
-            { to: '/intranet/dashboard', label: 'Announcements', icon: Radio, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'DEVELOPMENT_FACILITATOR'] },
-            { to: '/intranet/directory', label: 'Staff Directory', icon: Contact, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'DEVELOPMENT_FACILITATOR'] },
-            { to: '/intranet/documents', label: 'Document Library', icon: BookOpen, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'DEVELOPMENT_FACILITATOR'] },
-            { to: '/intranet/calendar', label: 'Organization Calendar', icon: Calendar, roles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'DEVELOPMENT_FACILITATOR'] },
+            { to: '/intranet/dashboard', label: 'Announcements', icon: Radio, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS', 'INTERN', 'FACILITATOR'] },
+            { to: '/intranet/directory', label: 'Staff Directory', icon: Contact, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS', 'INTERN', 'FACILITATOR'] },
+            { to: '/intranet/documents', label: 'Document Library', icon: BookOpen, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS', 'INTERN', 'FACILITATOR'] },
+            { to: '/intranet/calendar', label: 'Organization Calendar', icon: Calendar, systemRoles: ['SUPER_ADMIN', 'MANAGEMENT', 'PROGRAM_STAFF', 'OPERATIONS', 'INTERN', 'FACILITATOR'] },
         ],
     },
 ];
@@ -58,7 +58,7 @@ const NAV_ITEMS = [
 const FACILITATOR_NAV = [
     {
         group: 'My Work', items: [
-            { to: '/my-portal', label: 'My Portal', icon: LayoutDashboard, roles: ['DEVELOPMENT_FACILITATOR', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN'] },
+            { to: '/my-portal', label: 'My Portal', icon: LayoutDashboard, systemRoles: ['FACILITATOR', 'INTERN'] },
         ]
     },
 ];
@@ -67,17 +67,17 @@ export default function Sidebar({ pendingCount }) {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const navigate = useNavigate();
-    const role = user?.role_code || '';
+    const systemRole = user?.system_role || 'INTERN';
     const initial = (user?.name || 'U')[0].toUpperCase();
 
-    // Determine which nav groups to show
-    const navGroups = role === 'DEVELOPMENT_FACILITATOR' || role === 'SOCIAL_SERVICES_INTERN' || role === 'YOUTH_COMMUNICATIONS_INTERN'
+    // Determine which nav groups to show based on system role
+    const navGroups = systemRole === 'FACILITATOR' || systemRole === 'INTERN'
         ? FACILITATOR_NAV
         : NAV_ITEMS;
 
     const filtered = navGroups.map(group => ({
         ...group,
-        items: group.items.filter(item => item.roles.includes(role)),
+        items: group.items.filter(item => item.systemRoles.includes(systemRole)),
     })).filter(group => group.items.length > 0);
 
     const doLogout = () => {
@@ -85,21 +85,7 @@ export default function Sidebar({ pendingCount }) {
         navigate('/login');
     };
 
-    const roleLabel = (code) => {
-        const map = {
-            DIRECTOR: 'Director',
-            FINANCE_ADMIN_OFFICER: 'Finance & Admin Officer',
-            ADMIN_ASSISTANT: 'Admin Assistant',
-            LOGISTICS_ASSISTANT: 'Logistics Assistant',
-            PSYCHOSOCIAL_SUPPORT_OFFICER: 'PSS Officer',
-            COMMUNITY_DEVELOPMENT_OFFICER: 'CD Officer',
-            ME_INTERN_ACTING_OFFICER: 'M&E Officer',
-            SOCIAL_SERVICES_INTERN: 'Social Services Intern',
-            YOUTH_COMMUNICATIONS_INTERN: 'Youth & Comms Intern',
-            DEVELOPMENT_FACILITATOR: 'Development Facilitator',
-        };
-        return map[code] || code;
-    };
+    const roleDisplay = user?.job_title || (systemRole === 'SUPER_ADMIN' ? 'System Admin' : systemRole);
 
     return (
         <aside className="erp-sidebar">
@@ -169,7 +155,7 @@ export default function Sidebar({ pendingCount }) {
                     <div className="sidebar-user-avatar">{initial}</div>
                     <div className="sidebar-user-info">
                         <div className="sidebar-user-name">{user?.name}</div>
-                        <div className="sidebar-user-role">{roleLabel(role)}</div>
+                        <div className="sidebar-user-role">{roleDisplay}</div>
                     </div>
                     <LogOut size={15} style={{ color: '#EF4444', flexShrink: 0, opacity: 0.7 }} />
                 </div>

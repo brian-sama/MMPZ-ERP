@@ -41,7 +41,26 @@ const legacyToCanonicalMap = {
     volunteer: 'DEVELOPMENT_FACILITATOR',
 };
 
-export const toLegacyRole = (roleCode) => {
+export const SYSTEM_ROLES = {
+    SUPER_ADMIN: 'SUPER_ADMIN',
+    MANAGEMENT: 'MANAGEMENT',
+    PROGRAM_STAFF: 'PROGRAM_STAFF',
+    OPERATIONS: 'OPERATIONS',
+    INTERN: 'INTERN',
+    FACILITATOR: 'FACILITATOR'
+};
+
+const systemRoleToLegacy = {
+    [SYSTEM_ROLES.SUPER_ADMIN]: 'admin',
+    [SYSTEM_ROLES.MANAGEMENT]: 'admin',
+    [SYSTEM_ROLES.PROGRAM_STAFF]: 'officer',
+    [SYSTEM_ROLES.OPERATIONS]: 'officer',
+    [SYSTEM_ROLES.INTERN]: 'intern',
+    [SYSTEM_ROLES.FACILITATOR]: 'volunteer',
+};
+
+export const toLegacyRole = (roleCode, systemRole) => {
+    if (systemRole && systemRoleToLegacy[systemRole]) return systemRoleToLegacy[systemRole];
     return legacyRoleMap[roleCode] || 'intern';
 };
 
@@ -49,10 +68,14 @@ export const normalizeRoleCodeInput = (inputRole) => {
     if (!inputRole) return null;
     const candidate = String(inputRole).trim();
     const upper = candidate.toUpperCase();
+    
+    // Check if it's already a canonical job role
     if (ROLE_CODES.includes(upper)) return upper;
-
+    
+    // Check if it's a legacy label
     const lower = candidate.toLowerCase();
     if (legacyToCanonicalMap[lower]) return legacyToCanonicalMap[lower];
+    
     return null;
 };
 
@@ -86,12 +109,9 @@ export const getUserContext = async (userId) => {
 
     const users = await sql`
         SELECT
-            u.id,
-            u.name,
-            u.email,
-            u.role_code,
-            u.role_assignment_status,
-            u.role_confirmed_at,
+            u.id, u.name, u.email, 
+            u.role_code, u.system_role, u.job_title,
+            u.role_assignment_status, u.role_confirmed_at,
             u.require_password_reset
         FROM users u
         WHERE u.id = ${normalizedUserId}
@@ -103,12 +123,20 @@ export const getUserContext = async (userId) => {
     }
 
     const user = users[0];
-    const roleCode = user.role_code || 'DEVELOPMENT_FACILITATOR';
+    const systemRole = user.system_role || SYSTEM_ROLES.INTERN;
+    const jobTitle = user.job_title || user.role_code || 'Intern';
 
+    // Permissions can still be fetched by role_code for now, or we can map them by system_role
+    // User requested: "Access is enforced by system_role"
+    // So let's fetch permissions mapped to the system_role if we have a table, 
+    // or logically enforce them. 
+    // To keep it clean, we'll continue using the role_permissions table but we might
+    // need to ensure it has entries for the system roles.
+    
     const permissionRows = await sql`
         SELECT rp.permission_code
         FROM role_permissions rp
-        WHERE rp.role_code = ${roleCode}
+        WHERE rp.role_code = ${user.role_code}
     `;
 
     const permissions = new Set(permissionRows.map((row) => row.permission_code));
@@ -116,10 +144,12 @@ export const getUserContext = async (userId) => {
 
     return {
         ...user,
-        role_code: roleCode,
+        system_role: systemRole,
+        job_title: jobTitle,
+        role_code: user.role_code,
         role_assignment_status: roleAssignmentStatus,
-        role: toLegacyRole(roleCode),
-        is_pending_reassignment: roleAssignmentStatus !== 'confirmed',
+        role: toLegacyRole(user.role_code, systemRole),
+        is_pending_reassignment: roleAssignmentStatus !== 'confirmed' && systemRole !== SYSTEM_ROLES.SUPER_ADMIN,
         permissions,
     };
 };

@@ -10,7 +10,7 @@ const AnalyticsDashboardPage = () => {
           src="/streamlit/?embed=true"
           title="Streamlit Analytics"
           className="w-full h-full border-0 absolute top-0 left-0"
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+          sandbox="allow-scripts allow-popups allow-forms"
           allowFullScreen
         />
       </div>

@@ -14,6 +14,7 @@
         "db:up": "node scripts/docker_compose.js up -d",
         "db:down": "node scripts/docker_compose.js down",
         "db:migrate": "node scripts/db_migrate.js",
+        "db:migrate:all": "node scripts/db_migrate_all.js",
         "db:seed": "node scripts/db_seed.js",
         "db:reset": "node scripts/db_reset.js"
     },

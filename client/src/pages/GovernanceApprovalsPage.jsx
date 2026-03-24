@@ -16,6 +16,7 @@ export default function GovernanceApprovalsPage() {
     const [selectedItem, setSelectedItem] = useState(null);
     const [comments, setComments] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         fetchQueue();
@@ -81,7 +82,14 @@ export default function GovernanceApprovalsPage() {
                         <h2 className="panel-title">Active Queue ({queue.filter(q => q.status === 'pending').length})</h2>
                         <div className="search-box" style={{ width: '180px' }}>
                             <Search size={14} className="search-icon" />
-                            <input type="text" placeholder="Filter queue..." className="form-input" style={{ height: '30px', fontSize: '12px' }} />
+                            <input 
+                                type="text" 
+                                placeholder="Filter queue..." 
+                                className="form-input" 
+                                style={{ height: '30px', fontSize: '12px', paddingLeft: '28px' }} 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
                         </div>
                     </div>
 
@@ -96,7 +104,10 @@ export default function GovernanceApprovalsPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {queue.map(item => (
+                                {queue.filter(q => 
+                                    q.entity_type.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    q.requester_name.toLowerCase().includes(searchTerm.toLowerCase())
+                                ).map(item => (
                                     <tr
                                         key={item.id}
                                         className={`${item.status === 'pending' ? 'priority-high' : ''} ${selectedItem?.id === item.id ? 'active-row' : ''}`}

@@ -32,6 +32,8 @@ export const handler = async (event) => {
                     name,
                     email,
                     role_code,
+                    system_role,
+                    job_title,
                     role_assignment_status,
                     role_confirmed_at,
                     password_hash,
@@ -72,9 +74,11 @@ export const handler = async (event) => {
             name: user.name,
             email: user.email,
             role_code: user.role_code,
+            system_role: user.system_role || 'INTERN',
+            job_title: user.job_title || user.role_code || 'Intern',
             role_assignment_status: user.role_assignment_status || 'pending_reassignment',
             role_confirmed_at: user.role_confirmed_at,
-            role: toLegacyRole(user.role_code),
+            role: toLegacyRole(user.role_code, user.system_role),
             require_password_reset: user.require_password_reset,
         });
 

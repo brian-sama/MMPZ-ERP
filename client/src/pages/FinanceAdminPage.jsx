@@ -16,6 +16,8 @@ export default function FinanceAdminPage() {
     const [grants, setGrants] = useState([]);
     const [procurement, setProcurement] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [showRequisitionModal, setShowRequisitionModal] = useState(false);
+    const [selectedProcurement, setSelectedProcurement] = useState(null);
 
     useEffect(() => {
         fetchFinanceData();
@@ -48,8 +50,8 @@ export default function FinanceAdminPage() {
                 subtitle="Manage organizational wealth, donor grants, and procurement workflows."
                 actions={
                     <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-secondary btn-sm"><History size={16} /> Audit Logs</button>
-                        <button className="btn btn-primary btn-sm"><Plus size={16} /> New Requisition</button>
+                        <button className="btn btn-secondary btn-sm" onClick={() => alert('Audit logs feature coming soon.')}><History size={16} /> Audit Logs</button>
+                        <button className="btn btn-primary btn-sm" onClick={() => setShowRequisitionModal(true)}><Plus size={16} /> New Requisition</button>
                     </div>
                 }
             />
@@ -218,7 +220,7 @@ export default function FinanceAdminPage() {
                                             </span>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
-                                            <button className="btn btn-secondary btn-sm">View Items</button>
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedProcurement(p)}>View Items</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -231,6 +233,72 @@ export default function FinanceAdminPage() {
                                 <p className="empty-state-text">Submit your first procurement requisition to begin.</p>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Requisition Modal (Simplified) */}
+            {showRequisitionModal && (
+                <div className="modal-overlay" onClick={() => setShowRequisitionModal(false)}>
+                    <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title">New Procurement Requisition</div>
+                            <button className="modal-close" onClick={() => setShowRequisitionModal(false)}>×</button>
+                        </div>
+                        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="form-group">
+                                <label className="form-label">Request Title</label>
+                                <input type="text" className="form-input" placeholder="e.g., Office Supplies Q3" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Estimated Budget ($)</label>
+                                <input type="number" className="form-input" />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Justification</label>
+                                <textarea className="form-input" style={{ height: '80px' }}></textarea>
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowRequisitionModal(false)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={() => { alert('Requisition submitted for approval!'); setShowRequisitionModal(false); }}>Submit Request</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Item View Modal */}
+            {selectedProcurement && (
+                <div className="modal-overlay" onClick={() => setSelectedProcurement(null)}>
+                    <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title">Request Items: {selectedProcurement.title}</div>
+                            <button className="modal-close" onClick={() => setSelectedProcurement(null)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Unit Price</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {/* Mock items for now as procurement table doesn't have child lines in schema yet or they are in another table */}
+                                    <tr>
+                                        <td>Standard Procurement Item A</td>
+                                        <td>2</td>
+                                        <td>${(selectedProcurement.total_estimated_cost / 2).toLocaleString()}</td>
+                                        <td>${parseFloat(selectedProcurement.total_estimated_cost).toLocaleString()}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setSelectedProcurement(null)}>Close</button>
+                        </div>
                     </div>
                 </div>
             )}

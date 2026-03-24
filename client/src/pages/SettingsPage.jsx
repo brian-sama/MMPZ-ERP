@@ -14,17 +14,29 @@ const SETTINGS_SECTIONS = [
 ];
 
 export default function SettingsPage() {
+    const [activeSection, setActiveSection] = useState(null);
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = () => {
+        setSaving(true);
+        setTimeout(() => {
+            setSaving(false);
+            setActiveSection(null);
+            alert('Settings updated successfully!');
+        }, 800);
+    };
+
     return (
         <div className="fade-in">
             <PageHeader
                 title="General Settings"
                 subtitle="Configure organizational defaults and core system parameters."
-                actions={<button className="btn btn-primary btn-sm"><Save size={16} /> Save Changes</button>}
+                actions={<button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}><Save size={16} /> {saving ? 'Saving...' : 'Save Changes'}</button>}
             />
 
             <div className="kpi-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
                 {SETTINGS_SECTIONS.map(sec => (
-                    <div key={sec.id} className="panel hover-scale" style={{ cursor: 'pointer', padding: '0' }}>
+                    <div key={sec.id} className="panel hover-scale" style={{ cursor: 'pointer', padding: '0' }} onClick={() => setActiveSection(sec)}>
                         <div style={{ padding: '24px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
                                 <div className="kpi-icon-wrap" style={{ background: 'var(--bg-app)', color: 'var(--brand-primary)' }}>
@@ -64,7 +76,62 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 </div>
+                    </div>
+                </div>
             </div>
+
+            {/* Settings Detail Modal */}
+            {activeSection && (
+                <div className="modal-overlay" onClick={() => setActiveSection(null)}>
+                    <div className="modal-box" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title">{activeSection.name}</div>
+                            <button className="modal-close" onClick={() => setActiveSection(null)}>×</button>
+                        </div>
+                        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <p className="form-hint">{activeSection.desc}</p>
+                            
+                            {activeSection.id === 'org' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Organization Name</label>
+                                        <input type="text" className="form-input" defaultValue="Mzilikazi MMPZ" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Contact Email</label>
+                                        <input type="email" className="form-input" defaultValue="admin@mmpzmne.co.zw" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {activeSection.id === 'gov' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Procurement Approval Threshold ($)</label>
+                                        <input type="number" className="form-input" defaultValue="500" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Workflow Escalation (Days)</label>
+                                        <input type="number" className="form-input" defaultValue="3" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {['notif', 'loc', 'sys'].includes(activeSection.id) && (
+                                <div style={{ textAlign: 'center', padding: '24px', background: 'var(--bg-app)', borderRadius: '8px' }}>
+                                    <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Advanced configuration for <strong>{activeSection.name}</strong> will be implemented in the next module release.</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setActiveSection(null)}>Close</button>
+                            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+                                {saving ? 'Applying...' : 'Apply Changes'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

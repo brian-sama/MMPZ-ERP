@@ -49,8 +49,21 @@ export function AuthProvider({ children }) {
   };
 
   const logout = useCallback(() => {
+    // Clear all session data to prevent account carry-over
+    sessionStorage.clear();
+    localStorage.clear();
+    
+    // Clear all cookies
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i];
+        const eqPos = cookie.indexOf("=");
+        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
+    }
+
     setUser(null);
-    sessionStorage.removeItem('mmpz_user');
+    window.location.href = '/login';
   }, []);
 
   const resetPassword = async (newPassword) => {
@@ -70,12 +83,20 @@ export function AuthProvider({ children }) {
   };
 
   const hasRole = (...roleCodes) => roleCodes.includes(user?.role_code);
-  const isDirector = () => user?.role_code === 'DIRECTOR';
-  const isFinance = () => user?.role_code === 'FINANCE_ADMIN_OFFICER';
-  const isFacilitator = () => user?.role_code === 'DEVELOPMENT_FACILITATOR';
+  
+  // System Role Helpers
+  const isSuperAdmin = () => user?.system_role === 'SUPER_ADMIN';
+  const isManagement = () => user?.system_role === 'MANAGEMENT' || user?.system_role === 'SUPER_ADMIN';
+  const isProgramStaff = () => user?.system_role === 'PROGRAM_STAFF';
+  const isOperations = () => user?.system_role === 'OPERATIONS';
+  const isIntern = () => user?.system_role === 'INTERN';
+  const isFacilitator = () => user?.system_role === 'FACILITATOR';
 
   return (
-    <AuthContext.Provider value={{ user, loading, authError, login, logout, resetPassword, hasRole, isDirector, isFinance, isFacilitator }}>
+    <AuthContext.Provider value={{ 
+        user, loading, authError, login, logout, resetPassword, 
+        hasRole, isSuperAdmin, isManagement, isProgramStaff, isOperations, isIntern, isFacilitator 
+    }}>
       {children}
     </AuthContext.Provider>
   );

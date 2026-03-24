@@ -1,15 +1,35 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import API_BASE from '../../apiConfig';
 import PageHeader from '../../components/PageHeader';
-import { Contact, Search, MapPin, Mail, Phone } from 'lucide-react';
+import { Contact, Search, MapPin, Mail, Phone, Shield } from 'lucide-react';
 
 export default function StaffDirectoryPage() {
     const [search, setSearch] = useState('');
+    const [staff, setStaff] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const staffDummy = [
-        { id: 1, name: 'Tinashe Moyo', role: 'Director', dept: 'Executive', location: 'Harare HQ' },
-        { id: 2, name: 'Chipo Ndlovu', role: 'Finance Officer', dept: 'Finance & Admin', location: 'Bulawayo' },
-        { id: 3, name: 'Brian Sam', role: 'IT Administrator', dept: 'System', location: 'Harare HQ' },
-    ];
+    useEffect(() => {
+        fetchStaff();
+    }, []);
+
+    const fetchStaff = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_BASE}/users`);
+            setStaff(res.data);
+        } catch (err) {
+            console.error('Failed to fetch staff');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const filteredStaff = staff.filter(s => 
+        s.name.toLowerCase().includes(search.toLowerCase()) ||
+        (s.job_title || '').toLowerCase().includes(search.toLowerCase()) ||
+        (s.email || '').toLowerCase().includes(search.toLowerCase())
+    );
 
     return (
         <div className="fade-in">
@@ -31,25 +51,49 @@ export default function StaffDirectoryPage() {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
-                {staffDummy.map(staff => (
-                    <div key={staff.id} className="panel" style={{ padding: '20px', cursor: 'pointer', transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                {staff.name.charAt(0)}
+            {loading ? (
+                <div className="page-loading"><div className="spinner"></div></div>
+            ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                    {filteredStaff.map(s => (
+                        <div key={s.id} className="panel hover-scale" style={{ padding: '20px', cursor: 'pointer' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
+                                <div style={{ 
+                                    width: '48px', height: '48px', borderRadius: '50%', 
+                                    background: 'var(--brand-primary-light)', 
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                    fontSize: '18px', fontWeight: 700, color: 'var(--brand-primary)' 
+                                }}>
+                                    {s.name.charAt(0)}
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        {s.name}
+                                        {s.system_role === 'SUPER_ADMIN' && <Shield size={12} className="text-primary" />}
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                        {s.job_title || s.role_code}
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{staff.name}</div>
-                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{staff.role}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Mail size={13} /> {s.email}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Contact size={13} /> {s.system_role}
+                                </div>
+                                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', marginTop: '5px', fontSize: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>Member since: {new Date(s.created_at).getFullYear()}</span>
+                                    <span style={{ color: s.role_assignment_status === 'confirmed' ? 'var(--brand-success)' : 'var(--brand-warning)' }}>
+                                        ● {s.role_assignment_status}
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Contact size={12} /> {staff.dept}</div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={12} /> {staff.location}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
