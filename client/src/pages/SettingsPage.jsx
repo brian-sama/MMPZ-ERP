@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import {
     Settings as SettingsIcon, Shield, Bell,
@@ -75,10 +75,8 @@ export default function SettingsPage() {
                             <div style={{ fontSize: '13px' }}>Kobo Integration: <strong>Syncing</strong></div>
                         </div>
                     </div>
-                </div>
                     </div>
                 </div>
-            </div>
 
             {/* Settings Detail Modal */}
             {activeSection && (
