@@ -29,7 +29,7 @@ services:
     environment:
       # Pass the database connection URL matching the PostgreSQL service configuration
       DATABASE_URL: postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
-      MMPZ_API_URL: http://intranet.mmpzmne.co.zw/api
+      MMPZ_API_URL: https://mmpzmne.co.zw/api
       PORT: 3000
 
   streamlit:
