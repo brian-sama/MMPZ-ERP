@@ -54,9 +54,23 @@ This will:
 - **Restart a service**: `docker-compose restart app`
 - **Stop everything**: `docker-compose down`
 
-## 7. Troubleshooting SSL
+## 7. Troubleshooting
 
-If SSL is not working (e.g., certificate error):
+### Container Name Conflict
+If you see an error like `The container name "/traefik" is already in use`:
+Check if you have another project using Traefik. If it's a stale container, remove it:
+```bash
+docker rm -f traefik
+```
+
+### Port Conflict (80/443)
+If you see an error like `Bind for 0.0.0.0:80 failed: port is already allocated`:
+This means another web server (Nginx, or another Traefik instance) is using those ports. 
+- You must stop the other service: `sudo systemctl stop nginx` or `docker stop other_container`.
+- **Note**: If you want to host **multiple** sites (e.g. Lunia and MMPZ) on the same VPS, you should use only **one** Traefik instance. Contact Brian for help merging the configurations.
+
+### SSL Issuance
+If SSL is not working:
 1. Check Traefik logs: `docker-compose logs traefik`
 2. Ensure `mmpzmne.co.zw` is resolving to the correct IP.
-3. Ensure ports 80 and 443 are open in your VPS firewall (e.g., `ufw allow 80/tcp`, `ufw allow 443/tcp`).
+3. Check `traefik_data/acme.json` permissions (must be `600`).
