@@ -26,6 +26,7 @@ const sanitizeUser = (user) => ({
     role_code: user.role_code,
     system_role: resolveSystemRole(user.role_code, user.system_role),
     job_title: user.job_title || user.role_code || 'Intern',
+    profile_picture_url: user.profile_picture_url || null,
     role_assignment_status: user.role_assignment_status,
     role_confirmed_at: user.role_confirmed_at,
     role: toLegacyRole(user.role_code, resolveSystemRole(user.role_code, user.system_role)),
@@ -41,6 +42,7 @@ const sanitizeDirectoryUser = (user) => ({
     role_code: user.role_code,
     system_role: resolveSystemRole(user.role_code, user.system_role),
     job_title: user.job_title || user.role_code || 'Team Member',
+    profile_picture_url: user.profile_picture_url || null,
     role_assignment_status: user.role_assignment_status,
     created_at: user.created_at,
 });
@@ -79,6 +81,7 @@ export const handler = async (event) => {
                     role_code,
                     system_role,
                     job_title,
+                    profile_picture_url,
                     role_assignment_status,
                     role_confirmed_at,
                     require_password_reset,
@@ -154,6 +157,7 @@ export const handler = async (event) => {
                         role_code,
                         system_role,
                         job_title,
+                        profile_picture_url,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,
@@ -241,6 +245,9 @@ export const handler = async (event) => {
                             name,
                             email,
                             role_code,
+                            system_role,
+                            job_title,
+                            profile_picture_url,
                             role_assignment_status,
                             role_confirmed_at,
                             require_password_reset,
@@ -319,7 +326,7 @@ export const handler = async (event) => {
             }
 
             const existingRows = await sql`
-                SELECT id, role_code
+                SELECT id, role_code, system_role, job_title
                 FROM users
                 WHERE id = ${id}
                 LIMIT 1
@@ -383,6 +390,7 @@ export const handler = async (event) => {
                         role_code,
                         system_role,
                         job_title,
+                        profile_picture_url,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,

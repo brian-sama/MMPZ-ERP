@@ -56,7 +56,13 @@ export const handler = (req, res) => {
             const avatarUrl = `/uploads/avatars/${req.file.filename}`;
             
             // Update database
-            await sql`UPDATE users SET profile_picture_url = ${avatarUrl} WHERE id = ${userId}`;
+            await sql`
+                UPDATE users
+                SET
+                    profile_picture_url = ${avatarUrl},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${userId}
+            `;
 
             res.status(200).json({ 
                 message: 'Avatar uploaded successfully',

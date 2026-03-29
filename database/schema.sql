@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS users (
     role_code VARCHAR(80) NOT NULL DEFAULT 'DEVELOPMENT_FACILITATOR',
     system_role VARCHAR(40),
     job_title TEXT,
+    profile_picture_url TEXT,
     password_hash VARCHAR(255),
     require_password_reset BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP NULL,
@@ -108,18 +109,22 @@ CREATE TABLE IF NOT EXISTS users (
     role_confirmed_by_user_id INT NULL,
     role_confirmed_at TIMESTAMP NULL,
     role_legacy_snapshot VARCHAR(80) NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_code VARCHAR(80);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role VARCHAR(40);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS require_password_reset BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assignment_status VARCHAR(30) DEFAULT 'pending_reassignment';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_by_user_id INT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_at TIMESTAMP NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_legacy_snapshot VARCHAR(80) NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
 
 DO $$
 BEGIN
@@ -158,6 +163,10 @@ END $$;
 UPDATE users
 SET role_legacy_snapshot = COALESCE(role_legacy_snapshot, role_code)
 WHERE role_legacy_snapshot IS NULL;
+
+UPDATE users
+SET updated_at = COALESCE(updated_at, created_at, CURRENT_TIMESTAMP)
+WHERE updated_at IS NULL;
 
 UPDATE users
 SET role_code = CASE

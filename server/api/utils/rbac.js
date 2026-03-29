@@ -156,8 +156,8 @@ export const getUserContext = async (userId) => {
 
     const users = await sql`
         SELECT
-            u.id, u.name, u.email, 
-            u.role_code, u.system_role, u.job_title,
+            u.id, u.name, u.email,
+            u.role_code, u.system_role, u.job_title, u.profile_picture_url,
             u.role_assignment_status, u.role_confirmed_at,
             u.require_password_reset
         FROM users u

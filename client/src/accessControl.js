@@ -48,6 +48,7 @@ export const normalizeUserProfile = (user) => {
 };
 
 export const canAccessRole = (user, allowedRoles) => {
+  if (user?.system_role === 'SUPER_ADMIN') return true;
   if (!allowedRoles || allowedRoles.length === 0) return true;
   return allowedRoles.includes(user?.role_code);
 };
