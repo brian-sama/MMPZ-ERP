@@ -4,12 +4,23 @@ import { useAuth } from './context/AuthContext';
 import AppShell from './components/AppShell';
 import { canAccessRole, getDefaultRouteForUser } from './accessControl';
 import { getAllowedRolesForPath } from './navigationConfig';
-import SettingsPage from './pages/SettingsPage';
-import MyPortalPage from './pages/MyPortalPage';
-import UserManagementPage from './pages/UserManagementPage';
-import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
 
-// Intranet Placeholders
+// Pages
+import LoginPage from './pages/LoginPage';
+import ForcePasswordResetPage from './pages/ForcePasswordResetPage';
+import ExecutiveDashboardPage from './pages/ExecutiveDashboardPage';
+import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
+import ProgramsPage from './pages/ProgramsPage';
+import FacilitatorsPage from './pages/FacilitatorsPage';
+import MonitoringEvaluationPage from './pages/MonitoringEvaluationPage';
+import FinanceAdminPage from './pages/FinanceAdminPage';
+import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
+import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
+import UserManagementPage from './pages/UserManagementPage';
+import MyPortalPage from './pages/MyPortalPage';
+
+// Intranet
 import IntranetDashboardPage from './pages/intranet/IntranetDashboardPage.jsx';
 import StaffDirectoryPage from './pages/intranet/StaffDirectoryPage.jsx';
 import DocumentLibraryPage from './pages/intranet/DocumentLibraryPage.jsx';
