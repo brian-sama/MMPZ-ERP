@@ -66,9 +66,14 @@ if (fs.existsSync(clientBuildPath)) {
 }
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
-if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+    const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
+    if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+        console.log('Created uploads directory');
+    }
+} catch (dirError) {
+    console.warn('Could not create uploads directory. File uploads may fail, but server will continue starting.', dirError.message);
 }
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 

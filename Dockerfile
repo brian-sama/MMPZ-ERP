@@ -36,4 +36,4 @@ RUN chmod +x scripts/docker-entrypoint.sh && \
 
 # Automation: Run migrations and start server
 EXPOSE 3000
-ENTRYPOINT ["scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/scripts/docker-entrypoint.sh"]
