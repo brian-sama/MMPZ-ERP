@@ -50,11 +50,19 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-const clientBuildPath = path.join(__dirname, 'client', 'dist');
+const potentialPaths = [
+    path.join(__dirname, 'client', 'dist'),
+    path.join(process.cwd(), 'client', 'dist'),
+    '/app/client/dist'
+];
+
+let clientBuildPath = potentialPaths.find(p => fs.existsSync(p)) || potentialPaths[0];
+
 if (fs.existsSync(clientBuildPath)) {
+    console.log(`Serving static files from: ${clientBuildPath}`);
     app.use(express.static(clientBuildPath));
 } else {
-    console.warn('Client build not found. Run `npm run build` to serve frontend from this server.');
+    console.warn('Client build not found. Tried paths:', potentialPaths);
 }
 
 // Ensure uploads directory exists
