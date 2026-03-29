@@ -30,7 +30,9 @@ COPY database/ ./database/
 # Copy the built client to the expected path
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
-# Ensure migrations and seeding run before starting the server if necessary, 
-# although we rely primarily on postgres initialization.
+# Set permissions for entrypoint
+RUN chmod +x scripts/docker-entrypoint.sh
+
+# Automation: Run migrations and start server
 EXPOSE 3000
-CMD ["npm", "start"]
+ENTRYPOINT ["scripts/docker-entrypoint.sh"]

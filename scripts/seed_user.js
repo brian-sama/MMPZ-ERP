@@ -1,5 +1,5 @@
-import { sql } from './server/api/utils/db.js';
-import { hashPassword } from './server/api/utils/auth.js';
+import { sql } from '../server/api/utils/db.js';
+import { hashPassword } from '../server/api/utils/auth.js';
 
 async function seedUser() {
     const email = 'brianmagagula5@gmail.com';
