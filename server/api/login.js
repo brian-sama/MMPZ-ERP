@@ -2,7 +2,8 @@
 import { sql } from './utils/db.js';
 import { successResponse, errorResponse, corsResponse, parseBody } from './utils/response.js';
 import { comparePassword } from './utils/auth.js';
-import { toLegacyRole } from './utils/rbac.js';
+import { resolveSystemRole, toLegacyRole } from './utils/rbac.js';
+import { issueSessionToken } from './utils/session-token.js';
 
 export const handler = async (event) => {
     // Handle CORS preflight
@@ -69,17 +70,21 @@ export const handler = async (event) => {
         }
 
         // Return user data (without password)
+        const systemRole = resolveSystemRole(user.role_code, user.system_role);
         return successResponse({
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role_code: user.role_code,
-            system_role: user.system_role || 'INTERN',
-            job_title: user.job_title || user.role_code || 'Intern',
-            role_assignment_status: user.role_assignment_status || 'pending_reassignment',
-            role_confirmed_at: user.role_confirmed_at,
-            role: toLegacyRole(user.role_code, user.system_role),
-            require_password_reset: user.require_password_reset,
+            token: issueSessionToken(user.id),
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role_code: user.role_code,
+                system_role: systemRole,
+                job_title: user.job_title || user.role_code || 'Intern',
+                role_assignment_status: user.role_assignment_status || 'pending_reassignment',
+                role_confirmed_at: user.role_confirmed_at,
+                role: toLegacyRole(user.role_code, systemRole),
+                require_password_reset: user.require_password_reset,
+            },
         });
 
     } catch (error) {

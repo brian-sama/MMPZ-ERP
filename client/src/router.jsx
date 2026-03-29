@@ -2,6 +2,8 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AppShell from './components/AppShell';
+import { canAccessRole, getDefaultRouteForUser } from './accessControl';
+import { getAllowedRolesForPath } from './navigationConfig';
 
 // Lazy loading placeholders for now
 import LoginPage from './pages/LoginPage';
@@ -29,35 +31,37 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     if (loading) return <div>Loading...</div>;
     if (!user) return <Navigate to="/login" replace />;
 
-    if (allowedRoles && !allowedRoles.includes(user.role_code)) {
-        return <Navigate to="/" replace />;
+    if (!canAccessRole(user, allowedRoles)) {
+        return <Navigate to={getDefaultRouteForUser(user)} replace />;
     }
 
     return children;
 }
 
 export default function AppRouter() {
+    const { user, sessionKey } = useAuth();
+
     return (
         <Routes>
             <Route path="/login" element={<LoginPage />} />
 
             <Route element={
                 <ProtectedRoute>
-                    <AppShell />
+                    <AppShell key={sessionKey || user?.id || 'anonymous-session'} />
                 </ProtectedRoute>
             }>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<ExecutiveDashboardPage />} />
-                <Route path="/analytics" element={<ProtectedRoute allowedRoles={['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER']}><AnalyticsDashboardPage /></ProtectedRoute>} />
-                <Route path="/programs" element={<ProgramsPage />} />
-                <Route path="/facilitators" element={<FacilitatorsPage />} />
-                <Route path="/me" element={<MonitoringEvaluationPage />} />
-                <Route path="/finance" element={<FinanceAdminPage />} />
-                <Route path="/governance" element={<GovernanceApprovalsPage />} />
-                <Route path="/reports" element={<ProtectedRoute allowedRoles={['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'ADMIN_ASSISTANT']}><ReportsPage /></ProtectedRoute>} />
-                <Route path="/settings" element={<ProtectedRoute allowedRoles={['DIRECTOR', 'ADMIN_ASSISTANT']}><SettingsPage /></ProtectedRoute>} />
-                <Route path="/users" element={<ProtectedRoute allowedRoles={['DIRECTOR']}><UserManagementPage /></ProtectedRoute>} />
-                <Route path="/my-portal" element={<ProtectedRoute allowedRoles={['DEVELOPMENT_FACILITATOR', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN']}><MyPortalPage /></ProtectedRoute>} />
+                <Route path="/" element={<Navigate to={getDefaultRouteForUser(user)} replace />} />
+                <Route path="/dashboard" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/dashboard')}><ExecutiveDashboardPage /></ProtectedRoute>} />
+                <Route path="/analytics" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/analytics')}><AnalyticsDashboardPage /></ProtectedRoute>} />
+                <Route path="/programs" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/programs')}><ProgramsPage /></ProtectedRoute>} />
+                <Route path="/facilitators" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/facilitators')}><FacilitatorsPage /></ProtectedRoute>} />
+                <Route path="/me" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/me')}><MonitoringEvaluationPage /></ProtectedRoute>} />
+                <Route path="/finance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/finance')}><FinanceAdminPage /></ProtectedRoute>} />
+                <Route path="/governance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance')}><GovernanceApprovalsPage /></ProtectedRoute>} />
+                <Route path="/reports" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/reports')}><ReportsPage /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/settings')}><SettingsPage /></ProtectedRoute>} />
+                <Route path="/users" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/users')}><UserManagementPage /></ProtectedRoute>} />
+                <Route path="/my-portal" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/my-portal')}><MyPortalPage /></ProtectedRoute>} />
 
                 {/* Intranet Routes (All roles can access) */}
                 <Route path="/intranet/dashboard" element={<ProtectedRoute><IntranetDashboardPage /></ProtectedRoute>} />

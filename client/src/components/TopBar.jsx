@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, Search, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { getSearchableRoutes } from '../navigationConfig';
 
 export default function TopBar({ title }) {
     const { user, logout } = useAuth();
@@ -31,17 +32,10 @@ export default function TopBar({ title }) {
         navigate('/login');
     };
 
-    const navLinks = [
-        { label: 'Executive Dashboard', path: '/dashboard' },
-        { label: 'Programs', path: '/programs' },
-        { label: 'Development Facilitators', path: '/facilitators' },
-        { label: 'Monitoring & Evaluation', path: '/me' },
-        { label: 'Finance & Administration', path: '/finance' },
-        { label: 'Governance & Approvals', path: '/governance' },
-        { label: 'Reports', path: '/reports' },
-        { label: 'Settings', path: '/settings' },
-        { label: 'User Management', path: '/users' },
-    ];
+    const navLinks = getSearchableRoutes(user).map((item) => ({
+        label: item.label,
+        path: item.to,
+    }));
 
     const filteredLinks = searchQuery.length > 0
         ? navLinks.filter(l => l.label.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -169,7 +163,7 @@ export default function TopBar({ title }) {
                         }}>
                             <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Notifications</span>
-                                <span style={{ fontSize: '11px', color: '#7B2CBF', fontWeight: 600, cursor: 'pointer' }}>Mark all read</span>
+                                <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontWeight: 600, cursor: 'pointer' }}>Mark all read</span>
                             </div>
                             {sampleNotifications.map((n, i) => (
                                 <div key={i} style={{
@@ -179,7 +173,7 @@ export default function TopBar({ title }) {
                                     display: 'flex', gap: '10px', alignItems: 'flex-start',
                                 }}>
                                     {n.unread && (
-                                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#7B2CBF', marginTop: '5px', flexShrink: 0 }} />
+                                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--brand-primary)', marginTop: '5px', flexShrink: 0 }} />
                                     )}
                                     <div style={{ flex: 1, paddingLeft: n.unread ? 0 : '17px' }}>
                                         <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: n.unread ? 600 : 400 }}>{n.text}</div>
@@ -199,7 +193,7 @@ export default function TopBar({ title }) {
                     title="Sign out"
                     style={{
                         width: '32px', height: '32px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, #7B2CBF, #5A189A)',
+                        background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))',
                         border: 'none', cursor: 'pointer',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '12px', fontWeight: 700, color: 'white',

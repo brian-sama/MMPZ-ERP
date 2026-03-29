@@ -35,6 +35,7 @@ import { handler as financeCoreHandler } from './server/api/finance-core.js';
 import { handler as procurementHandler } from './server/api/procurement.js';
 import { handler as meHandler } from './server/api/me.js';
 import { handler as governanceHandler } from './server/api/governance.js';
+import { handler as announcementsHandler } from './server/api/announcements.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -75,6 +76,8 @@ app.use('/api/progress/:id/approve', functionToExpress(approvalsHandler));
 
 // Notifications
 app.use('/api/notifications', functionToExpress(notificationsHandler));
+app.use('/api/announcements/:id', functionToExpress(announcementsHandler));
+app.use('/api/announcements', functionToExpress(announcementsHandler));
 
 // Users and roles
 app.use('/api/users/:id/confirm-role', functionToExpress(usersHandler));
@@ -89,6 +92,7 @@ app.use('/api/dashboard/executive-summary', functionToExpress(dashboardHandler))
 // Finance & Procurement
 app.use('/api/finance/summary', functionToExpress(financeCoreHandler));
 app.use('/api/finance/grants', functionToExpress(financeCoreHandler));
+app.use('/api/finance/budget-lines', functionToExpress(financeCoreHandler));
 app.use('/api/finance/budgets', functionToExpress(financeCoreHandler));
 app.use('/api/procurement/:id', functionToExpress(procurementHandler));
 app.use('/api/procurement', functionToExpress(procurementHandler));

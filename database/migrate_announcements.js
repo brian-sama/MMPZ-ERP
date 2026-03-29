@@ -15,16 +15,26 @@ async function migrate() {
     console.log('Running Announcements table migration...');
     try {
         await sql`
+            CREATE EXTENSION IF NOT EXISTS pgcrypto;
+        `;
+
+        await sql`
             CREATE TABLE IF NOT EXISTS announcements (
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 title VARCHAR(255) NOT NULL,
                 content TEXT NOT NULL,
                 author_id INT REFERENCES users(id) ON DELETE SET NULL,
-                audience TEXT[] DEFAULT ARRAY['ALL'],
-                is_active BOOLEAN DEFAULT TRUE,
+                audience TEXT[] NOT NULL DEFAULT ARRAY['ALL'],
+                is_active BOOLEAN NOT NULL DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        `;
+
+        await sql`
+            UPDATE announcements
+            SET audience = ARRAY['ALL']
+            WHERE audience IS NULL OR array_length(audience, 1) IS NULL
         `;
         console.log('Announcements table created.');
     } catch (err) {

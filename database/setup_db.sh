@@ -8,10 +8,7 @@ set -e
 echo "Running 1: schema.sql..."
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f /docker-init-scripts/schema.sql
 
-echo "Running 2: rebuild_schema.sql..."
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f /docker-init-scripts/rebuild_schema.sql
-
-echo "Running 3: seed.sql..."
+echo "Running 2: seed.sql..."
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" -f /docker-init-scripts/seed.sql
 
 echo "Database successfully initialized and seeded!"

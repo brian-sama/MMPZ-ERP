@@ -1,5 +1,7 @@
--- MMPZ ERP Phase 3: Canonical Rebuild Schema (Additive)
--- This script adds the new canonical tables for the ERP rebuild.
+-- Deprecated bootstrap script.
+-- The canonical bootstrap now lives in database/schema.sql so both Docker init
+-- and scripted migrations build the same schema.
+-- This file is kept only as historical reference.
 -- 3.1 M&E and Programs Hierarchy
 CREATE TABLE IF NOT EXISTS outputs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

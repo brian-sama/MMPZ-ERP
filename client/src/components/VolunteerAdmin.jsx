@@ -112,6 +112,29 @@ const VolunteerAdmin = ({ user }) => {
         }
     };
 
+    const handleDownload = async (submissionId) => {
+        try {
+            const res = await axios.get(`${API_BASE}/volunteer/download/${submissionId}`, {
+                params: { userId: user.id },
+            });
+            const fileData = res.data?.file_data;
+            const fileName = res.data?.file_name || `submission-${submissionId}`;
+            if (!fileData) {
+                alert('No file data found for this submission.');
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = fileData;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            alert('Could not download this submission.');
+        }
+    };
+
     // Calculate unique volunteers (mock logic as API doesn't return count directly yet, but we can infer from unique names in submissions/participants)
     const uniqueVolunteers = new Set([...submissions.map(s => s.volunteer_name), ...participants.map(p => p.volunteer_name)]).size;
 
@@ -226,7 +249,7 @@ const VolunteerAdmin = ({ user }) => {
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 {sub.has_file && (
-                                                    <button onClick={() => window.open(`${API_BASE}/volunteer/download/${sub.id}`)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors shadow-sm">
+                                                    <button onClick={() => handleDownload(sub.id)} className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors shadow-sm">
                                                         <Download size={14} /> Download
                                                     </button>
                                                 )}

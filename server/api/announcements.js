@@ -1,6 +1,30 @@
 import { sql } from './utils/db.js';
 import { successResponse, errorResponse, corsResponse, parseBody, getPathParam } from './utils/response.js';
-import { getUserContext, getRequestUserId, ensurePermission, SYSTEM_ROLES } from './utils/rbac.js';
+import {
+    HttpError,
+    getUserContext,
+    getRequestUserId,
+    SYSTEM_ROLES,
+} from './utils/rbac.js';
+
+const ALLOWED_AUDIENCES = new Set([
+    'ALL',
+    SYSTEM_ROLES.SUPER_ADMIN,
+    SYSTEM_ROLES.MANAGEMENT,
+    SYSTEM_ROLES.PROGRAM_STAFF,
+    SYSTEM_ROLES.OPERATIONS,
+    SYSTEM_ROLES.INTERN,
+    SYSTEM_ROLES.FACILITATOR,
+]);
+
+const normalizeAudience = (audience) => {
+    const values = Array.isArray(audience) ? audience : [audience || 'ALL'];
+    const cleaned = values
+        .map((value) => String(value || '').trim().toUpperCase())
+        .filter((value) => ALLOWED_AUDIENCES.has(value));
+
+    return cleaned.length > 0 ? [...new Set(cleaned)] : ['ALL'];
+};
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -40,7 +64,7 @@ export const handler = async (event) => {
                 return errorResponse('Title and content are required', 400);
             }
 
-            const targetedAudience = Array.isArray(audience) ? audience : ['ALL'];
+            const targetedAudience = normalizeAudience(audience);
 
             const created = await sql`
                 INSERT INTO announcements (title, content, author_id, audience)
@@ -69,7 +93,10 @@ export const handler = async (event) => {
 
         return errorResponse('Not found', 404);
     } catch (err) {
+        if (err instanceof HttpError) {
+            return errorResponse(err.message, err.statusCode);
+        }
         console.error('Announcements error:', err);
-        return errorResponse('Internal server error', 500);
+        return errorResponse('Internal server error', 500, err.message);
     }
 };

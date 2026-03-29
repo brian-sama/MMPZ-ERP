@@ -154,6 +154,29 @@ const VolunteerPortal = ({ user }) => {
         }
     };
 
+    const handleDownload = async (submissionId) => {
+        try {
+            const res = await axios.get(`${API_BASE}/volunteer/download/${submissionId}`, {
+                params: { userId: user.id },
+            });
+            const fileData = res.data?.file_data;
+            const fileName = res.data?.file_name || `submission-${submissionId}`;
+            if (!fileData) {
+                setMsg({ type: 'error', text: 'No file data found for this submission.' });
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = fileData;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            setMsg({ type: 'error', text: 'Could not download this submission.' });
+        }
+    };
+
     return (
         <div className="space-y-8 animate-slideIn">
             <header className="flex items-center justify-between">
@@ -229,7 +252,7 @@ const VolunteerPortal = ({ user }) => {
                                         <div className="text-sm text-slate-500">{sub.file_name} | {new Date(sub.created_at).toLocaleDateString()}</div>
                                     </div>
                                 </div>
-                                <button onClick={() => window.open(`${API_BASE}/volunteer/download/${sub.id}`)} className="text-slate-400 hover:text-blue-600"><Download size={20} /></button>
+                                <button onClick={() => handleDownload(sub.id)} className="text-slate-400 hover:text-blue-600"><Download size={20} /></button>
                             </div>
                         ))}
                     </div>

@@ -98,6 +98,8 @@ CREATE TABLE IF NOT EXISTS users (
     name VARCHAR(100),
     email VARCHAR(100) UNIQUE,
     role_code VARCHAR(80) NOT NULL DEFAULT 'DEVELOPMENT_FACILITATOR',
+    system_role VARCHAR(40),
+    job_title TEXT,
     password_hash VARCHAR(255),
     require_password_reset BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP NULL,
@@ -110,6 +112,8 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_code VARCHAR(80);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role VARCHAR(40);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS require_password_reset BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assignment_status VARCHAR(30) DEFAULT 'pending_reassignment';
@@ -185,6 +189,26 @@ SET role_assignment_status = CASE
 END
 WHERE role_assignment_status IS NULL
    OR role_assignment_status NOT IN ('confirmed', 'pending_reassignment');
+
+UPDATE users
+SET system_role = CASE
+    WHEN role_code = 'DIRECTOR' THEN 'MANAGEMENT'
+    WHEN role_code = 'FINANCE_ADMIN_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'ADMIN_ASSISTANT' THEN 'OPERATIONS'
+    WHEN role_code = 'LOGISTICS_ASSISTANT' THEN 'OPERATIONS'
+    WHEN role_code = 'PSYCHOSOCIAL_SUPPORT_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'COMMUNITY_DEVELOPMENT_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'ME_INTERN_ACTING_OFFICER' THEN 'INTERN'
+    WHEN role_code = 'SOCIAL_SERVICES_INTERN' THEN 'INTERN'
+    WHEN role_code = 'YOUTH_COMMUNICATIONS_INTERN' THEN 'INTERN'
+    WHEN role_code = 'DEVELOPMENT_FACILITATOR' THEN 'FACILITATOR'
+    ELSE COALESCE(system_role, 'INTERN')
+END
+WHERE system_role IS NULL OR system_role = '';
+
+UPDATE users
+SET job_title = INITCAP(REPLACE(role_code, '_', ' '))
+WHERE job_title IS NULL OR job_title = '';
 
 ALTER TABLE users
     ALTER COLUMN role_code SET NOT NULL,
@@ -833,6 +857,286 @@ DROP TRIGGER IF EXISTS audit_activities_trigger ON activities;
 CREATE TRIGGER audit_activities_trigger
 AFTER INSERT OR UPDATE OR DELETE ON activities
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+-- =====================================================
+-- 6B. Canonical Intranet, Field, Finance and Governance Extensions
+-- =====================================================
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS legacy_source_table VARCHAR(50);
+ALTER TABLE programs ADD COLUMN IF NOT EXISTS legacy_source_id VARCHAR(100);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS legacy_source_table VARCHAR(50);
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS legacy_source_id VARCHAR(100);
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS legacy_source_table VARCHAR(50);
+ALTER TABLE indicators ADD COLUMN IF NOT EXISTS legacy_source_id VARCHAR(100);
+
+CREATE TABLE IF NOT EXISTS announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    content TEXT NOT NULL,
+    author_id INT REFERENCES users(id) ON DELETE SET NULL,
+    audience TEXT[] NOT NULL DEFAULT ARRAY['ALL'],
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE announcements ADD COLUMN IF NOT EXISTS author_id INT NULL;
+ALTER TABLE announcements ADD COLUMN IF NOT EXISTS audience TEXT[] DEFAULT ARRAY['ALL'];
+ALTER TABLE announcements ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE announcements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_name = 'announcements'
+          AND column_name = 'audience'
+          AND data_type = 'text'
+    ) THEN
+        ALTER TABLE announcements
+            ALTER COLUMN audience TYPE TEXT[]
+            USING ARRAY[UPPER(COALESCE(audience, 'ALL'))];
+    END IF;
+END $$;
+
+UPDATE announcements
+SET audience = ARRAY['ALL']
+WHERE audience IS NULL OR array_length(audience, 1) IS NULL;
+
+ALTER TABLE announcements ALTER COLUMN audience SET DEFAULT ARRAY['ALL'];
+ALTER TABLE announcements ALTER COLUMN audience SET NOT NULL;
+
+CREATE TABLE IF NOT EXISTS outputs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    activity_id INT REFERENCES activities(id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    target_value INT DEFAULT 0,
+    current_value INT DEFAULT 0,
+    unit VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS indicator_targets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    indicator_id INT REFERENCES indicators(id) ON DELETE CASCADE,
+    reporting_period VARCHAR(20) NOT NULL,
+    target_value INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(indicator_id, reporting_period)
+);
+
+CREATE TABLE IF NOT EXISTS indicator_progress (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    indicator_id INT REFERENCES indicators(id) ON DELETE CASCADE,
+    target_id UUID REFERENCES indicator_targets(id) ON DELETE SET NULL,
+    reporting_period VARCHAR(20) NOT NULL,
+    value INT NOT NULL,
+    notes TEXT,
+    reported_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE indicator_progress DROP CONSTRAINT IF EXISTS indicator_progress_status_check;
+ALTER TABLE indicator_progress
+    ADD CONSTRAINT indicator_progress_status_check
+    CHECK (status IN ('pending', 'approved', 'rejected'));
+
+CREATE TABLE IF NOT EXISTS development_facilitators (
+    user_id INT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    gender VARCHAR(20),
+    age_bracket VARCHAR(20),
+    phone VARCHAR(20),
+    address TEXT,
+    status VARCHAR(20) DEFAULT 'active',
+    joined_at DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE development_facilitators DROP CONSTRAINT IF EXISTS development_facilitators_status_check;
+ALTER TABLE development_facilitators
+    ADD CONSTRAINT development_facilitators_status_check
+    CHECK (status IN ('active', 'inactive'));
+
+CREATE TABLE IF NOT EXISTS facilitator_assignments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    facilitator_user_id INT REFERENCES development_facilitators(user_id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE,
+    UNIQUE(facilitator_user_id, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS facilitator_attendance (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    assignment_id UUID REFERENCES facilitator_assignments(id) ON DELETE CASCADE,
+    date DATE NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE facilitator_attendance DROP CONSTRAINT IF EXISTS facilitator_attendance_status_check;
+ALTER TABLE facilitator_attendance
+    ADD CONSTRAINT facilitator_attendance_status_check
+    CHECK (status IN ('present', 'office', 'absent'));
+
+CREATE TABLE IF NOT EXISTS donors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(200) NOT NULL UNIQUE,
+    code VARCHAR(50) UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS grants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    donor_id UUID REFERENCES donors(id) ON DELETE CASCADE,
+    name VARCHAR(200) NOT NULL,
+    code VARCHAR(50) UNIQUE,
+    total_amount DECIMAL(15, 2),
+    currency VARCHAR(10) DEFAULT 'USD',
+    start_date DATE,
+    end_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS budgets (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    grant_id UUID REFERENCES grants(id) ON DELETE CASCADE,
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+    name VARCHAR(200),
+    total_amount DECIMAL(15, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS budget_lines (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    budget_id UUID REFERENCES budgets(id) ON DELETE CASCADE,
+    code VARCHAR(50),
+    description TEXT,
+    allocated_amount DECIMAL(15, 2) NOT NULL,
+    used_amount DECIMAL(15, 2) DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS procurement_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    requested_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+    budget_line_id UUID REFERENCES budget_lines(id) ON DELETE SET NULL,
+    title VARCHAR(255) NOT NULL,
+    justification TEXT,
+    total_estimated_cost DECIMAL(15, 2),
+    status VARCHAR(30) DEFAULT 'draft',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE procurement_requests DROP CONSTRAINT IF EXISTS procurement_requests_status_check;
+ALTER TABLE procurement_requests
+    ADD CONSTRAINT procurement_requests_status_check
+    CHECK (status IN ('draft', 'pending_approval', 'approved', 'ordered', 'received', 'cancelled', 'rejected'));
+
+CREATE TABLE IF NOT EXISTS procurement_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    request_id UUID REFERENCES procurement_requests(id) ON DELETE CASCADE,
+    description TEXT NOT NULL,
+    quantity DECIMAL(10, 2) NOT NULL,
+    unit VARCHAR(50),
+    estimated_unit_cost DECIMAL(15, 2),
+    actual_unit_cost DECIMAL(15, 2),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id VARCHAR(120) NOT NULL,
+    requested_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    current_step INT DEFAULT 1,
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE approvals DROP CONSTRAINT IF EXISTS approvals_status_check;
+ALTER TABLE approvals
+    ADD CONSTRAINT approvals_status_check
+    CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
+
+CREATE TABLE IF NOT EXISTS approval_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    approval_id UUID REFERENCES approvals(id) ON DELETE CASCADE,
+    step_number INT NOT NULL,
+    action VARCHAR(20) NOT NULL,
+    actor_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS audit_announcements_trigger ON announcements;
+CREATE TRIGGER audit_announcements_trigger
+AFTER INSERT OR UPDATE OR DELETE ON announcements
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_outputs_trigger ON outputs;
+CREATE TRIGGER audit_outputs_trigger
+AFTER INSERT OR UPDATE OR DELETE ON outputs
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_indicator_targets_trigger ON indicator_targets;
+CREATE TRIGGER audit_indicator_targets_trigger
+AFTER INSERT OR UPDATE OR DELETE ON indicator_targets
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_indicator_progress_trigger ON indicator_progress;
+CREATE TRIGGER audit_indicator_progress_trigger
+AFTER INSERT OR UPDATE OR DELETE ON indicator_progress
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_facilitators_trigger ON development_facilitators;
+CREATE TRIGGER audit_facilitators_trigger
+AFTER INSERT OR UPDATE OR DELETE ON development_facilitators
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('user_id');
+
+DROP TRIGGER IF EXISTS audit_donors_trigger ON donors;
+CREATE TRIGGER audit_donors_trigger
+AFTER INSERT OR UPDATE OR DELETE ON donors
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_grants_trigger ON grants;
+CREATE TRIGGER audit_grants_trigger
+AFTER INSERT OR UPDATE OR DELETE ON grants
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_budgets_trigger ON budgets;
+CREATE TRIGGER audit_budgets_trigger
+AFTER INSERT OR UPDATE OR DELETE ON budgets
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_budget_lines_trigger ON budget_lines;
+CREATE TRIGGER audit_budget_lines_trigger
+AFTER INSERT OR UPDATE OR DELETE ON budget_lines
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_procurement_trigger ON procurement_requests;
+CREATE TRIGGER audit_procurement_trigger
+AFTER INSERT OR UPDATE OR DELETE ON procurement_requests
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_procurement_items_trigger ON procurement_items;
+CREATE TRIGGER audit_procurement_items_trigger
+AFTER INSERT OR UPDATE OR DELETE ON procurement_items
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_approvals_trigger ON approvals;
+CREATE TRIGGER audit_approvals_trigger
+AFTER INSERT OR UPDATE OR DELETE ON approvals
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+DROP TRIGGER IF EXISTS audit_approval_logs_trigger ON approval_logs;
+CREATE TRIGGER audit_approval_logs_trigger
+AFTER INSERT OR UPDATE OR DELETE ON approval_logs
+FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
 -- =====================================================
 -- 7. Indexes and governance notifications
 -- =====================================================
@@ -854,9 +1158,13 @@ CREATE INDEX IF NOT EXISTS idx_progress_updates_approval_status ON progress_upda
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_announcements_active_created_at ON announcements(is_active, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_activities_indicator ON activities(indicator_id);
 CREATE INDEX IF NOT EXISTS idx_activities_project_id ON activities(project_id);
+CREATE INDEX IF NOT EXISTS idx_outputs_activity_id ON outputs(activity_id);
+CREATE INDEX IF NOT EXISTS idx_indicator_targets_indicator_period ON indicator_targets(indicator_id, reporting_period);
+CREATE INDEX IF NOT EXISTS idx_indicator_progress_indicator_period ON indicator_progress(indicator_id, reporting_period);
 
 CREATE INDEX IF NOT EXISTS idx_kobo_form_links_indicator ON kobo_form_links(indicator_id);
 CREATE INDEX IF NOT EXISTS idx_kobo_submissions_indicator ON kobo_submissions(indicator_id);
@@ -865,8 +1173,24 @@ CREATE INDEX IF NOT EXISTS idx_volunteer_submissions_user ON volunteer_submissio
 CREATE INDEX IF NOT EXISTS idx_volunteer_participants_user ON volunteer_participants(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_project_assignments_project_user ON project_assignments(project_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_development_facilitators_status ON development_facilitators(status);
+CREATE INDEX IF NOT EXISTS idx_facilitator_assignments_facilitator_project ON facilitator_assignments(facilitator_user_id, project_id);
+CREATE INDEX IF NOT EXISTS idx_facilitator_attendance_assignment_date ON facilitator_attendance(assignment_id, date);
 CREATE INDEX IF NOT EXISTS idx_expense_requests_status ON expense_requests(status);
 CREATE INDEX IF NOT EXISTS idx_expense_requests_project_id ON expense_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_donors_code ON donors(code);
+CREATE INDEX IF NOT EXISTS idx_grants_donor_id ON grants(donor_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_grant_id ON budgets(grant_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_project_id ON budgets(project_id);
+CREATE INDEX IF NOT EXISTS idx_budget_lines_budget_id ON budget_lines(budget_id);
+CREATE INDEX IF NOT EXISTS idx_procurement_requests_status ON procurement_requests(status);
+CREATE INDEX IF NOT EXISTS idx_procurement_requests_budget_line_id ON procurement_requests(budget_line_id);
+CREATE INDEX IF NOT EXISTS idx_procurement_requests_project_id ON procurement_requests(project_id);
+CREATE INDEX IF NOT EXISTS idx_procurement_requests_requested_by ON procurement_requests(requested_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_procurement_items_request_id ON procurement_items(request_id);
+CREATE INDEX IF NOT EXISTS idx_approvals_status ON approvals(status);
+CREATE INDEX IF NOT EXISTS idx_approvals_entity ON approvals(entity_type, entity_id);
+CREATE INDEX IF NOT EXISTS idx_approval_logs_approval_id ON approval_logs(approval_id);
 CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(status);
 CREATE INDEX IF NOT EXISTS idx_approval_steps_request_order ON approval_steps(approval_request_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_entity ON audit_logs(table_name, entity_pk);

@@ -10,13 +10,14 @@ import {
 } from 'lucide-react';
 
 export default function GovernanceApprovalsPage() {
-    const { user, isDirector } = useAuth();
+    const { user } = useAuth();
     const [queue, setQueue] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedItem, setSelectedItem] = useState(null);
     const [comments, setComments] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const canAction = user?.role_code === 'DIRECTOR';
 
     useEffect(() => {
         fetchQueue();
@@ -105,8 +106,8 @@ export default function GovernanceApprovalsPage() {
                             </thead>
                             <tbody>
                                 {queue.filter(q => 
-                                    q.entity_type.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                                    q.requester_name.toLowerCase().includes(searchTerm.toLowerCase())
+                                    (q.entity_type || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    (q.requester_name || '').toLowerCase().includes(searchTerm.toLowerCase())
                                 ).map(item => (
                                     <tr
                                         key={item.id}
@@ -183,13 +184,48 @@ export default function GovernanceApprovalsPage() {
                                     <FileText size={16} className="text-muted" /> Transaction Details
                                 </h3>
                                 <div style={{ background: 'var(--bg-app)', padding: '16px', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                                    <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                        The system has linked this request to entity <strong>{selectedItem.entity_id}</strong>.
-                                        Please review the primary module's record for detailed breakdown of items/costs.
-                                    </div>
-                                    <button className="btn btn-ghost btn-sm" style={{ marginTop: '12px', color: 'var(--brand-primary)' }}>
-                                        <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
-                                    </button>
+                                    {selectedItem.procurement ? (
+                                        <div style={{ display: 'grid', gap: '12px' }}>
+                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                                <strong>{selectedItem.procurement.title}</strong> totals{' '}
+                                                <strong>{Number(selectedItem.procurement.total_estimated_cost || 0).toLocaleString()}</strong> USD
+                                                and is linked to {selectedItem.procurement.project_name || 'an unassigned project'}.
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                {selectedItem.procurement.policy?.control_note || 'Review itemization, budget line and procurement evidence before actioning.'}
+                                            </div>
+                                            <div className="data-table-wrap">
+                                                <table className="data-table">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Description</th>
+                                                            <th>Qty</th>
+                                                            <th>Unit Cost</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {selectedItem.procurement.items?.map((item) => (
+                                                            <tr key={item.id}>
+                                                                <td>{item.description}</td>
+                                                                <td>{item.quantity}</td>
+                                                                <td>{Number(item.estimated_unit_cost || 0).toLocaleString()}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                                The system has linked this request to entity <strong>{selectedItem.entity_id}</strong>.
+                                                Please review the primary module's record for detailed breakdown of items and costs.
+                                            </div>
+                                            <button className="btn btn-ghost btn-sm" style={{ marginTop: '12px', color: 'var(--brand-primary)' }}>
+                                                <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
 
@@ -203,7 +239,7 @@ export default function GovernanceApprovalsPage() {
                                     onChange={(e) => setComments(e.target.value)}
                                 ></textarea>
 
-                                {selectedItem.status === 'pending' && (
+                                {selectedItem.status === 'pending' && canAction && (
                                     <div style={{ display: 'flex', gap: '12px' }}>
                                         <button
                                             className="btn btn-primary"
@@ -221,6 +257,11 @@ export default function GovernanceApprovalsPage() {
                                         >
                                             <XCircle size={18} style={{ marginRight: '8px' }} /> {actionLoading ? 'Processing...' : 'Reject / Send Back'}
                                         </button>
+                                    </div>
+                                )}
+                                {selectedItem.status === 'pending' && !canAction && (
+                                    <div className="form-hint">
+                                        Queue visibility is enabled for oversight roles, but only the Director can record the final approval action.
                                     </div>
                                 )}
                             </div>

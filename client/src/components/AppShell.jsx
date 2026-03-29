@@ -5,6 +5,8 @@ import TopBar from './TopBar';
 import axios from 'axios';
 import API_BASE from '../apiConfig';
 import { useAuth } from '../context/AuthContext';
+import { canAccessRole } from '../accessControl';
+import { getAllowedRolesForPath, getPageTitle } from '../navigationConfig';
 import '../erp-shell.css';
 
 export default function AppShell() {
@@ -16,30 +18,21 @@ export default function AppShell() {
     useEffect(() => {
         const fetchCounts = async () => {
             if (!user?.id) return;
+            if (!canAccessRole(user, getAllowedRolesForPath('/governance'))) {
+                setPendingCount(0);
+                return;
+            }
             try {
-                const res = await axios.get(`${API_BASE}/approvals`, {
-                    params: { countOnly: true, userId: user.id }
+                const res = await axios.get(`${API_BASE}/governance/queue`, {
+                    params: { userId: user.id }
                 });
-                setPendingCount(res.data.total || 0);
+                setPendingCount((res.data || []).filter((item) => item.status === 'pending').length);
             } catch (err) {
                 console.error('Failed to fetch approval counts', err);
             }
         };
         fetchCounts();
     }, [location.pathname, user?.id]);
-
-    const getPageTitle = () => {
-        const path = location.pathname;
-        if (path === '/dashboard') return 'Executive Dashboard';
-        if (path === '/programs') return 'Programs Module';
-        if (path === '/facilitators') return 'Development Facilitators';
-        if (path === '/me') return 'Monitoring & Evaluation';
-        if (path === '/finance') return 'Finance & Administration';
-        if (path === '/governance') return 'Governance & Approvals';
-        if (path === '/reports') return 'System Reports';
-        if (path === '/settings') return 'General Settings';
-        return 'MMPZ ERP';
-    };
 
     return (
         <div className="erp-shell">
@@ -52,7 +45,7 @@ export default function AppShell() {
 
             <Sidebar pendingCount={pendingCount} />
             <div className="erp-main">
-                <TopBar title={getPageTitle()} />
+                <TopBar title={getPageTitle(location.pathname)} />
                 <main className="erp-content">
                     <Outlet />
                 </main>

@@ -1,14 +1,21 @@
 import { sql } from './utils/db.js';
 import { errorResponse, successResponse } from './utils/response.js';
+import {
+    HttpError,
+    getRequestUserId,
+    getUserContext,
+    ensureAnyPermission,
+} from './utils/rbac.js';
 
 export const handler = async (event) => {
-    const { userId } = event.queryStringParameters || {};
-
-    if (!userId) {
-        return errorResponse('User ID is required', 400);
-    }
-
     try {
+        const actor = await getUserContext(getRequestUserId(event));
+        ensureAnyPermission(
+            actor,
+            ['approval.read', 'expense.read', 'program.read', 'indicator.read_all', 'indicator.read_assigned'],
+            { allowPending: true }
+        );
+
         // ... rest of logic remains correct as it uses the SQL template tags ...
         // (Just ensure the rest of the file uses the correct responses)
         // 1. Fetch KPI basic counts/sums
@@ -76,6 +83,9 @@ export const handler = async (event) => {
         });
 
     } catch (error) {
+        if (error instanceof HttpError) {
+            return errorResponse(error.message, error.statusCode);
+        }
         console.error('Dashboard API Error:', error);
         return errorResponse('Failed to fetch executive dashboard data [DIAG_DASH_001]', 500, {
             message: error.message,

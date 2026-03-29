@@ -12,7 +12,8 @@ export const successResponse = (data, statusCode = 200) => {
         headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*', // Configure this for production
-            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Expose-Headers': 'Content-Disposition',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
         },
         body: JSON.stringify(data),
@@ -40,7 +41,8 @@ export const errorResponse = (message, statusCode = 500, details = null) => {
         headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Expose-Headers': 'Content-Disposition',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
         },
         body: JSON.stringify(errorBody),
@@ -56,7 +58,8 @@ export const corsResponse = () => {
         statusCode: 200,
         headers: {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Expose-Headers': 'Content-Disposition',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
         },
         body: '',

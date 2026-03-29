@@ -1,4 +1,8 @@
 import { sql } from './db.js';
+import {
+    getBearerTokenFromHeaders,
+    verifySessionToken,
+} from './session-token.js';
 
 export class HttpError extends Error {
     constructor(message, statusCode = 400) {
@@ -50,6 +54,20 @@ export const SYSTEM_ROLES = {
     FACILITATOR: 'FACILITATOR'
 };
 
+export const ROLE_TO_SYSTEM_ROLE = {
+    DIRECTOR: SYSTEM_ROLES.MANAGEMENT,
+    FINANCE_ADMIN_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    ADMIN_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
+    LOGISTICS_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
+    PSYCHOSOCIAL_SUPPORT_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    COMMUNITY_DEVELOPMENT_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    ME_INTERN_ACTING_OFFICER: SYSTEM_ROLES.INTERN,
+    SOCIAL_SERVICES_INTERN: SYSTEM_ROLES.INTERN,
+    YOUTH_COMMUNICATIONS_INTERN: SYSTEM_ROLES.INTERN,
+    DEVELOPMENT_FACILITATOR: SYSTEM_ROLES.FACILITATOR,
+    SYSTEM_ADMIN: SYSTEM_ROLES.SUPER_ADMIN,
+};
+
 const systemRoleToLegacy = {
     [SYSTEM_ROLES.SUPER_ADMIN]: 'admin',
     [SYSTEM_ROLES.MANAGEMENT]: 'admin',
@@ -59,10 +77,18 @@ const systemRoleToLegacy = {
     [SYSTEM_ROLES.FACILITATOR]: 'volunteer',
 };
 
+const runtimePermissionOverrides = {
+    ADMIN_ASSISTANT: ['settings.finance_threshold.read'],
+    LOGISTICS_ASSISTANT: ['expense.read'],
+};
+
 export const toLegacyRole = (roleCode, systemRole) => {
     if (systemRole && systemRoleToLegacy[systemRole]) return systemRoleToLegacy[systemRole];
     return legacyRoleMap[roleCode] || 'intern';
 };
+
+export const resolveSystemRole = (roleCode, fallbackSystemRole = null) =>
+    fallbackSystemRole || ROLE_TO_SYSTEM_ROLE[roleCode] || SYSTEM_ROLES.INTERN;
 
 export const normalizeRoleCodeInput = (inputRole) => {
     if (!inputRole) return null;
@@ -85,7 +111,7 @@ const asInt = (value) => {
     return Number.isNaN(parsed) ? null : parsed;
 };
 
-export const getRequestUserId = (event, body = null) => {
+const extractExplicitUserId = (event, body = null) => {
     const query = event?.queryStringParameters || {};
     const payload = body || {};
 
@@ -101,6 +127,27 @@ export const getRequestUserId = (event, body = null) => {
         asInt(query.adminId) ||
         asInt(query.actorUserId)
     );
+};
+
+export const getAuthenticatedUserId = (event) => {
+    const token = getBearerTokenFromHeaders(event?.headers || {});
+    const session = verifySessionToken(token);
+    return asInt(session?.userId);
+};
+
+export const getRequestUserId = (event, body = null) => {
+    const authenticatedUserId = getAuthenticatedUserId(event);
+    const explicitUserId = extractExplicitUserId(event, body);
+
+    if (!authenticatedUserId) {
+        throw new HttpError('Authentication required', 401);
+    }
+
+    if (explicitUserId && explicitUserId !== authenticatedUserId) {
+        throw new HttpError('Authenticated user does not match request actor', 403);
+    }
+
+    return authenticatedUserId;
 };
 
 export const getUserContext = async (userId) => {
@@ -123,7 +170,7 @@ export const getUserContext = async (userId) => {
     }
 
     const user = users[0];
-    const systemRole = user.system_role || SYSTEM_ROLES.INTERN;
+    const systemRole = resolveSystemRole(user.role_code, user.system_role);
     const jobTitle = user.job_title || user.role_code || 'Intern';
 
     // Permissions can still be fetched by role_code for now, or we can map them by system_role
@@ -140,6 +187,9 @@ export const getUserContext = async (userId) => {
     `;
 
     const permissions = new Set(permissionRows.map((row) => row.permission_code));
+    for (const permission of runtimePermissionOverrides[user.role_code] || []) {
+        permissions.add(permission);
+    }
     const roleAssignmentStatus = user.role_assignment_status || 'pending_reassignment';
 
     return {

@@ -12,7 +12,9 @@ import {
     getRequestUserId,
     getUserContext,
     ensurePermission,
+    hasPermission,
     normalizeRoleCodeInput,
+    resolveSystemRole,
     toLegacyRole,
     setAuditActor,
 } from './utils/rbac.js';
@@ -22,13 +24,24 @@ const sanitizeUser = (user) => ({
     name: user.name,
     email: user.email,
     role_code: user.role_code,
-    system_role: user.system_role || 'INTERN',
+    system_role: resolveSystemRole(user.role_code, user.system_role),
     job_title: user.job_title || user.role_code || 'Intern',
     role_assignment_status: user.role_assignment_status,
     role_confirmed_at: user.role_confirmed_at,
-    role: toLegacyRole(user.role_code, user.system_role),
+    role: toLegacyRole(user.role_code, resolveSystemRole(user.role_code, user.system_role)),
     require_password_reset: user.require_password_reset,
     last_login: user.last_login,
+    created_at: user.created_at,
+});
+
+const sanitizeDirectoryUser = (user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role_code: user.role_code,
+    system_role: resolveSystemRole(user.role_code, user.system_role),
+    job_title: user.job_title || user.role_code || 'Team Member',
+    role_assignment_status: user.role_assignment_status,
     created_at: user.created_at,
 });
 
@@ -58,7 +71,6 @@ export const handler = async (event) => {
 
         // GET - List users
         if (method === 'GET') {
-            ensurePermission(actor, 'user.view', { allowPending: true });
             const data = await sql`
                 SELECT
                     id,
@@ -75,7 +87,12 @@ export const handler = async (event) => {
                 FROM users
                 ORDER BY created_at DESC
             `;
-            return successResponse(data.map(sanitizeUser));
+
+            if (hasPermission(actor, 'user.view')) {
+                return successResponse(data.map(sanitizeUser));
+            }
+
+            return successResponse(data.map(sanitizeDirectoryUser));
         }
 
         // POST - Create user
@@ -88,7 +105,7 @@ export const handler = async (event) => {
             }
 
             const roleCode = resolveIncomingRole(body);
-            const systemRole = body.system_role || body.systemRole || 'INTERN';
+            const systemRole = body.system_role || body.systemRole || resolveSystemRole(roleCode);
             const jobTitle = body.job_title || body.jobTitle || roleCode;
 
             assertCanAssignRole(actor, roleCode);
@@ -247,7 +264,7 @@ export const handler = async (event) => {
             assertCanAssignRole(actor, nextRoleCode);
 
             const existingRows = await sql`
-                SELECT id, role_code
+                SELECT id, role_code, system_role, job_title
                 FROM users
                 WHERE id = ${id}
                 LIMIT 1
@@ -313,7 +330,7 @@ export const handler = async (event) => {
             const nextRoleCode = body.role || body.role_code
                 ? resolveIncomingRole(body)
                 : existing.role_code;
-            const nextSystemRole = body.system_role || body.systemRole || existing.system_role || 'INTERN';
+            const nextSystemRole = body.system_role || body.systemRole || existing.system_role || resolveSystemRole(nextRoleCode);
             const nextJobTitle = body.job_title || body.jobTitle || existing.job_title || nextRoleCode;
             
             assertCanAssignRole(actor, nextRoleCode);

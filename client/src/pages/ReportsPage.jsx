@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
+import axios from 'axios';
 import PageHeader from '../components/PageHeader';
+import { useAuth } from '../context/AuthContext';
+import API_BASE from '../apiConfig';
 import {
     FilePieChart, Download, FileText, Table,
     Filter, Calendar, ChevronRight, BarChartHorizontal
@@ -21,23 +24,46 @@ export default function ReportsPage() {
     const [format, setFormat] = useState('pdf');
 
     const handleGenerate = async () => {
+        if (!selectedReport) return;
         setGenerating(true);
+        const previewWindow = format === 'pdf' ? window.open('', '_blank', 'noopener,noreferrer') : null;
         try {
             const endpoint = format === 'pdf' ? '/reports/pdf' : '/reports/excel';
-            const url = `${API_BASE}${endpoint}?userId=${user.id}&from=${dateFrom}&to=${dateTo}&type=${selectedReport.id}`;
-            
+            const res = await axios.get(`${API_BASE}${endpoint}`, {
+                params: {
+                    from: dateFrom,
+                    to: dateTo,
+                    type: selectedReport.id,
+                    userId: user.id,
+                },
+                responseType: 'blob',
+            });
+
+            const blob = new Blob([res.data], {
+                type:
+                    res.headers['content-type'] ||
+                    (format === 'pdf' ? 'text/html;charset=utf-8' : 'text/csv;charset=utf-8'),
+            });
+            const blobUrl = window.URL.createObjectURL(blob);
+
             if (format === 'pdf') {
-                window.open(url, '_blank');
+                if (previewWindow) {
+                    previewWindow.location = blobUrl;
+                } else {
+                    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+                }
+                setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60_000);
             } else {
-                // For CSV, we can trigger a download
                 const link = document.createElement('a');
-                link.href = url;
+                link.href = blobUrl;
                 link.setAttribute('download', `report_${selectedReport.id}.csv`);
                 document.body.appendChild(link);
                 link.click();
                 link.remove();
+                window.URL.revokeObjectURL(blobUrl);
             }
         } catch (err) {
+            if (previewWindow) previewWindow.close();
             alert('Failed to generate report');
         } finally {
             setGenerating(false);

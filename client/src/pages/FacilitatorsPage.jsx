@@ -6,7 +6,7 @@ import PageHeader from '../components/PageHeader';
 import {
     Users, Search, Plus, MapPin, Phone,
     Calendar, CheckCircle, XCircle, Info,
-    UserCheck, Briefcase, ChevronRight
+    UserCheck, Briefcase, ChevronRight, MessageSquare
 } from 'lucide-react';
 
 export default function FacilitatorsPage() {
