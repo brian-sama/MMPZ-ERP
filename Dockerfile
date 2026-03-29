@@ -30,8 +30,9 @@ COPY database/ ./database/
 # Copy the built client to the expected path
 COPY --from=frontend-builder /app/client/dist ./client/dist
 
-# Set permissions for entrypoint
-RUN chmod +x scripts/docker-entrypoint.sh
+# Set permissions and fix line endings for linux execution
+RUN chmod +x scripts/docker-entrypoint.sh && \
+    sed -i 's/\r$//' scripts/*.sh
 
 # Automation: Run migrations and start server
 EXPOSE 3000
