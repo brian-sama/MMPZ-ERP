@@ -21,6 +21,7 @@ export const handler = async (sql) => {
     await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;`;
     await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`;
     await sql`ALTER TABLE announcements ADD COLUMN IF NOT EXISTS audience TEXT[] DEFAULT ARRAY['ALL'];`;
+    await sql`ALTER TABLE announcements ALTER COLUMN audience DROP DEFAULT;`;
 
     await sql.unsafe(`
       DO $$

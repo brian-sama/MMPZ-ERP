@@ -36,6 +36,7 @@ async function migrate() {
             SET audience = ARRAY['ALL']
             WHERE audience IS NULL OR array_length(audience, 1) IS NULL
         `;
+        await sql`ALTER TABLE announcements ALTER COLUMN audience SET DEFAULT ARRAY['ALL']`;
         console.log('Announcements table created.');
     } catch (err) {
         console.error('Migration failed:', err);
