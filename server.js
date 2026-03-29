@@ -38,6 +38,7 @@ import { handler as governanceHandler } from './server/api/governance.js';
 import { handler as announcementsHandler } from './server/api/announcements.js';
 import { handler as changePasswordHandler } from './server/api/change-password.js';
 import { handler as userProfileHandler } from './server/api/user-profile.js';
+import { handler as uploadAvatarHandler } from './server/api/upload-avatar.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -55,6 +56,13 @@ if (fs.existsSync(clientBuildPath)) {
 } else {
     console.warn('Client build not found. Run `npm run build` to serve frontend from this server.');
 }
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Health
 app.use('/api/health', functionToExpress(healthHandler));
@@ -103,6 +111,7 @@ app.use('/api/me/summary', functionToExpress(meHandler));
 app.use('/api/me/progress', functionToExpress(meHandler));
 app.use('/api/me/change-password', functionToExpress(changePasswordHandler));
 app.use('/api/me/profile', functionToExpress(userProfileHandler));
+app.use('/api/me/upload-avatar', uploadAvatarHandler); // Note: Multer handler doesn't need functionToExpress adapter if it's already an Express handler
 app.use('/api/me', functionToExpress(meHandler));
 
 app.use('/api/governance/queue', functionToExpress(governanceHandler));

@@ -23,16 +23,31 @@ export default function Sidebar({ pendingCount }) {
         navigate('/login');
     };
 
-    const updateAvatar = async () => {
-        const url = window.prompt("Enter Profile Picture URL:", user?.profile_picture_url || "");
-        if (url === null) return; // Cancelled
+    const fileInputRef = React.useRef(null);
+
+    const handleAvatarClick = () => {
+        if (updating) return;
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('avatar', file);
 
         setUpdating(true);
         try {
-            const res = await axios.patch(`${API_BASE}/me/profile`, { profile_picture_url: url });
-            updateUserProfile({ profile_picture_url: url });
+            const res = await axios.post(`${API_BASE}/me/upload-avatar`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            updateUserProfile({ profile_picture_url: res.data.url });
         } catch (err) {
-            alert("Failed to update profile picture");
+            console.error('Upload error:', err);
+            alert(err.response?.data?.error || "Failed to upload profile picture");
         } finally {
             setUpdating(false);
         }
@@ -78,14 +93,20 @@ export default function Sidebar({ pendingCount }) {
                     </div>
                 ))}
             </nav>
-
             <div className="sidebar-footer">
+                <input 
+                    type="file" 
+                    ref={fileInputRef} 
+                    onChange={handleFileChange} 
+                    accept="image/*" 
+                    style={{ display: 'none' }} 
+                />
                 <div
                     className="sidebar-user"
                     role="button"
                     aria-label="User Profile"
-                    title="Update Profile Picture"
-                    onClick={updateAvatar}
+                    title="Upload Profile Picture"
+                    onClick={handleAvatarClick}
                     style={{ cursor: updating ? 'wait' : 'pointer' }}
                 >
                     {user?.profile_picture_url ? (

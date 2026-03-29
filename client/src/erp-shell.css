@@ -443,6 +443,29 @@ body {
   text-overflow: ellipsis;
 }
 
+.sidebar-logout-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sidebar-logout-wrapper:hover {
+  background: rgba(180, 35, 24, 0.08);
+  color: var(--brand-danger);
+}
+
+.sidebar-logout-wrapper span {
+  flex: 1;
+}
+
 /* ── Top Bar ────────────────────────────────────────────── */
 .erp-topbar {
   height: 64px;

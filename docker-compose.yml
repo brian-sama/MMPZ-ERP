@@ -42,6 +42,8 @@ services:
     networks:
       - mmpz_inner
       - traefik-public
+    volumes:
+      - ./uploads:/app/uploads
 
   streamlit:
     build:
