@@ -11,11 +11,12 @@ echo "Starting MMPZ ERP Deployment Lifecycle..."
 attempts=0
 max_attempts=30
 while [ $attempts -lt $max_attempts ]; do
-    if node -e "import postgres from 'postgres'; const sql = postgres(process.env.DATABASE_URL); await sql\`SELECT 1\`; process.exit(0);" 2>/dev/null; then
+    echo "Checking database connectivity... ($((attempts+1))/$max_attempts)"
+    # Use -p to pass code as a string, and --input-type=module for ESM support
+    if echo "import postgres from 'postgres'; const sql = postgres(process.env.DATABASE_URL); sql\`SELECT 1\`.then(() => process.exit(0)).catch(() => process.exit(1));" | node --input-type=module > /dev/null 2>&1; then
         echo "Database is ready!"
         break
     fi
-    echo "Waiting for database... ($((attempts+1))/$max_attempts)"
     sleep 2
     attempts=$((attempts+1))
 done
