@@ -16,6 +16,7 @@ import {
     ensurePermission,
     setAuditActor,
 } from './utils/rbac.js';
+import { createNotification } from './utils/notification-center.js';
 
 const loadConfig = async () => {
     const configs = await sql`SELECT * FROM kobo_config LIMIT 1`;
@@ -104,16 +105,16 @@ const syncForm = async (link, config, actorId) => {
 
                 const directors = await tx`SELECT id FROM users WHERE role_code = 'DIRECTOR'`;
                 for (const director of directors) {
-                    await tx`
-                        INSERT INTO notifications (user_id, type, title, message, related_indicator_id)
-                        VALUES (
-                            ${director.id},
-                            'approval_needed',
-                            'Audit Ready for Review',
-                            ${`Progress update audited with Kobo. Manual: ${audit.new_value}, Kobo: ${totalKoboSubmissions}${tallyMatches ? ' (Match)' : ' (Mismatch)'}`},
-                            ${link.indicator_id}
-                        )
-                    `;
+                    await createNotification(tx, {
+                        userId: director.id,
+                        type: 'approval_needed',
+                        title: 'Audit ready for review',
+                        message: `Progress update audited with Kobo. Manual: ${audit.new_value}, Kobo: ${totalKoboSubmissions}${tallyMatches ? ' (Match)' : ' (Mismatch)'}`,
+                        relatedIndicatorId: link.indicator_id,
+                        relatedEntityType: 'kobo_audit',
+                        relatedEntityId: String(audit.id),
+                        actionUrl: '/governance',
+                    });
                 }
             }
         } else if (newCount > 0) {

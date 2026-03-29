@@ -101,6 +101,84 @@ export const getQueryParams = (event) => {
  * @returns {string|null} Parameter value
  */
 export const getPathParam = (event, paramName) => {
+    const staticPathSegments = new Set([
+        'api',
+        'activities',
+        'announcements',
+        'approvals',
+        'budget-lines',
+        'budgets',
+        'calendar',
+        'change-password',
+        'config',
+        'dashboard',
+        'disconnect',
+        'documents',
+        'excel',
+        'expenses',
+        'executive-summary',
+        'export',
+        'facilitator-assignments',
+        'facilitator-attendance',
+        'facilitators',
+        'fields',
+        'finance',
+        'finance-threshold',
+        'forms',
+        'governance',
+        'grants',
+        'health',
+        'import-participants',
+        'indicators',
+        'kobo',
+        'link',
+        'links',
+        'login',
+        'me',
+        'notifications',
+        'outputs',
+        'pdf',
+        'pending',
+        'pending-role-assignments',
+        'procurement',
+        'profile',
+        'programs',
+        'progress',
+        'projects',
+        'push',
+        'queue',
+        'reports',
+        'roles',
+        'settings',
+        'stream',
+        'subscriptions',
+        'summary',
+        'sync',
+        'sync-all',
+        'upload-avatar',
+        'users',
+        'volunteer',
+    ]);
+
+    const inferredIdParents = new Set([
+        'activities',
+        'announcements',
+        'approvals',
+        'calendar',
+        'documents',
+        'expenses',
+        'facilitators',
+        'governance',
+        'indicators',
+        'link',
+        'notifications',
+        'procurement',
+        'progress',
+        'projects',
+        'sync',
+        'users',
+    ]);
+
     // 1. Check mapped path parameters first.
     if (event.pathParameters && event.pathParameters[paramName]) {
         return event.pathParameters[paramName];
@@ -113,12 +191,17 @@ export const getPathParam = (event, paramName) => {
     // Look for ID at the end if we are looking for 'id'
     if (paramName === 'id' || paramName === 'indicatorId') {
         const lastPart = parts[parts.length - 1];
-        const resourceNames = ['indicators', 'activities', 'users', 'progress', 'kobo', 'config', 'link', 'sync'];
-        if (!resourceNames.includes(lastPart)) {
+        const parentPart = parts[parts.length - 2];
+        if (lastPart && inferredIdParents.has(parentPart) && !staticPathSegments.has(lastPart)) {
             return lastPart;
         }
+        return null;
     }
 
     const index = parts.indexOf(paramName);
-    return (index !== -1 && parts[index + 1]) ? parts[index + 1] : null;
+    const nextPart = index !== -1 ? parts[index + 1] : null;
+    if (!nextPart || staticPathSegments.has(nextPart)) {
+        return null;
+    }
+    return nextPart;
 };

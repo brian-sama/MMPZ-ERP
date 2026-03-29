@@ -5,12 +5,15 @@ const AnalyticsDashboardPage = () => {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <PageHeader title="Advanced Analytics" />
-      <div className="flex-1 w-full bg-white rounded-lg shadow mt-4 p-0 overflow-hidden relative">
+      <div
+        className="flex-1 w-full bg-white rounded-lg shadow mt-4 p-0 overflow-hidden relative"
+        style={{ minHeight: 'min(900px, calc(100vh - 180px))' }}
+      >
         <iframe
           src="/streamlit/?embed=true"
           title="Streamlit Analytics"
           className="w-full h-full border-0 absolute top-0 left-0"
-          sandbox="allow-scripts allow-popups allow-forms allow-same-origin"
+          sandbox="allow-scripts allow-popups allow-forms"
           allowFullScreen
         />
       </div>

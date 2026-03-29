@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
 import {
     ArrowUpRight,
     ClipboardList,
@@ -71,6 +72,7 @@ const createBlankItem = () => ({
 
 export default function FinanceAdminPage() {
     const { user } = useAuth();
+    const [searchParams, setSearchParams] = useSearchParams();
     const canCreateRequisition = [
         'DIRECTOR',
         'COMMUNITY_DEVELOPMENT_OFFICER',
@@ -128,6 +130,13 @@ export default function FinanceAdminPage() {
     useEffect(() => {
         fetchFinanceData();
     }, []);
+
+    useEffect(() => {
+        const procurementId = searchParams.get('procurement');
+        if (procurementId) {
+            openProcurementDetail(procurementId);
+        }
+    }, [searchParams]);
 
     const formTotal = useMemo(
         () =>
@@ -191,6 +200,11 @@ export default function FinanceAdminPage() {
                 params: { userId: user.id },
             });
             setSelectedProcurement(res.data);
+            setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set('procurement', id);
+                return next;
+            });
         } catch (err) {
             setMessage({
                 type: 'error',
@@ -732,7 +746,19 @@ export default function FinanceAdminPage() {
                     <div className="modal-box xl" onClick={(event) => event.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title">{selectedProcurement.title}</div>
-                            <button className="modal-close" onClick={() => setSelectedProcurement(null)}>&times;</button>
+                            <button
+                                className="modal-close"
+                                onClick={() => {
+                                    setSelectedProcurement(null);
+                                    setSearchParams((current) => {
+                                        const next = new URLSearchParams(current);
+                                        next.delete('procurement');
+                                        return next;
+                                    });
+                                }}
+                            >
+                                &times;
+                            </button>
                         </div>
                         <div className="modal-body">
                             <div className="detail-grid">
@@ -788,7 +814,19 @@ export default function FinanceAdminPage() {
                             </div>
                         </div>
                         <div className="modal-footer">
-                            <button className="btn btn-secondary" onClick={() => setSelectedProcurement(null)}>Close</button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={() => {
+                                    setSelectedProcurement(null);
+                                    setSearchParams((current) => {
+                                        const next = new URLSearchParams(current);
+                                        next.delete('procurement');
+                                        return next;
+                                    });
+                                }}
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

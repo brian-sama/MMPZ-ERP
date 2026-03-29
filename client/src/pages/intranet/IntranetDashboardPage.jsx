@@ -8,6 +8,7 @@ import { Radio, Bell, MessageSquare, CheckCircle2, Plus, Users, Globe, Trash2, C
 export default function IntranetDashboardPage() {
     const { user, isFacilitator } = useAuth();
     const [announcements, setAnnouncements] = useState([]);
+    const [upcomingCount, setUpcomingCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
 
@@ -27,7 +28,11 @@ export default function IntranetDashboardPage() {
         setLoading(true);
         try {
             const res = await axios.get(`${API_BASE}/announcements`, { params: { userId: user.id } });
+            const eventsRes = await axios.get(`${API_BASE}/calendar`, {
+                params: { userId: user.id, view: 'upcoming', countOnly: true },
+            });
             setAnnouncements(res.data);
+            setUpcomingCount(Number(eventsRes.data?.upcoming || eventsRes.data?.total || 0));
         } catch (err) {
             console.error('Failed to fetch announcements');
         } finally {
@@ -154,7 +159,7 @@ export default function IntranetDashboardPage() {
                     <div className="kpi-card info">
                         <div className="kpi-icon-wrap"><Clock size={20} /></div>
                         <div className="kpi-label">Upcoming Events</div>
-                        <div className="kpi-value">0</div>
+                        <div className="kpi-value">{upcomingCount}</div>
                         <p className="form-hint">See full calendar for more details.</p>
                     </div>
                 </div>

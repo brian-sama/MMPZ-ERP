@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
     ShieldCheck, Clock, CheckCircle2, XCircle,
     MessageSquare, User, FileText, ChevronRight,
@@ -11,6 +12,8 @@ import {
 
 export default function GovernanceApprovalsPage() {
     const { user } = useAuth();
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [queue, setQueue] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedItem, setSelectedItem] = useState(null);
@@ -22,6 +25,13 @@ export default function GovernanceApprovalsPage() {
     useEffect(() => {
         fetchQueue();
     }, []);
+
+    useEffect(() => {
+        const approvalId = searchParams.get('approvalId');
+        if (approvalId) {
+            fetchDetail(approvalId);
+        }
+    }, [searchParams]);
 
     const fetchQueue = async () => {
         setLoading(true);
@@ -40,6 +50,11 @@ export default function GovernanceApprovalsPage() {
         try {
             const res = await axios.get(`${API_BASE}/governance/${id}`, { params: { userId: user.id } });
             setSelectedItem(res.data);
+            setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set('approvalId', id);
+                return next;
+            });
         } catch (err) {
             console.error('Failed to fetch approval details');
         } finally {
@@ -59,6 +74,11 @@ export default function GovernanceApprovalsPage() {
             });
             setComments('');
             setSelectedItem(null);
+            setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.delete('approvalId');
+                return next;
+            });
             fetchQueue();
         } catch (err) {
             alert('Failed to process approval action');
@@ -156,7 +176,19 @@ export default function GovernanceApprovalsPage() {
                                         <p className="panel-subtitle">Governance Audit ID: {selectedItem.id.slice(0, 13)}</p>
                                     </div>
                                 </div>
-                                <button className="btn btn-ghost btn-sm" onClick={() => setSelectedItem(null)}>Close</button>
+                                <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => {
+                                        setSelectedItem(null);
+                                        setSearchParams((current) => {
+                                            const next = new URLSearchParams(current);
+                                            next.delete('approvalId');
+                                            return next;
+                                        });
+                                    }}
+                                >
+                                    Close
+                                </button>
                             </div>
                         </div>
 
@@ -214,6 +246,13 @@ export default function GovernanceApprovalsPage() {
                                                     </tbody>
                                                 </table>
                                             </div>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                style={{ marginTop: '12px', color: 'var(--brand-primary)' }}
+                                                onClick={() => navigate(`/finance?procurement=${selectedItem.entity_id}`)}
+                                            >
+                                                <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
+                                            </button>
                                         </div>
                                     ) : (
                                         <>
@@ -221,7 +260,15 @@ export default function GovernanceApprovalsPage() {
                                                 The system has linked this request to entity <strong>{selectedItem.entity_id}</strong>.
                                                 Please review the primary module's record for detailed breakdown of items and costs.
                                             </div>
-                                            <button className="btn btn-ghost btn-sm" style={{ marginTop: '12px', color: 'var(--brand-primary)' }}>
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                style={{ marginTop: '12px', color: 'var(--brand-primary)' }}
+                                                onClick={() => {
+                                                    if (selectedItem.entity_type === 'procurement') {
+                                                        navigate(`/finance?procurement=${selectedItem.entity_id}`);
+                                                    }
+                                                }}
+                                            >
                                                 <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
                                             </button>
                                         </>

@@ -20,6 +20,17 @@ export default function MonitoringEvaluationPage() {
     const [performance, setPerformance] = useState([]);
     const [selectedInd, setSelectedInd] = useState(null);
     const [showReportForm, setShowReportForm] = useState(false);
+    const [showIndicatorForm, setShowIndicatorForm] = useState(false);
+    const [projects, setProjects] = useState([]);
+    const [indicatorSearch, setIndicatorSearch] = useState('');
+    const [creatingIndicator, setCreatingIndicator] = useState(false);
+    const [newIndicator, setNewIndicator] = useState({
+        title: '',
+        project_id: '',
+        target_value: '',
+        total_budget: '',
+        priority: 'medium',
+    });
 
     // KoBo State
     const [koboLinks, setKoboLinks] = useState([]);
@@ -28,6 +39,7 @@ export default function MonitoringEvaluationPage() {
     // Form State
     const [reportValue, setReportValue] = useState('');
     const [reportNotes, setReportNotes] = useState('');
+    const hasPerformanceData = performance.length > 0;
 
     useEffect(() => {
         fetchMEData();
@@ -61,17 +73,67 @@ export default function MonitoringEvaluationPage() {
     const fetchMEData = async () => {
         setLoading(true);
         try {
-            const indRes = await axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } });
+            const [indRes, perfRes, projectRes] = await Promise.all([
+                axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
+            ]);
             setIndicators(indRes.data);
-
-            const perfRes = await axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } });
             setPerformance(perfRes.data.reverse());
+            setProjects(projectRes.data || []);
         } catch (err) {
-            console.error('Failed to fetch M&E data');
+            console.error('Failed to fetch M&E data', err);
         } finally {
             setLoading(false);
         }
     };
+
+    const handleExportFramework = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/export/indicators`, {
+                responseType: 'blob',
+                params: { userId: user.id },
+            });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = 'mmpz-indicators-export.csv';
+            link.click();
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            alert('Failed to export framework');
+        }
+    };
+
+    const handleCreateIndicator = async (e) => {
+        e.preventDefault();
+        setCreatingIndicator(true);
+        try {
+            await axios.post(`${API_BASE}/indicators`, {
+                userId: user.id,
+                ...newIndicator,
+                target_value: Number(newIndicator.target_value || 0),
+                total_budget: Number(newIndicator.total_budget || 0),
+            });
+            setShowIndicatorForm(false);
+            setNewIndicator({
+                title: '',
+                project_id: '',
+                target_value: '',
+                total_budget: '',
+                priority: 'medium',
+            });
+            fetchMEData();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to create indicator');
+        } finally {
+            setCreatingIndicator(false);
+        }
+    };
+
+    const filteredIndicators = indicators.filter((ind) =>
+        ind.title.toLowerCase().includes(indicatorSearch.toLowerCase())
+    );
 
     const handleReportProgress = async (e) => {
         e.preventDefault();
@@ -103,15 +165,19 @@ export default function MonitoringEvaluationPage() {
                 title="Monitoring & Evaluation"
                 subtitle="Track organizational indicators, verify field evidence, and analyze performance trends."
                 actions={
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button className="btn btn-secondary btn-sm"><Download size={16} /> Export Framework</button>
-                        <button className="btn btn-primary btn-sm"><Plus size={16} /> New Indicator</button>
+                    <div className="page-action-group" style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn btn-secondary btn-sm" onClick={handleExportFramework}>
+                            <Download size={16} /> Export Framework
+                        </button>
+                        <button className="btn btn-primary btn-sm" onClick={() => setShowIndicatorForm(true)}>
+                            <Plus size={16} /> New Indicator
+                        </button>
                     </div>
                 }
             />
 
-            <div className="kpi-grid" style={{ gridTemplateColumns: '1fr 2fr' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div className="kpi-grid me-overview-grid" style={{ gridTemplateColumns: '1fr 2fr' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', minWidth: 0 }}>
                     <div className="kpi-card info">
                         <div className="kpi-icon-wrap"><Target size={22} /></div>
                         <div className="kpi-label">Indicators Tracking</div>
@@ -119,22 +185,29 @@ export default function MonitoringEvaluationPage() {
                         <div className="kpi-sub">{indicators.filter(i => i.status === 'active').length} active targets</div>
                     </div>
 
-                    <div className="panel">
+                    <div className="panel" style={{ minWidth: 0 }}>
                         <div className="panel-header">
                             <h2 className="panel-title">Cumulative Performance</h2>
                         </div>
-                        <div style={{ height: '200px', width: '100%', padding: '0 10px' }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={performance}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                                    <XAxis dataKey="reporting_period" hide />
-                                    <Tooltip
-                                        contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '8px' }}
-                                        itemStyle={{ color: 'var(--text-primary)' }}
-                                    />
-                                    <Bar dataKey="total_reached" fill="var(--brand-primary)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
+                        <div style={{ height: '220px', width: '100%', minWidth: 0, minHeight: '220px', padding: '0 10px' }}>
+                            {hasPerformanceData ? (
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={performance}>
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                                        <XAxis dataKey="reporting_period" hide />
+                                        <Tooltip
+                                            contentStyle={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '8px' }}
+                                            itemStyle={{ color: 'var(--text-primary)' }}
+                                        />
+                                        <Bar dataKey="total_reached" fill="var(--brand-primary)" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <div className="empty-state" style={{ height: '100%', minHeight: 0 }}>
+                                    <div className="empty-state-icon"><BarChart3 size={24} /></div>
+                                    <p className="empty-state-text">Performance data will appear once reports are submitted.</p>
+                                </div>
+                            )}
                         </div>
                         <div style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)', marginTop: '8px' }}>
                             Actual Reached vs Targets (Last 6 Months)
@@ -148,7 +221,7 @@ export default function MonitoringEvaluationPage() {
                             </h2>
                         </div>
                         <div style={{ padding: '20px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div className="me-sync-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 600 }}>KoBoToolbox Connection</div>
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{koboLinks.length} active form bridges</div>
@@ -184,13 +257,20 @@ export default function MonitoringEvaluationPage() {
                     </div>
                 </div>
 
-                <div className="panel">
-                    <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div className="panel" style={{ minWidth: 0 }}>
+                    <div className="panel-header me-framework-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <h2 className="panel-title">Strategic Indicator Framework</h2>
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <div className="search-box">
                                 <Search size={14} className="search-icon" />
-                                <input type="text" placeholder="Filter indicators..." className="form-input" style={{ height: '32px', fontSize: '12px' }} />
+                                <input
+                                    type="text"
+                                    placeholder="Filter indicators..."
+                                    className="form-input"
+                                    style={{ height: '32px', fontSize: '12px' }}
+                                    value={indicatorSearch}
+                                    onChange={(event) => setIndicatorSearch(event.target.value)}
+                                />
                             </div>
                         </div>
                     </div>
@@ -206,7 +286,7 @@ export default function MonitoringEvaluationPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {indicators.map(ind => (
+                                {filteredIndicators.map(ind => (
                                     <tr key={ind.id} onClick={() => setSelectedInd(ind)} style={{ cursor: 'pointer' }} className={selectedInd?.id === ind.id ? 'active-row' : ''}>
                                         <td>
                                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{ind.title}</div>
@@ -292,6 +372,86 @@ export default function MonitoringEvaluationPage() {
                             <div className="modal-footer">
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowReportForm(false)}>Cancel</button>
                                 <button type="submit" className="btn btn-primary">Submit Report</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {showIndicatorForm && (
+                <div className="modal-overlay" onClick={() => setShowIndicatorForm(false)}>
+                    <div className="modal-box" onClick={(event) => event.stopPropagation()}>
+                        <div className="modal-header">
+                            <div className="modal-title">Create Indicator</div>
+                            <button className="modal-close" onClick={() => setShowIndicatorForm(false)}>×</button>
+                        </div>
+                        <form onSubmit={handleCreateIndicator}>
+                            <div className="modal-body" style={{ display: 'grid', gap: '16px' }}>
+                                <div className="form-group">
+                                    <label className="form-label">Title</label>
+                                    <input
+                                        className="form-input"
+                                        value={newIndicator.title}
+                                        onChange={(event) => setNewIndicator((current) => ({ ...current, title: event.target.value }))}
+                                        required
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Project</label>
+                                    <select
+                                        className="form-input"
+                                        value={newIndicator.project_id}
+                                        onChange={(event) => setNewIndicator((current) => ({ ...current, project_id: event.target.value }))}
+                                    >
+                                        <option value="">Unassigned</option>
+                                        {projects.map((project) => (
+                                            <option key={project.id} value={project.id}>{project.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Target Value</label>
+                                        <input
+                                            type="number"
+                                            className="form-input"
+                                            min="0"
+                                            value={newIndicator.target_value}
+                                            onChange={(event) => setNewIndicator((current) => ({ ...current, target_value: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Budget</label>
+                                        <input
+                                            type="number"
+                                            className="form-input"
+                                            min="0"
+                                            value={newIndicator.total_budget}
+                                            onChange={(event) => setNewIndicator((current) => ({ ...current, total_budget: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Priority</label>
+                                    <select
+                                        className="form-input"
+                                        value={newIndicator.priority}
+                                        onChange={(event) => setNewIndicator((current) => ({ ...current, priority: event.target.value }))}
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                        <option value="critical">Critical</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowIndicatorForm(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={creatingIndicator}>
+                                    {creatingIndicator ? 'Saving...' : 'Save Indicator'}
+                                </button>
                             </div>
                         </form>
                     </div>

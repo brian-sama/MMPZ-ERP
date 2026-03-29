@@ -15,6 +15,7 @@ import {
     hasPermission,
     setAuditActor,
 } from './utils/rbac.js';
+import { createNotification } from './utils/notification-center.js';
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -151,16 +152,16 @@ export const handler = async (event) => {
                             : 'A new progress update needs approval.';
 
                     for (const director of directors) {
-                        await tx`
-                            INSERT INTO notifications (user_id, type, title, message, related_indicator_id)
-                            VALUES (
-                                ${director.id},
-                                'approval_needed',
-                                'Progress Approval Needed',
-                                ${message},
-                                ${indicatorId}
-                            )
-                        `;
+                        await createNotification(tx, {
+                            userId: director.id,
+                            type: 'approval_needed',
+                            title: 'Progress approval needed',
+                            message,
+                            relatedIndicatorId: indicatorId,
+                            relatedEntityType: 'indicator_progress',
+                            relatedEntityId: String(rows[0].id),
+                            actionUrl: '/governance',
+                        });
                     }
                 }
 

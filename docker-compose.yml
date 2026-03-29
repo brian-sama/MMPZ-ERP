@@ -32,6 +32,18 @@ services:
       DATABASE_URL: postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
       MMPZ_API_URL: https://mmpzmne.co.zw/api
       PORT: 3000
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(async (response) => { const body = await response.json(); process.exit(response.ok && body.status === 'ok' ? 0 : 1); }).catch(() => process.exit(1));"
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 45s
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"
@@ -56,6 +68,18 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8501/streamlit/_stcore/health', timeout=5); sys.exit(0 if response.status == 200 else 1)"
+        ]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 35s
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik-public"

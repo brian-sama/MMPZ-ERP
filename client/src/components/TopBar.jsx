@@ -1,11 +1,33 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Search, X } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useRef, useState } from 'react';
+import { Bell, Menu, Search, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
 import { getSearchableRoutes } from '../navigationConfig';
 
-export default function TopBar({ title }) {
+const formatTimeAgo = (value) => {
+    const timestamp = new Date(value).getTime();
+    if (Number.isNaN(timestamp)) return '';
+    const deltaMs = Date.now() - timestamp;
+    const minutes = Math.max(1, Math.round(deltaMs / 60000));
+    if (minutes < 60) return `${minutes} min ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+    const days = Math.round(hours / 24);
+    if (days < 7) return `${days} day${days === 1 ? '' : 's'} ago`;
+    return new Date(value).toLocaleDateString();
+};
+
+export default function TopBar({ title, onToggleMenu, mobileMenuOpen }) {
     const { user, logout } = useAuth();
+    const {
+        notifications,
+        unreadCount,
+        permission,
+        markRead,
+        markAllRead,
+        enableDesktopNotifications,
+    } = useNotifications();
     const navigate = useNavigate();
     const [showNotifications, setShowNotifications] = useState(false);
     const [showSearch, setShowSearch] = useState(false);
@@ -13,13 +35,12 @@ export default function TopBar({ title }) {
     const searchRef = useRef(null);
     const notifRef = useRef(null);
 
-    // Close dropdowns on outside click
     useEffect(() => {
-        const handler = (e) => {
-            if (notifRef.current && !notifRef.current.contains(e.target)) {
+        const handler = (event) => {
+            if (notifRef.current && !notifRef.current.contains(event.target)) {
                 setShowNotifications(false);
             }
-            if (searchRef.current && !searchRef.current.contains(e.target)) {
+            if (searchRef.current && !searchRef.current.contains(event.target)) {
                 setShowSearch(false);
             }
         };
@@ -27,108 +48,134 @@ export default function TopBar({ title }) {
         return () => document.removeEventListener('mousedown', handler);
     }, []);
 
-    const doLogout = () => {
-        logout();
-        navigate('/login');
-    };
-
     const navLinks = getSearchableRoutes(user).map((item) => ({
         label: item.label,
         path: item.to,
     }));
 
     const filteredLinks = searchQuery.length > 0
-        ? navLinks.filter(l => l.label.toLowerCase().includes(searchQuery.toLowerCase()))
+        ? navLinks.filter((item) => item.label.toLowerCase().includes(searchQuery.toLowerCase()))
         : [];
 
-    const sampleNotifications = [
-        { text: 'New expense request submitted', time: '5 min ago', unread: true },
-        { text: 'Program report is ready to review', time: '1 hour ago', unread: true },
-        { text: 'T. Moyo completed field assignment', time: '3 hours ago', unread: false },
-    ];
+    const doLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    const handleNotificationClick = async (notification) => {
+        if (!notification.is_read) {
+            try {
+                await markRead(notification.id);
+            } catch (error) {
+                console.error('Failed to mark notification as read', error);
+            }
+        }
+
+        setShowNotifications(false);
+        if (!notification.action_url) return;
+        if (notification.action_url.startsWith('/uploads/')) {
+            window.open(notification.action_url, '_blank', 'noopener,noreferrer');
+            return;
+        }
+        if (notification.action_url.startsWith('/')) {
+            navigate(notification.action_url);
+            return;
+        }
+        window.open(notification.action_url, '_blank', 'noopener,noreferrer');
+    };
 
     return (
         <header className="erp-topbar">
-            <div className="topbar-title">{title}</div>
+            <div className="topbar-leading">
+                <button
+                    className={`topbar-btn topbar-menu-btn${mobileMenuOpen ? ' active' : ''}`}
+                    title={mobileMenuOpen ? 'Close navigation' : 'Open navigation'}
+                    aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                    onClick={onToggleMenu}
+                >
+                    <Menu size={18} />
+                </button>
+                <div className="topbar-title">{title}</div>
+            </div>
 
             <div className="topbar-actions">
-                {/* Search */}
                 <div style={{ position: 'relative' }} ref={searchRef}>
                     <button
                         className="topbar-btn"
                         title="Search"
-                        onClick={() => { setShowSearch(s => !s); setShowNotifications(false); }}
+                        onClick={() => {
+                            setShowSearch((current) => !current);
+                            setShowNotifications(false);
+                        }}
                     >
                         <Search size={17} />
                     </button>
 
                     {showSearch && (
-                        <div style={{
-                            position: 'absolute', top: '44px', right: 0,
-                            width: '300px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-lg)',
-                            boxShadow: 'var(--card-shadow)',
-                            zIndex: 200,
-                            overflow: 'hidden',
-                        }}>
-                            <div style={{ padding: '12px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div className="topbar-dropdown">
+                            <div className="topbar-dropdown-search">
                                 <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                                 <input
                                     autoFocus
                                     type="text"
                                     placeholder="Search pages..."
                                     value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
+                                    onChange={(event) => setSearchQuery(event.target.value)}
                                     style={{
-                                        flex: 1, background: 'none', border: 'none', outline: 'none',
-                                        color: 'var(--text-primary)', fontSize: '13px', fontFamily: 'inherit',
+                                        flex: 1,
+                                        background: 'none',
+                                        border: 'none',
+                                        outline: 'none',
+                                        color: 'var(--text-primary)',
+                                        fontSize: '13px',
+                                        fontFamily: 'inherit',
                                     }}
                                 />
                                 {searchQuery && (
-                                    <button onClick={() => setSearchQuery('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
+                                    <button
+                                        onClick={() => setSearchQuery('')}
+                                        style={{
+                                            background: 'none',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            color: 'var(--text-muted)',
+                                            padding: 0,
+                                        }}
+                                    >
                                         <X size={13} />
                                     </button>
                                 )}
                             </div>
+
                             {filteredLinks.length > 0 ? (
                                 <div style={{ padding: '6px' }}>
-                                    {filteredLinks.map(link => (
+                                    {filteredLinks.map((link) => (
                                         <button
                                             key={link.path}
-                                            onClick={() => { navigate(link.path); setShowSearch(false); setSearchQuery(''); }}
-                                            style={{
-                                                width: '100%', textAlign: 'left', padding: '9px 12px',
-                                                background: 'none', border: 'none', cursor: 'pointer',
-                                                color: 'var(--text-primary)', fontSize: '13px',
-                                                borderRadius: 'var(--radius-md)', fontFamily: 'inherit',
-                                                display: 'flex', alignItems: 'center', gap: '8px',
+                                            className="topbar-dropdown-item"
+                                            onClick={() => {
+                                                navigate(link.path);
+                                                setShowSearch(false);
+                                                setSearchQuery('');
                                             }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
                                         >
                                             {link.label}
                                         </button>
                                     ))}
                                 </div>
                             ) : searchQuery.length > 0 ? (
-                                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>No results found</div>
+                                <div className="topbar-empty">No results found</div>
                             ) : (
                                 <div style={{ padding: '12px 16px' }}>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Pages</div>
-                                    {navLinks.map(link => (
+                                    <div className="topbar-dropdown-heading">Pages</div>
+                                    {navLinks.map((link) => (
                                         <button
                                             key={link.path}
-                                            onClick={() => { navigate(link.path); setShowSearch(false); }}
-                                            style={{
-                                                width: '100%', textAlign: 'left', padding: '8px 10px',
-                                                background: 'none', border: 'none', cursor: 'pointer',
-                                                color: 'var(--text-secondary)', fontSize: '13px',
-                                                borderRadius: 'var(--radius-md)', fontFamily: 'inherit',
+                                            className="topbar-dropdown-item"
+                                            onClick={() => {
+                                                navigate(link.path);
+                                                setShowSearch(false);
                                             }}
-                                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
                                         >
                                             {link.label}
                                         </button>
@@ -139,69 +186,83 @@ export default function TopBar({ title }) {
                     )}
                 </div>
 
-                {/* Notifications */}
                 <div style={{ position: 'relative' }} ref={notifRef}>
                     <button
                         className="topbar-btn"
                         title="Notifications"
-                        onClick={() => { setShowNotifications(s => !s); setShowSearch(false); }}
+                        onClick={() => {
+                            setShowNotifications((current) => !current);
+                            setShowSearch(false);
+                        }}
                     >
                         <Bell size={17} />
-                        <span className="topbar-badge">3</span>
+                        {unreadCount > 0 && (
+                            <span className="topbar-badge">
+                                {unreadCount > 99 ? '99+' : unreadCount}
+                            </span>
+                        )}
                     </button>
 
                     {showNotifications && (
-                        <div style={{
-                            position: 'absolute', top: '44px', right: 0,
-                            width: '300px',
-                            background: 'var(--bg-surface)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 'var(--radius-lg)',
-                            boxShadow: 'var(--card-shadow)',
-                            zIndex: 200,
-                            overflow: 'hidden',
-                        }}>
-                            <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>Notifications</span>
-                                <span style={{ fontSize: '11px', color: 'var(--brand-primary)', fontWeight: 600, cursor: 'pointer' }}>Mark all read</span>
+                        <div className="topbar-dropdown topbar-notifications">
+                            <div className="topbar-dropdown-header">
+                                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
+                                    Notifications
+                                </span>
+                                <button
+                                    className="topbar-inline-action"
+                                    onClick={markAllRead}
+                                    disabled={notifications.length === 0}
+                                >
+                                    Mark all read
+                                </button>
                             </div>
-                            {sampleNotifications.map((n, i) => (
-                                <div key={i} style={{
-                                    padding: '12px 16px',
-                                    borderBottom: i < sampleNotifications.length - 1 ? '1px solid var(--border)' : 'none',
-                                    background: n.unread ? 'rgba(123,44,191,0.05)' : 'transparent',
-                                    display: 'flex', gap: '10px', alignItems: 'flex-start',
-                                }}>
-                                    {n.unread && (
-                                        <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: 'var(--brand-primary)', marginTop: '5px', flexShrink: 0 }} />
-                                    )}
-                                    <div style={{ flex: 1, paddingLeft: n.unread ? 0 : '17px' }}>
-                                        <div style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: n.unread ? 600 : 400 }}>{n.text}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>{n.time}</div>
+
+                            {permission !== 'granted' && permission !== 'unsupported' && (
+                                <div className="topbar-dropdown-banner">
+                                    <div>
+                                        <div style={{ fontWeight: 700, marginBottom: '4px' }}>Browser alerts are off</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                            Enable browser notifications for realtime alerts and 24-hour event reminders.
+                                        </div>
                                     </div>
+                                    <button className="btn btn-secondary btn-sm" onClick={enableDesktopNotifications}>
+                                        Enable
+                                    </button>
                                 </div>
-                            ))}
+                            )}
+
+                            {notifications.length > 0 ? (
+                                <div className="topbar-notification-list">
+                                    {notifications.map((item) => (
+                                        <button
+                                            key={item.id}
+                                            className={`topbar-notification-item${item.is_read ? '' : ' unread'}`}
+                                            onClick={() => handleNotificationClick(item)}
+                                        >
+                                            <div className="topbar-notification-title">{item.title}</div>
+                                            <div className="topbar-notification-message">
+                                                {item.message || 'New system update.'}
+                                            </div>
+                                            <div className="topbar-notification-time">
+                                                {formatTimeAgo(item.created_at)}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="topbar-empty">No notifications yet</div>
+                            )}
                         </div>
                     )}
                 </div>
 
-                <div style={{ width: '1px', height: '24px', background: 'var(--border)', margin: '0 4px' }} />
+                <div className="topbar-divider" />
 
-                {/* User avatar + logout */}
                 <button
                     onClick={doLogout}
                     title="Sign out"
-                    style={{
-                        width: '32px', height: '32px', borderRadius: '50%',
-                        background: 'linear-gradient(135deg, var(--brand-primary), var(--brand-secondary))',
-                        border: 'none', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '12px', fontWeight: 700, color: 'white',
-                        fontFamily: 'inherit', flexShrink: 0,
-                        transition: 'opacity 0.15s ease',
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-                    onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                    className="topbar-avatar-btn"
                 >
                     {(user?.name || 'U')[0].toUpperCase()}
                 </button>

@@ -39,6 +39,15 @@ import { handler as announcementsHandler } from './server/api/announcements.js';
 import { handler as changePasswordHandler } from './server/api/change-password.js';
 import { handler as userProfileHandler } from './server/api/user-profile.js';
 import { handler as uploadAvatarHandler } from './server/api/upload-avatar.js';
+import { handler as calendarEventsHandler } from './server/api/calendar-events.js';
+import { handler as documentLibraryHandler } from './server/api/document-library.js';
+import { handler as pushSubscriptionsHandler } from './server/api/push-subscriptions.js';
+import { subscribeRealtime } from './server/api/utils/notification-center.js';
+import {
+    getBearerTokenFromHeaders,
+    verifySessionToken,
+} from './server/api/utils/session-token.js';
+import { startCalendarReminderScheduler } from './server/jobs/calendar-reminders.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -98,9 +107,46 @@ app.use('/api/approvals', functionToExpress(approvalsHandler));
 app.use('/api/progress/:id/approve', functionToExpress(approvalsHandler));
 
 // Notifications
+app.get('/api/notifications/stream', (req, res) => {
+    const token =
+        req.query.token ||
+        req.query.sessionToken ||
+        getBearerTokenFromHeaders(req.headers);
+    const session = verifySessionToken(token);
+    if (!session?.userId) {
+        res.status(401).json({ error: 'Unauthorized' });
+        return;
+    }
+
+    const userId = Number(session.userId);
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    const send = (payload) => {
+        if (payload?.user_id && Number(payload.user_id) !== userId) return;
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    send({ kind: 'connected', user_id: userId });
+    const unsubscribe = subscribeRealtime(send);
+    const heartbeat = setInterval(() => {
+        res.write('event: heartbeat\ndata: {}\n\n');
+    }, 25000);
+
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        unsubscribe();
+        res.end();
+    });
+});
+
 app.use('/api/notifications', functionToExpress(notificationsHandler));
 app.use('/api/announcements/:id', functionToExpress(announcementsHandler));
 app.use('/api/announcements', functionToExpress(announcementsHandler));
+app.use('/api/push/subscriptions', functionToExpress(pushSubscriptionsHandler));
+app.use('/api/push/config', functionToExpress(pushSubscriptionsHandler));
 
 // Users and roles
 app.use('/api/users/:id/confirm-role', functionToExpress(usersHandler));
@@ -164,6 +210,10 @@ app.use('/api/facilitator-attendance', functionToExpress(facilitatorAttendanceHa
 
 // Volunteer
 app.use('/api/volunteer', functionToExpress(volunteerHandler));
+app.use('/api/calendar/:id', functionToExpress(calendarEventsHandler));
+app.use('/api/calendar', functionToExpress(calendarEventsHandler));
+app.use('/api/documents/:id', functionToExpress(documentLibraryHandler));
+app.use('/api/documents', functionToExpress(documentLibraryHandler));
 
 app.use('/api', (req, res) => {
     res.status(404).json({ error: 'API route not found' });
@@ -179,4 +229,5 @@ app.use((req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server is running on http://localhost:${PORT}`);
+    startCalendarReminderScheduler();
 });

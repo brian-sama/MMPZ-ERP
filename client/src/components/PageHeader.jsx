@@ -4,7 +4,7 @@ export default function PageHeader({ title, subtitle, actions }) {
     return (
         <header className="page-header">
             <div className="page-header-row">
-                <div>
+                <div className="page-header-copy">
                     <h1 className="page-title">{title}</h1>
                     {subtitle && <p className="page-subtitle">{subtitle}</p>}
                 </div>

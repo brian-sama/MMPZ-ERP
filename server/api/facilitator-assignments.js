@@ -6,6 +6,7 @@ import {
     getUserContext,
     ensurePermission,
 } from './utils/rbac.js';
+import { ensureFacilitatorProfile, isFacilitatorUser } from './utils/facilitators.js';
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -45,6 +46,23 @@ export const handler = async (event) => {
             ensurePermission(actor, 'user.assign_role');
             const { facilitator_user_id, project_id } = body;
             if (!facilitator_user_id || !project_id) return errorResponse('Facilitator ID and Project ID are required', 400);
+
+            const facilitatorRows = await sql`
+                SELECT id, role_code, system_role, created_at
+                FROM users
+                WHERE id = ${facilitator_user_id}
+                LIMIT 1
+            `;
+            if (facilitatorRows.length === 0) return errorResponse('Facilitator user not found', 404);
+            if (!isFacilitatorUser(facilitatorRows[0])) {
+                return errorResponse('Selected user is not a development facilitator', 400);
+            }
+
+            await ensureFacilitatorProfile(sql, {
+                userId: facilitator_user_id,
+                joinedAt: facilitatorRows[0].created_at,
+                activate: true,
+            });
 
             const inserted = await sql`
                 INSERT INTO facilitator_assignments (facilitator_user_id, project_id)

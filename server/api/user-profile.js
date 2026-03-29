@@ -16,11 +16,14 @@ export const handler = async (event) => {
         const actor = await getUserContext(userId);
 
         if (method === 'PATCH') {
-            const { profile_picture_url, name } = body;
+            const { profile_picture_url, name, short_bio, shortBio } = body;
 
             const updates = {};
             if (profile_picture_url !== undefined) updates.profile_picture_url = profile_picture_url;
             if (name !== undefined) updates.name = name;
+            if (short_bio !== undefined || shortBio !== undefined) {
+                updates.short_bio = short_bio ?? shortBio;
+            }
 
             if (Object.keys(updates).length === 0) {
                 return errorResponse('No update data provided', 400);

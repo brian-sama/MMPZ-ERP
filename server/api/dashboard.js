@@ -26,7 +26,7 @@ export const handler = async (event) => {
                 (SELECT COUNT(*)::int FROM users WHERE role_code = 'DEVELOPMENT_FACILITATOR') as active_facilitators,
                 (SELECT COALESCE(SUM(total_budget), 0)::float FROM indicators WHERE status = 'active') as budget_total,
                 (SELECT COALESCE(SUM(current_budget_balance), 0)::float FROM indicators WHERE status = 'active') as budget_remaining,
-                (SELECT COUNT(*)::int FROM approval_requests WHERE status = 'pending') as pending_approvals
+                (SELECT COUNT(*)::int FROM approvals WHERE status = 'pending') as pending_approvals
         `;
 
         const m = metrics[0];
@@ -59,11 +59,11 @@ export const handler = async (event) => {
         const pendingApprovalsList = await sql`
             SELECT 
                 id,
-                request_type,
+                entity_type AS request_type,
                 entity_id,
                 created_at,
                 (SELECT name FROM users WHERE id = requested_by_user_id) as requester_name
-            FROM approval_requests
+            FROM approvals
             WHERE status = 'pending'
             ORDER BY created_at DESC
             LIMIT 5

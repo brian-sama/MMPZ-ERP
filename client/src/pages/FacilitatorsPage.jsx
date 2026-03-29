@@ -57,7 +57,7 @@ export default function FacilitatorsPage() {
             const projRes = await axios.get(`${API_BASE}/projects`, { params: { userId: user.id } });
             setProjects(projRes.data);
         } catch (err) {
-            console.error('Failed to fetch facilitators/metadata');
+            console.error('Failed to fetch facilitators metadata', err);
         } finally {
             setLoading(false);
         }
@@ -96,6 +96,7 @@ export default function FacilitatorsPage() {
                     name: newFacilitator.name,
                     email: newFacilitator.email,
                     password: newFacilitator.password,
+                    role_code: 'DEVELOPMENT_FACILITATOR',
                     system_role: 'FACILITATOR',
                     job_title: 'Development Facilitator',
                     userId: user.id

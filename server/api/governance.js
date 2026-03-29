@@ -6,6 +6,7 @@ import {
     getUserContext,
     ensurePermission,
 } from './utils/rbac.js';
+import { createNotification } from './utils/notification-center.js';
 
 const THRESHOLD_KEY = 'major_finance_threshold_usd';
 
@@ -129,13 +130,14 @@ export const handler = async (event) => {
                     INNER JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
                         ON a.entity_type = 'procurement'
-                       AND (CASE 
-                            WHEN a.entity_id IS NOT NULL AND a.entity_id ~ '^[0-9]+$' 
-                            THEN pr.id = a.entity_id::integer 
-                            ELSE pr.id::text = a.entity_id 
-                            END)
+                       AND pr.id::text = a.entity_id
                     ORDER BY a.created_at DESC
                 `;
+                if (query.countOnly === 'true') {
+                    return successResponse({
+                        total: queue.filter((item) => item.status === 'pending').length,
+                    });
+                }
                 return successResponse(queue);
             } catch (err) {
                 console.error('Database error in governance queue:', err);
@@ -205,6 +207,21 @@ export const handler = async (event) => {
                         SET status = ${finalStatus}
                         WHERE id::text = ${approval.entity_id}
                     `;
+                }
+
+                if (approval.requested_by_user_id && approval.requested_by_user_id !== actor.id) {
+                    await createNotification(tx, {
+                        userId: approval.requested_by_user_id,
+                        type: 'approval_result',
+                        title: `Request ${finalStatus}`,
+                        message: `Your ${approval.entity_type.replace(/_/g, ' ')} request was ${finalStatus}${comments ? `: ${comments}` : '.'}`,
+                        relatedEntityType: approval.entity_type,
+                        relatedEntityId: approval.entity_id,
+                        actionUrl:
+                            approval.entity_type === 'procurement'
+                                ? `/finance?procurement=${approval.entity_id}`
+                                : null,
+                    });
                 }
             });
 

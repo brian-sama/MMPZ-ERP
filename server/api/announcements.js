@@ -6,6 +6,7 @@ import {
     getRequestUserId,
     SYSTEM_ROLES,
 } from './utils/rbac.js';
+import { createNotifications } from './utils/notification-center.js';
 
 const ALLOWED_AUDIENCES = new Set([
     'ALL',
@@ -66,11 +67,36 @@ export const handler = async (event) => {
 
             const targetedAudience = normalizeAudience(audience);
 
-            const created = await sql`
-                INSERT INTO announcements (title, content, author_id, audience)
-                VALUES (${title}, ${content}, ${user.id}, ${targetedAudience})
-                RETURNING *
-            `;
+            const created = await sql.begin(async (tx) => {
+                const rows = await tx`
+                    INSERT INTO announcements (title, content, author_id, audience)
+                    VALUES (${title}, ${content}, ${user.id}, ${targetedAudience})
+                    RETURNING *
+                `;
+
+                const recipients = targetedAudience.includes('ALL')
+                    ? await tx`SELECT id FROM users WHERE id <> ${user.id}`
+                    : (await tx`
+                        SELECT id, system_role
+                        FROM users
+                        WHERE id <> ${user.id}
+                    `).filter((recipient) => targetedAudience.includes(String(recipient.system_role || '').toUpperCase()));
+
+                await createNotifications(
+                    tx,
+                    recipients.map((recipient) => ({
+                        userId: recipient.id,
+                        type: 'system',
+                        title: 'New internal announcement',
+                        message: title,
+                        relatedEntityType: 'announcement',
+                        relatedEntityId: String(rows[0].id),
+                        actionUrl: '/intranet/dashboard',
+                    }))
+                );
+
+                return rows;
+            });
             return successResponse(created[0]);
         }
 

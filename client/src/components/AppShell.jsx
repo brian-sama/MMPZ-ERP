@@ -13,6 +13,7 @@ export default function AppShell() {
     const { user } = useAuth();
     const location = useLocation();
     const [pendingCount, setPendingCount] = useState(0);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     // Fetch count for sidebar badge
     useEffect(() => {
@@ -24,18 +25,41 @@ export default function AppShell() {
             }
             try {
                 const res = await axios.get(`${API_BASE}/governance/queue`, {
-                    params: { userId: user.id }
+                    params: { userId: user.id, countOnly: true }
                 });
-                setPendingCount((res.data || []).filter((item) => item.status === 'pending').length);
+                setPendingCount(Number(res.data?.total || 0));
             } catch (err) {
-                console.error('Failed to fetch approval counts', err);
+                console.error('Failed to fetch governance queue count', err);
             }
         };
         fetchCounts();
     }, [location.pathname, user?.id]);
 
+    useEffect(() => {
+        setSidebarOpen(false);
+    }, [location.pathname]);
+
+    useEffect(() => {
+        if (!sidebarOpen) return undefined;
+
+        const previousOverflow = document.body.style.overflow;
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setSidebarOpen(false);
+            }
+        };
+
+        document.body.style.overflow = 'hidden';
+        document.addEventListener('keydown', handleKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [sidebarOpen]);
+
     return (
-        <div className="erp-shell">
+        <div className={`erp-shell${sidebarOpen ? ' sidebar-open' : ''}`}>
             {/* Animated Background Elements */}
             <div className="erp-bg-effects">
                 <div className="glow-1"></div>
@@ -43,9 +67,22 @@ export default function AppShell() {
                 <div className="glow-3"></div>
             </div>
 
-            <Sidebar pendingCount={pendingCount} />
+            <button
+                className={`erp-sidebar-scrim${sidebarOpen ? ' visible' : ''}`}
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close navigation menu"
+            />
+            <Sidebar
+                pendingCount={pendingCount}
+                mobileOpen={sidebarOpen}
+                onNavigate={() => setSidebarOpen(false)}
+            />
             <div className="erp-main">
-                <TopBar title={getPageTitle(location.pathname)} />
+                <TopBar
+                    title={getPageTitle(location.pathname)}
+                    onToggleMenu={() => setSidebarOpen((current) => !current)}
+                    mobileMenuOpen={sidebarOpen}
+                />
                 <main className="erp-content">
                     <Outlet />
                 </main>

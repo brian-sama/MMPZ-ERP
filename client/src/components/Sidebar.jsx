@@ -8,7 +8,7 @@ import { useTheme } from '../context/ThemeContext';
 import { formatRoleLabel } from '../accessControl';
 import { getNavigationForUser, isGovernanceRoute } from '../navigationConfig';
 
-export default function Sidebar({ pendingCount }) {
+export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }) {
     const { user, updateUserProfile, logout } = useAuth();
     const { theme } = useTheme();
     const navigate = useNavigate();
@@ -54,7 +54,7 @@ export default function Sidebar({ pendingCount }) {
     };
 
     return (
-        <aside className="erp-sidebar">
+        <aside className={`erp-sidebar${mobileOpen ? ' mobile-open' : ''}`}>
             <div className="sidebar-brand">
                 <div className="sidebar-brand-logo">
                     <img src="/mmpz-logo.png" alt="MMPZ Logo" />
@@ -76,6 +76,7 @@ export default function Sidebar({ pendingCount }) {
                                 <NavLink
                                     key={item.to}
                                     to={item.to}
+                                    onClick={onNavigate}
                                     className={({ isActive }) =>
                                         `sidebar-nav-item${isActive ? ' active' : ''}`
                                     }

@@ -180,7 +180,12 @@ export default function ExecutiveDashboardPage() {
                                             <td>{item.requester_name}</td>
                                             <td>{new Date(item.created_at).toLocaleDateString()}</td>
                                             <td style={{ textAlign: 'right' }}>
-                                                <button className="btn btn-primary btn-sm">Review</button>
+                                                <button
+                                                    className="btn btn-primary btn-sm"
+                                                    onClick={() => navigate(`/governance?approvalId=${item.id}`)}
+                                                >
+                                                    Review
+                                                </button>
                                             </td>
                                         </tr>
                                     ))}

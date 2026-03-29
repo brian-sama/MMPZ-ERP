@@ -13,6 +13,7 @@ import {
     ensurePermission,
     setAuditActor,
 } from './utils/rbac.js';
+import { createNotification } from './utils/notification-center.js';
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -157,16 +158,16 @@ export const handler = async (event) => {
                     }
 
                     if (update.updated_by_user_id) {
-                        await tx`
-                            INSERT INTO notifications (user_id, type, title, message, related_indicator_id)
-                            VALUES (
-                                ${update.updated_by_user_id},
-                                'approval_result',
-                                'Progress Update ' || ${action === 'approved' ? 'Approved' : 'Rejected'},
-                                ${`Your progress update was ${action}.`},
-                                ${update.indicator_id}
-                            )
-                        `;
+                        await createNotification(tx, {
+                            userId: update.updated_by_user_id,
+                            type: 'approval_result',
+                            title: `Progress update ${action}`,
+                            message: `Your progress update was ${action}.`,
+                            relatedIndicatorId: update.indicator_id,
+                            relatedEntityType: 'progress_update',
+                            relatedEntityId: String(update.id),
+                            actionUrl: '/me',
+                        });
                     }
                 });
 

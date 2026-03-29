@@ -18,6 +18,7 @@ import {
     toLegacyRole,
     setAuditActor,
 } from './utils/rbac.js';
+import { syncFacilitatorProfileForUser } from './utils/facilitators.js';
 
 const sanitizeUser = (user) => ({
     id: user.id,
@@ -26,12 +27,15 @@ const sanitizeUser = (user) => ({
     role_code: user.role_code,
     system_role: resolveSystemRole(user.role_code, user.system_role),
     job_title: user.job_title || user.role_code || 'Intern',
+    short_bio: user.short_bio || '',
     profile_picture_url: user.profile_picture_url || null,
     role_assignment_status: user.role_assignment_status,
     role_confirmed_at: user.role_confirmed_at,
     role: toLegacyRole(user.role_code, resolveSystemRole(user.role_code, user.system_role)),
     require_password_reset: user.require_password_reset,
     last_login: user.last_login,
+    failed_login_attempts: user.failed_login_attempts || 0,
+    locked_at: user.locked_at || null,
     created_at: user.created_at,
 });
 
@@ -42,6 +46,7 @@ const sanitizeDirectoryUser = (user) => ({
     role_code: user.role_code,
     system_role: resolveSystemRole(user.role_code, user.system_role),
     job_title: user.job_title || user.role_code || 'Team Member',
+    short_bio: user.short_bio || '',
     profile_picture_url: user.profile_picture_url || null,
     role_assignment_status: user.role_assignment_status,
     created_at: user.created_at,
@@ -81,11 +86,14 @@ export const handler = async (event) => {
                     role_code,
                     system_role,
                     job_title,
+                    short_bio,
                     profile_picture_url,
                     role_assignment_status,
                     role_confirmed_at,
                     require_password_reset,
                     last_login,
+                    failed_login_attempts,
+                    locked_at,
                     created_at
                 FROM users
                 ORDER BY created_at DESC
@@ -131,6 +139,7 @@ export const handler = async (event) => {
                         role_code,
                         system_role,
                         job_title,
+                        short_bio,
                         role_assignment_status,
                         role_confirmed_by_user_id,
                         role_confirmed_at,
@@ -144,6 +153,7 @@ export const handler = async (event) => {
                         ${roleCode},
                         ${systemRole},
                         ${jobTitle},
+                        ${body.short_bio || body.shortBio || null},
                         ${roleStatus},
                         ${roleStatus === 'confirmed' ? actor.id : null},
                         ${roleStatus === 'confirmed' ? new Date().toISOString() : null},
@@ -157,6 +167,7 @@ export const handler = async (event) => {
                         role_code,
                         system_role,
                         job_title,
+                        short_bio,
                         profile_picture_url,
                         role_assignment_status,
                         role_confirmed_at,
@@ -164,6 +175,8 @@ export const handler = async (event) => {
                         last_login,
                         created_at
                 `;
+
+                await syncFacilitatorProfileForUser(tx, created[0]);
 
                 await tx`
                     INSERT INTO user_role_history (
@@ -216,6 +229,7 @@ export const handler = async (event) => {
                         UPDATE users
                         SET
                             role_code = ${finalRoleCode},
+                            system_role = ${resolveSystemRole(finalRoleCode)},
                             role_assignment_status = 'confirmed',
                             role_confirmed_by_user_id = ${actor.id},
                             role_confirmed_at = ${new Date().toISOString()}
@@ -247,6 +261,7 @@ export const handler = async (event) => {
                             role_code,
                             system_role,
                             job_title,
+                            short_bio,
                             profile_picture_url,
                             role_assignment_status,
                             role_confirmed_at,
@@ -257,6 +272,7 @@ export const handler = async (event) => {
                         WHERE id = ${id}
                         LIMIT 1
                     `;
+                    await syncFacilitatorProfileForUser(tx, rows[0]);
                     return rows[0];
                 });
 
@@ -266,12 +282,23 @@ export const handler = async (event) => {
                 });
             }
 
+            if (path.endsWith('/unlock')) {
+                ensurePermission(actor, 'user.update');
+                await sql`
+                    UPDATE users 
+                    SET failed_login_attempts = 0, 
+                        locked_at = NULL 
+                    WHERE id = ${id}
+                `;
+                return successResponse({ message: 'Account unlocked successfully' });
+            }
+
             ensurePermission(actor, 'user.assign_role');
             const nextRoleCode = resolveIncomingRole(body);
             assertCanAssignRole(actor, nextRoleCode);
 
             const existingRows = await sql`
-                SELECT id, role_code, system_role, job_title
+                SELECT id, role_code, system_role, job_title, short_bio, created_at
                 FROM users
                 WHERE id = ${id}
                 LIMIT 1
@@ -288,6 +315,7 @@ export const handler = async (event) => {
                     UPDATE users
                     SET
                         role_code = ${nextRoleCode},
+                        system_role = ${resolveSystemRole(nextRoleCode)},
                         role_assignment_status = ${status},
                         role_confirmed_by_user_id = ${status === 'confirmed' ? actor.id : null},
                         role_confirmed_at = ${status === 'confirmed' ? new Date().toISOString() : null}
@@ -310,6 +338,13 @@ export const handler = async (event) => {
                         ${body.reason || 'Role update'}
                     )
                 `;
+
+                await syncFacilitatorProfileForUser(tx, {
+                    id: existing.id,
+                    role_code: nextRoleCode,
+                    system_role: resolveSystemRole(nextRoleCode),
+                    created_at: existing.created_at,
+                });
             });
 
             return successResponse({ message: 'Role updated successfully' });
@@ -326,7 +361,7 @@ export const handler = async (event) => {
             }
 
             const existingRows = await sql`
-                SELECT id, role_code, system_role, job_title
+                SELECT id, role_code, system_role, job_title, short_bio, created_at
                 FROM users
                 WHERE id = ${id}
                 LIMIT 1
@@ -337,8 +372,12 @@ export const handler = async (event) => {
             const nextRoleCode = body.role || body.role_code
                 ? resolveIncomingRole(body)
                 : existing.role_code;
-            const nextSystemRole = body.system_role || body.systemRole || existing.system_role || resolveSystemRole(nextRoleCode);
+            const nextSystemRole = body.system_role || body.systemRole || resolveSystemRole(nextRoleCode);
             const nextJobTitle = body.job_title || body.jobTitle || existing.job_title || nextRoleCode;
+            const nextShortBio =
+                body.short_bio !== undefined || body.shortBio !== undefined
+                    ? body.short_bio || body.shortBio
+                    : existing.short_bio;
             
             assertCanAssignRole(actor, nextRoleCode);
 
@@ -358,11 +397,14 @@ export const handler = async (event) => {
                             role_code = ${nextRoleCode},
                             system_role = ${nextSystemRole},
                             job_title = ${nextJobTitle},
+                            short_bio = ${nextShortBio || null},
                             role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
                             role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
                             role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
                             password_hash = ${passwordHash},
-                            require_password_reset = ${requireReset}
+                            require_password_reset = ${requireReset},
+                            failed_login_attempts = 0,
+                            locked_at = NULL
                         WHERE id = ${id}
                     `;
                 } else {
@@ -374,10 +416,13 @@ export const handler = async (event) => {
                             role_code = ${nextRoleCode},
                             system_role = ${nextSystemRole},
                             job_title = ${nextJobTitle},
+                            short_bio = ${nextShortBio || null},
                             role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
                             role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
                             role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
-                            require_password_reset = ${requireReset}
+                            require_password_reset = ${requireReset},
+                            failed_login_attempts = 0,
+                            locked_at = NULL
                         WHERE id = ${id}
                     `;
                 }
@@ -390,16 +435,20 @@ export const handler = async (event) => {
                         role_code,
                         system_role,
                         job_title,
+                        short_bio,
                         profile_picture_url,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,
                         last_login,
+                        failed_login_attempts,
+                        locked_at,
                         created_at
                     FROM users
                     WHERE id = ${id}
                     LIMIT 1
                 `;
+                await syncFacilitatorProfileForUser(tx, rows[0]);
                 return rows[0];
             });
 

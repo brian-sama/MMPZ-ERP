@@ -35,11 +35,14 @@ export const handler = async (event) => {
                     role_code,
                     system_role,
                     job_title,
+                    short_bio,
                     profile_picture_url,
                     role_assignment_status,
                     role_confirmed_at,
                     password_hash,
-                    require_password_reset
+                    require_password_reset,
+                    failed_login_attempts,
+                    locked_at
                 FROM users
                 WHERE email = ${email}
                 LIMIT 1
@@ -55,23 +58,49 @@ export const handler = async (event) => {
 
         const user = users[0];
 
+        // Check if account is locked
+        if (user.locked_at) {
+            return errorResponse('Account is locked due to multiple failed login attempts. Please contact a System Administrator to reset your password.', 403);
+        }
+
         // Verify password
         const isValid = await comparePassword(password, user.password_hash);
 
         if (!isValid) {
-            return errorResponse('Invalid email or password', 401);
+            const newFailedAttempts = (user.failed_login_attempts || 0) + 1;
+            
+            if (newFailedAttempts >= 3) {
+                await sql`
+                    UPDATE users 
+                    SET failed_login_attempts = ${newFailedAttempts},
+                        locked_at = CURRENT_TIMESTAMP 
+                    WHERE id = ${user.id}
+                `;
+                return errorResponse('Account has been locked after 3 failed attempts. Please contact an administrator.', 403);
+            } else {
+                await sql`
+                    UPDATE users 
+                    SET failed_login_attempts = ${newFailedAttempts} 
+                    WHERE id = ${user.id}
+                `;
+                return errorResponse(`Invalid email or password. Attempt ${newFailedAttempts} of 3.`, 401);
+            }
         }
 
-        // Update last_login timestamp
-        try {
-            await sql`UPDATE users SET last_login = ${new Date().toISOString()} WHERE id = ${user.id}`;
-        } catch (updateError) {
-            console.error('Error updating last login:', updateError);
-            // Non-critical error, continue
-        }
-
-        // Return user data (without password)
+        // Success: Reset failed attempts and update last_login
         const systemRole = resolveSystemRole(user.role_code, user.system_role);
+        try {
+            await sql`
+                UPDATE users 
+                SET last_login = CURRENT_TIMESTAMP,
+                    failed_login_attempts = 0,
+                    locked_at = NULL
+                WHERE id = ${user.id}
+            `;
+        } catch (updateError) {
+            console.error('Error updating user login stats:', updateError);
+        }
+
         return successResponse({
             token: issueSessionToken(user.id),
             user: {
@@ -81,6 +110,7 @@ export const handler = async (event) => {
                 role_code: user.role_code,
                 system_role: systemRole,
                 job_title: user.job_title || user.role_code || 'Intern',
+                short_bio: user.short_bio || '',
                 profile_picture_url: user.profile_picture_url || null,
                 role_assignment_status: user.role_assignment_status || 'pending_reassignment',
                 role_confirmed_at: user.role_confirmed_at,

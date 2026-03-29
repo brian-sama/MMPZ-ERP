@@ -77,7 +77,7 @@ export default function ReportsPage() {
                 subtitle="Extract strategic data and operational insights for stakeholder reporting."
             />
 
-            <div className="panels-row">
+            <div className="panels-row reports-layout">
                 <div className="panel" style={{ flex: '0 0 450px' }}>
                     <div className="panel-header">
                         <h2 className="panel-title">Report Templates</h2>
@@ -113,7 +113,7 @@ export default function ReportsPage() {
 
                 <div className="panel">
                     {selectedReport ? (
-                        <div className="animate-slide-in" style={{ padding: '32px' }}>
+                        <div className="animate-slide-in reports-preview" style={{ padding: '32px' }}>
                             <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                                 <div className="kpi-icon-wrap" style={{ margin: '0 auto 16px', width: '64px', height: '64px', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
                                     <selectedReport.icon size={32} />
@@ -125,7 +125,7 @@ export default function ReportsPage() {
                             <div style={{ maxWidth: '500px', margin: '0 auto' }}>
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
                                     <label className="form-label">Select Date Range</label>
-                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                    <div className="reports-date-range" style={{ display: 'flex', gap: '12px' }}>
                                         <input type="date" className="form-input" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
                                         <input type="date" className="form-input" value={dateTo} onChange={e => setDateTo(e.target.value)} />
                                     </div>
@@ -133,7 +133,7 @@ export default function ReportsPage() {
 
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
                                     <label className="form-label">Output Format</label>
-                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                    <div className="reports-format-grid" style={{ display: 'flex', gap: '12px' }}>
                                         <label style={{ flex: 1, padding: '12px', border: format === 'pdf' ? '2px solid var(--brand-primary)' : '1px solid var(--border)', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', background: format === 'pdf' ? 'var(--brand-primary-light)' : 'transparent' }}>
                                             <input type="radio" name="format" checked={format === 'pdf'} onChange={() => setFormat('pdf')} />
                                             <span>PDF Document</span>

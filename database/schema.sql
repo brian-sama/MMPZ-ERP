@@ -100,10 +100,13 @@ CREATE TABLE IF NOT EXISTS users (
     role_code VARCHAR(80) NOT NULL DEFAULT 'DEVELOPMENT_FACILITATOR',
     system_role VARCHAR(40),
     job_title TEXT,
+    short_bio TEXT,
     profile_picture_url TEXT,
     password_hash VARCHAR(255),
     require_password_reset BOOLEAN DEFAULT FALSE,
     last_login TIMESTAMP NULL,
+    failed_login_attempts INT DEFAULT 0,
+    locked_at TIMESTAMP NULL,
     role_assignment_status VARCHAR(30) NOT NULL DEFAULT 'pending_reassignment'
         CHECK (role_assignment_status IN ('confirmed', 'pending_reassignment')),
     role_confirmed_by_user_id INT NULL,
@@ -116,9 +119,12 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_code VARCHAR(80);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS system_role VARCHAR(40);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS job_title TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS short_bio TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS require_password_reset BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_at TIMESTAMP NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_assignment_status VARCHAR(30) DEFAULT 'pending_reassignment';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_by_user_id INT NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_at TIMESTAMP NULL;
@@ -390,10 +396,17 @@ CREATE TABLE IF NOT EXISTS notifications (
     message TEXT,
     is_read BOOLEAN DEFAULT FALSE,
     related_indicator_id INT,
+    related_entity_type VARCHAR(60),
+    related_entity_id TEXT,
+    action_url TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (related_indicator_id) REFERENCES indicators(id) ON DELETE CASCADE
 );
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_entity_type VARCHAR(60);
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS related_entity_id TEXT;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS action_url TEXT;
 
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 ALTER TABLE notifications
@@ -404,8 +417,31 @@ ALTER TABLE notifications
         'approval_result',
         'budget_warning',
         'system',
-        'governance'
+        'governance',
+        'calendar_reminder'
     ));
+
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh_key TEXT NOT NULL,
+    auth_key TEXT NOT NULL,
+    user_agent TEXT,
+    last_error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_success_at TIMESTAMP NULL
+);
+
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS p256dh_key TEXT;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS auth_key TEXT;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_error TEXT;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE push_subscriptions ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMP NULL;
 
 CREATE TABLE IF NOT EXISTS activities (
     id SERIAL PRIMARY KEY,
@@ -503,13 +539,54 @@ CREATE TABLE IF NOT EXISTS volunteer_submissions (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL,
     type VARCHAR(50) NOT NULL,
+    assignment_id UUID,
+    project_id UUID,
+    title VARCHAR(255),
+    content TEXT,
     file_data TEXT,
+    file_path TEXT,
     file_name VARCHAR(255),
     mime_type VARCHAR(100),
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL
 );
+
+ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS assignment_id UUID NULL;
+ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS project_id UUID NULL;
+ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS title VARCHAR(255);
+ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS file_path TEXT;
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = 'facilitator_assignments'
+    ) AND NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'volunteer_submissions'
+          AND constraint_name = 'volunteer_submissions_assignment_id_fkey'
+    ) THEN
+        ALTER TABLE volunteer_submissions
+            ADD CONSTRAINT volunteer_submissions_assignment_id_fkey
+            FOREIGN KEY (assignment_id) REFERENCES facilitator_assignments(id) ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'volunteer_submissions'
+          AND constraint_name = 'volunteer_submissions_project_id_fkey'
+    ) THEN
+        ALTER TABLE volunteer_submissions
+            ADD CONSTRAINT volunteer_submissions_project_id_fkey
+            FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 ALTER TABLE volunteer_submissions DROP CONSTRAINT IF EXISTS volunteer_submissions_type_check;
 ALTER TABLE volunteer_submissions
@@ -544,6 +621,48 @@ CREATE TABLE IF NOT EXISTS volunteer_activity_reports (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS volunteer_submission_recipients (
+    id SERIAL PRIMARY KEY,
+    submission_id INT NOT NULL REFERENCES volunteer_submissions(id) ON DELETE CASCADE,
+    user_id INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_by_user_id INT NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (submission_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS calendar_events (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    event_type VARCHAR(50) NOT NULL DEFAULT 'internal_meeting',
+    start_at TIMESTAMP NOT NULL,
+    end_at TIMESTAMP NULL,
+    location VARCHAR(255),
+    created_by_user_id INT NULL REFERENCES users(id) ON DELETE SET NULL,
+    updated_by_user_id INT NULL REFERENCES users(id) ON DELETE SET NULL,
+    reminder_24h_sent_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS reminder_24h_sent_at TIMESTAMP NULL;
+
+CREATE TABLE IF NOT EXISTS document_library_files (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title VARCHAR(255) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    mime_type VARCHAR(120),
+    category VARCHAR(120) NOT NULL DEFAULT 'General',
+    description TEXT,
+    uploaded_by_user_id INT NULL REFERENCES users(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE document_library_files ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 
 -- =====================================================
 -- 4. ERP Governance and Financial Tables
@@ -986,6 +1105,20 @@ CREATE TABLE IF NOT EXISTS facilitator_attendance (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE table_name = 'volunteer_submissions'
+          AND constraint_name = 'volunteer_submissions_assignment_id_fkey'
+    ) THEN
+        ALTER TABLE volunteer_submissions
+            ADD CONSTRAINT volunteer_submissions_assignment_id_fkey
+            FOREIGN KEY (assignment_id) REFERENCES facilitator_assignments(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
 ALTER TABLE facilitator_attendance DROP CONSTRAINT IF EXISTS facilitator_attendance_status_check;
 ALTER TABLE facilitator_attendance
     ADD CONSTRAINT facilitator_attendance_status_check
@@ -1168,6 +1301,8 @@ CREATE INDEX IF NOT EXISTS idx_progress_updates_approval_status ON progress_upda
 
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(is_read);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_events_start_reminder ON calendar_events(start_at, reminder_24h_sent_at);
 CREATE INDEX IF NOT EXISTS idx_announcements_active_created_at ON announcements(is_active, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_activities_indicator ON activities(indicator_id);
