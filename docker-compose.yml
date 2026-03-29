@@ -34,6 +34,7 @@ services:
       PORT: 3000
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.mmpz_app.rule=Host(`mmpzmne.co.zw`)"
       - "traefik.http.routers.mmpz_app.entrypoints=websecure"
       - "traefik.http.routers.mmpz_app.tls.certresolver=myresolver"
@@ -55,6 +56,7 @@ services:
       - DATABASE_URL=postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.mmpz_streamlit.rule=Host(`mmpzmne.co.zw`) && PathPrefix(`/streamlit`)"
       - "traefik.http.routers.mmpz_streamlit.entrypoints=websecure"
       - "traefik.http.routers.mmpz_streamlit.tls.certresolver=myresolver"
