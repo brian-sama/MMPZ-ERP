@@ -36,6 +36,8 @@ import { handler as procurementHandler } from './server/api/procurement.js';
 import { handler as meHandler } from './server/api/me.js';
 import { handler as governanceHandler } from './server/api/governance.js';
 import { handler as announcementsHandler } from './server/api/announcements.js';
+import { handler as changePasswordHandler } from './server/api/change-password.js';
+import { handler as userProfileHandler } from './server/api/user-profile.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,6 +101,8 @@ app.use('/api/procurement', functionToExpress(procurementHandler));
 
 app.use('/api/me/summary', functionToExpress(meHandler));
 app.use('/api/me/progress', functionToExpress(meHandler));
+app.use('/api/me/change-password', functionToExpress(changePasswordHandler));
+app.use('/api/me/profile', functionToExpress(userProfileHandler));
 app.use('/api/me', functionToExpress(meHandler));
 
 app.use('/api/governance/queue', functionToExpress(governanceHandler));

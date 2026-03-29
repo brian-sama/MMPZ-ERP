@@ -148,6 +148,12 @@ export function AuthProvider({ children }) {
     return res.data;
   };
 
+  const updateUserProfile = (updates) => {
+    const updated = normalizeUserProfile({ ...user, ...updates });
+    setUser(updated);
+    sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updated));
+  };
+
   const hasRole = (...roleCodes) => roleCodes.includes(user?.role_code);
   const isDirector = () => user?.role_code === 'DIRECTOR';
   
@@ -161,7 +167,7 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{ 
-        user, token, sessionKey, loading, authError, login, logout, resetPassword, 
+        user, token, sessionKey, loading, authError, login, logout, resetPassword, updateUserProfile,
         hasRole, isDirector, isSuperAdmin, isManagement, isProgramStaff, isOperations, isIntern, isFacilitator 
     }}>
       {children}

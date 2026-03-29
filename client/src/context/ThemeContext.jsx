@@ -4,17 +4,21 @@ const ThemeContext = createContext();
 
 export const ThemeProvider = ({ children }) => {
     const [theme, setTheme] = useState(() => {
-        const saved = localStorage.getItem('mmpz_theme');
-        if (saved) return saved;
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     });
+
+    useEffect(() => {
+        const handler = (e) => setTheme(e.matches ? 'dark' : 'light');
+        const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+        mediaQuery.addEventListener('change', handler);
+        return () => mediaQuery.removeEventListener('change', handler);
+    }, []);
 
     useEffect(() => {
         const root = document.documentElement;
         const body = document.body;
         
         root.setAttribute('data-theme', theme);
-        localStorage.setItem('mmpz_theme', theme);
 
         if (theme === 'dark') {
             root.classList.add('dark-mode');
@@ -25,12 +29,8 @@ export const ThemeProvider = ({ children }) => {
         }
     }, [theme]);
 
-    const toggleTheme = () => {
-        setTheme(prev => prev === 'dark' ? 'light' : 'dark');
-    };
-
     return (
-        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+        <ThemeContext.Provider value={{ theme }}>
             {children}
         </ThemeContext.Provider>
     );

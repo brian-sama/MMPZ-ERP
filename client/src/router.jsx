@@ -4,16 +4,6 @@ import { useAuth } from './context/AuthContext';
 import AppShell from './components/AppShell';
 import { canAccessRole, getDefaultRouteForUser } from './accessControl';
 import { getAllowedRolesForPath } from './navigationConfig';
-
-// Lazy loading placeholders for now
-import LoginPage from './pages/LoginPage';
-import ExecutiveDashboardPage from './pages/ExecutiveDashboardPage';
-import ProgramsPage from './pages/ProgramsPage';
-import FacilitatorsPage from './pages/FacilitatorsPage';
-import MonitoringEvaluationPage from './pages/MonitoringEvaluationPage';
-import FinanceAdminPage from './pages/FinanceAdminPage';
-import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
-import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import MyPortalPage from './pages/MyPortalPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -30,6 +20,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
     if (loading) return <div>Loading...</div>;
     if (!user) return <Navigate to="/login" replace />;
+    
+    // Force password reset if required
+    if (user.require_password_reset && window.location.pathname !== '/force-password-reset') {
+        return <Navigate to="/force-password-reset" replace />;
+    }
 
     if (!canAccessRole(user, allowedRoles)) {
         return <Navigate to={getDefaultRouteForUser(user)} replace />;
@@ -44,6 +39,7 @@ export default function AppRouter() {
     return (
         <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/force-password-reset" element={<ForcePasswordResetPage />} />
 
             <Route element={
                 <ProtectedRoute>

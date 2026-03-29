@@ -1,15 +1,19 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, Moon, Sun } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
+import axios from 'axios';
+import API_BASE from '../apiConfig';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { formatRoleLabel } from '../accessControl';
 import { getNavigationForUser, isGovernanceRoute } from '../navigationConfig';
 
 export default function Sidebar({ pendingCount }) {
-    const { user, logout } = useAuth();
-    const { theme, toggleTheme } = useTheme();
+    const { user, updateUserProfile, logout } = useAuth();
+    const { theme } = useTheme();
     const navigate = useNavigate();
+    const [updating, setUpdating] = React.useState(false);
+    
     const initial = (user?.name || 'U')[0].toUpperCase();
     const navGroups = getNavigationForUser(user);
     const roleDisplay = user?.job_title || formatRoleLabel(user?.role_code);
@@ -17,6 +21,21 @@ export default function Sidebar({ pendingCount }) {
     const doLogout = () => {
         logout();
         navigate('/login');
+    };
+
+    const updateAvatar = async () => {
+        const url = window.prompt("Enter Profile Picture URL:", user?.profile_picture_url || "");
+        if (url === null) return; // Cancelled
+
+        setUpdating(true);
+        try {
+            const res = await axios.patch(`${API_BASE}/me/profile`, { profile_picture_url: url });
+            updateUserProfile({ profile_picture_url: url });
+        } catch (err) {
+            alert("Failed to update profile picture");
+        } finally {
+            setUpdating(false);
+        }
     };
 
     return (
@@ -61,30 +80,43 @@ export default function Sidebar({ pendingCount }) {
             </nav>
 
             <div className="sidebar-footer">
-                <div className="sidebar-actions">
-                    <button
-                        className="topbar-btn sidebar-theme-toggle"
-                        onClick={toggleTheme}
-                        title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-                    >
-                        {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-                        <span>{theme === 'dark' ? 'Light Mode' : 'Low-Light Mode'}</span>
-                    </button>
-                </div>
-
                 <div
                     className="sidebar-user"
-                    onClick={doLogout}
                     role="button"
-                    aria-label="Sign out"
-                    title="Sign out"
+                    aria-label="User Profile"
+                    title="Update Profile Picture"
+                    onClick={updateAvatar}
+                    style={{ cursor: updating ? 'wait' : 'pointer' }}
                 >
-                    <div className="sidebar-user-avatar">{initial}</div>
+                    {user?.profile_picture_url ? (
+                        <div className="sidebar-avatar-container">
+                            <img 
+                                src={user.profile_picture_url} 
+                                alt={user.name} 
+                                className="sidebar-user-avatar" 
+                            />
+                            <div className="sidebar-avatar-overlay">Edit</div>
+                        </div>
+                    ) : (
+                        <div className="sidebar-user-avatar">
+                            {initial}
+                            <div className="sidebar-avatar-overlay">Edit</div>
+                        </div>
+                    )}
                     <div className="sidebar-user-info">
                         <div className="sidebar-user-name">{user?.name}</div>
                         <div className="sidebar-user-role">{roleDisplay}</div>
                     </div>
-                    <LogOut size={15} className="sidebar-user-logout" />
+                </div>
+                
+                <div 
+                    className="sidebar-logout-wrapper"
+                    onClick={doLogout}
+                    role="button"
+                    title="Sign out"
+                >
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
                 </div>
             </div>
         </aside>

@@ -190,6 +190,19 @@ export const getUserContext = async (userId) => {
     for (const permission of runtimePermissionOverrides[user.role_code] || []) {
         permissions.add(permission);
     }
+
+    // Role boundary enforcement
+    // System settings and administrative user management should ONLY be accessible to SYSTEM_ADMIN (SUPER_ADMIN)
+    if (systemRole !== SYSTEM_ROLES.SUPER_ADMIN) {
+        // Remove administrative permissions for non-super admins like DIRECTOR
+        for (const perm of [...permissions]) {
+            if (perm.startsWith('settings.') || 
+                (perm.startsWith('user.') && !perm.includes('.view') && !perm.includes('.read'))) {
+                permissions.delete(perm);
+            }
+        }
+    }
+
     const roleAssignmentStatus = user.role_assignment_status || 'pending_reassignment';
 
     return {

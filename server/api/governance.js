@@ -117,21 +117,30 @@ export const handler = async (event) => {
                 return successResponse({ ...approval[0], logs, procurement });
             }
 
-            const queue = await sql`
-                SELECT
-                    a.*,
-                    u.name AS requester_name,
-                    pr.title AS procurement_title,
-                    pr.total_estimated_cost,
-                    pr.status AS procurement_status
-                FROM approvals a
-                JOIN users u ON a.requested_by_user_id = u.id
-                LEFT JOIN procurement_requests pr
-                    ON a.entity_type = 'procurement'
-                   AND pr.id::text = a.entity_id
-                ORDER BY a.created_at DESC
-            `;
-            return successResponse(queue);
+            try {
+                const queue = await sql`
+                    SELECT
+                        a.*,
+                        u.name AS requester_name,
+                        pr.title AS procurement_title,
+                        pr.total_estimated_cost,
+                        pr.status AS procurement_status
+                    FROM approvals a
+                    INNER JOIN users u ON a.requested_by_user_id = u.id
+                    LEFT JOIN procurement_requests pr
+                        ON a.entity_type = 'procurement'
+                       AND (CASE 
+                            WHEN a.entity_id IS NOT NULL AND a.entity_id ~ '^[0-9]+$' 
+                            THEN pr.id = a.entity_id::integer 
+                            ELSE pr.id::text = a.entity_id 
+                            END)
+                    ORDER BY a.created_at DESC
+                `;
+                return successResponse(queue);
+            } catch (err) {
+                console.error('Database error in governance queue:', err);
+                throw new HttpError('Failed to fetch governance queue', 500);
+            }
         }
 
         if (method === 'POST') {
