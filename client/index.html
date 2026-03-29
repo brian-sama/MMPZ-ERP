@@ -15,15 +15,13 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" as="style">
+  <link rel="preload"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" as="style">
   <style>
     body {
       font-family: 'Plus Jakarta Sans', sans-serif;
       overflow-x: hidden;
     }
-  </style>
-
-  <link rel="modulepreload" href="/src/main.jsx">
 
     .dark-mode {
       background-color: #020617;
@@ -97,6 +95,25 @@
       transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
     }
   </style>
+
+  <script>
+    (function () {
+      try {
+        const savedTheme = localStorage.getItem('mmpz_theme');
+        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        const finalTheme = savedTheme || systemTheme;
+
+        if (finalTheme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          // Since React code uses body.dark-mode, we check if body exists or use documentElement
+          // We apply to documentElement for now, but ThemeContext will handle the body class
+          document.documentElement.classList.add('dark-mode');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      } catch (e) { }
+    })();
+  </script>
 </head>
 
 <body class="transition-colors duration-500">
