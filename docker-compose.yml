@@ -1,28 +1,4 @@
 services:
-  traefik:
-    image: traefik:v3.0
-    container_name: mmpz_erp_traefik
-    restart: unless-stopped
-    command:
-      - "--api.insecure=false"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--entrypoints.websecure.address=:443"
-      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
-      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
-      - "--certificatesresolvers.myresolver.acme.tlschallenge=true"
-      - "--certificatesresolvers.myresolver.acme.email=brianmagagula5@gmail.com"
-      - "--certificatesresolvers.myresolver.acme.storage=/letsecrypt/acme.json"
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
-      - "./traefik_data/acme.json:/letsecrypt/acme.json"
-    networks:
-      - mmpz_network
-
   db:
     image: postgres:16-alpine
     container_name: mmpz_erp_db
@@ -41,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - mmpz_network
+      - mmpz_inner
 
   app:
     build:
@@ -58,12 +34,13 @@ services:
       PORT: 3000
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.app.rule=Host(`mmpzmne.co.zw`)"
-      - "traefik.http.routers.app.entrypoints=websecure"
-      - "traefik.http.routers.app.tls.certresolver=myresolver"
-      - "traefik.http.services.app.loadbalancer.server.port=3000"
+      - "traefik.http.routers.mmpz_app.rule=Host(`mmpzmne.co.zw`)"
+      - "traefik.http.routers.mmpz_app.entrypoints=websecure"
+      - "traefik.http.routers.mmpz_app.tls.certresolver=myresolver"
+      - "traefik.http.services.mmpz_app.loadbalancer.server.port=3000"
     networks:
-      - mmpz_network
+      - mmpz_inner
+      - traefik-public
 
   streamlit:
     build:
@@ -78,16 +55,19 @@ services:
       - DATABASE_URL=postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.streamlit.rule=Host(`mmpzmne.co.zw`) && PathPrefix(`/streamlit`)"
-      - "traefik.http.routers.streamlit.entrypoints=websecure"
-      - "traefik.http.routers.streamlit.tls.certresolver=myresolver"
-      - "traefik.http.services.streamlit.loadbalancer.server.port=8501"
+      - "traefik.http.routers.mmpz_streamlit.rule=Host(`mmpzmne.co.zw`) && PathPrefix(`/streamlit`)"
+      - "traefik.http.routers.mmpz_streamlit.entrypoints=websecure"
+      - "traefik.http.routers.mmpz_streamlit.tls.certresolver=myresolver"
+      - "traefik.http.services.mmpz_streamlit.loadbalancer.server.port=8501"
     networks:
-      - mmpz_network
+      - mmpz_inner
+      - traefik-public
 
 networks:
-  mmpz_network:
+  mmpz_inner:
     driver: bridge
+  traefik-public:
+    external: true
 
 volumes:
   mmpz_db_data:

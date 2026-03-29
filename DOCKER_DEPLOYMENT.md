@@ -1,31 +1,32 @@
-# Docker & Traefik Deployment Guide
+# Docker & Shared Traefik Deployment Guide
 
-This guide explains how to deploy the MMPZ System using Docker Compose and Traefik for automated SSL and reverse proxying.
+This guide explains how to deploy the MMPZ System to a VPS that already has a **Global Traefik** instance running (such as one used for multiple websites like Lunia).
 
 ## 1. Prerequisites
 
 - A VPS with Docker and Docker Compose installed.
+- **Global Traefik** already running on the server.
+- The network **`traefik-public`** must exist (it was detected as your global entry point).
 - Domain `mmpzmne.co.zw` pointed to your VPS IP.
-- Port 80 and 443 must be open and not used by other services (like Nginx on the host).
 
 ## 2. Initial Setup on VPS
 
-Clone the repository and prepare the Traefik storage:
+Clone the repository:
 
 ```bash
 git clone git@github.com:brian-sama/mmpz-system.git
 cd mmpz-system
-
-# Create traefik storage and set correct permissions
-mkdir -p traefik_data
-touch traefik_data/acme.json
-chmod 600 traefik_data/acme.json
 ```
+
+*(Note: You do NOT need to create a `traefik_data` directory for this project as the global Traefik handles all SSL certificates.)*
 
 ## 3. Configuration
 
-The `docker-compose.yml` is already configured for `mmpzmne.co.zw`. 
-Check your `.env` file (if needed by the app container) though most configuration is now handled via the compose file.
+The `docker-compose.yml` is configured to connect to your existing `traefik-public` network. 
+
+**SSL Resolver Name**: This setup assumes your global Traefik uses the name `myresolver` for Let's Encrypt. If your global configuration use a different name (like `letsencrypt`), update the following labels in `docker-compose.yml`:
+- `traefik.http.routers.mmpz_app.tls.certresolver`
+- `traefik.http.routers.mmpz_streamlit.tls.certresolver`
 
 ## 4. Deployment
 
@@ -36,23 +37,27 @@ docker-compose up -d --build
 ```
 
 This will:
-1. Start the PostgreSQL database.
-2. Build and start the Node.js app.
-3. Build and start the Streamlit dashboard.
-4. Start Traefik, which will automatically request SSL certificates from Let's Encrypt.
+1. Start the PostgreSQL database on a private internal network (`mmpz_inner`).
+2. Build and start the Node.js app and Streamlit dashboard.
+3. Automatically register these services with your **existing** Traefik instance via the `traefik-public` network.
 
 ## 5. Verification
 
 - **Main App**: [https://mmpzmne.co.zw](https://mmpzmne.co.zw)
 - **Dashboard**: [https://mmpzmne.co.zw/streamlit](https://mmpzmne.co.zw/streamlit)
-- **API Health**: [https://mmpzmne.co.zw/api/health](https://mmpzmne.co.zw/api/health)
 
-## 6. Maintenance Commands
+## 6. Troubleshooting
 
-- **View logs**: `docker-compose logs -f`
-- **View Traefik logs specifically**: `docker-compose logs -f traefik`
-- **Restart a service**: `docker-compose restart app`
-- **Stop everything**: `docker-compose down`
+### Network Not Found Error
+If you see an error saying `network traefik-public not found`, verify the exact name of your global Traefik network:
+```bash
+docker network ls
+```
+
+### SSL Not Working
+If the site loads but shows a security warning:
+1. Check the logs of your **global** Traefik container (not the MMPZ containers).
+2. Ensure the `certresolver` name in `docker-compose.yml` matches your global Traefik config.
 
 ## 7. Troubleshooting
 
