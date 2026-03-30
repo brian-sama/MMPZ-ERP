@@ -17,7 +17,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - mmpz_inner
+      - apps_network
 
   app:
     build:
@@ -25,6 +25,8 @@ services:
       dockerfile: Dockerfile
     container_name: mmpz_erp_app
     restart: unless-stopped
+    ports:
+      - "3001:3000"
     depends_on:
       db:
         condition: service_healthy
@@ -44,16 +46,8 @@ services:
       timeout: 5s
       retries: 8
       start_period: 45s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
-      - "traefik.http.routers.mmpz_app.rule=Host(`mmpzmne.co.zw`)"
-      - "traefik.http.routers.mmpz_app.entrypoints=websecure"
-      - "traefik.http.routers.mmpz_app.tls.certresolver=myresolver"
-      - "traefik.http.services.mmpz_app.loadbalancer.server.port=3000"
     networks:
-      - mmpz_inner
-      - traefik-public
+      - apps_network
     volumes:
       - ./uploads:/app/uploads
 
@@ -63,6 +57,8 @@ services:
       dockerfile: Dockerfile
     container_name: mmpz_erp_streamlit
     restart: unless-stopped
+    ports:
+      - "8501:8501"
     depends_on:
       db:
         condition: service_healthy
@@ -80,21 +76,11 @@ services:
       timeout: 5s
       retries: 8
       start_period: 35s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
-      - "traefik.http.routers.mmpz_streamlit.rule=Host(`mmpzmne.co.zw`) && PathPrefix(`/streamlit`)"
-      - "traefik.http.routers.mmpz_streamlit.entrypoints=websecure"
-      - "traefik.http.routers.mmpz_streamlit.tls.certresolver=myresolver"
-      - "traefik.http.services.mmpz_streamlit.loadbalancer.server.port=8501"
     networks:
-      - mmpz_inner
-      - traefik-public
+      - apps_network
 
 networks:
-  mmpz_inner:
-    driver: bridge
-  traefik-public:
+  apps_network:
     external: true
 
 volumes:
