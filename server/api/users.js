@@ -29,6 +29,7 @@ const sanitizeUser = (user) => ({
     job_title: user.job_title || user.role_code || 'Intern',
     short_bio: user.short_bio || '',
     profile_picture_url: user.profile_picture_url || null,
+    phone: user.phone || '',
     role_assignment_status: user.role_assignment_status,
     role_confirmed_at: user.role_confirmed_at,
     role: toLegacyRole(user.role_code, resolveSystemRole(user.role_code, user.system_role)),
@@ -48,11 +49,13 @@ const sanitizeDirectoryUser = (user) => ({
     job_title: user.job_title || user.role_code || 'Team Member',
     short_bio: user.short_bio || '',
     profile_picture_url: user.profile_picture_url || null,
+    phone: user.phone || '',
     role_assignment_status: user.role_assignment_status,
     created_at: user.created_at,
 });
 
 const assertCanAssignRole = (actor, targetRoleCode) => {
+    if (actor.system_role === 'SUPER_ADMIN') return;
     if (targetRoleCode === 'DIRECTOR' && actor.role_code !== 'DIRECTOR') {
         throw new HttpError('Only Director can create or assign Director role', 403);
     }
@@ -94,6 +97,7 @@ export const handler = async (event) => {
                     last_login,
                     failed_login_attempts,
                     locked_at,
+                    phone,
                     created_at
                 FROM users
                 ORDER BY created_at DESC
@@ -144,7 +148,8 @@ export const handler = async (event) => {
                         role_confirmed_by_user_id,
                         role_confirmed_at,
                         role_legacy_snapshot,
-                        require_password_reset
+                        require_password_reset,
+                        phone
                     )
                     VALUES (
                         ${name},
@@ -158,7 +163,8 @@ export const handler = async (event) => {
                         ${roleStatus === 'confirmed' ? actor.id : null},
                         ${roleStatus === 'confirmed' ? new Date().toISOString() : null},
                         ${body.role || null},
-                        ${requireReset}
+                        ${requireReset},
+                        ${body.phone || null}
                     )
                     RETURNING
                         id,
@@ -403,6 +409,7 @@ export const handler = async (event) => {
                             role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
                             password_hash = ${passwordHash},
                             require_password_reset = ${requireReset},
+                            phone = ${body.phone !== undefined ? body.phone : existing.phone},
                             failed_login_attempts = 0,
                             locked_at = NULL
                         WHERE id = ${id}
@@ -417,10 +424,11 @@ export const handler = async (event) => {
                             system_role = ${nextSystemRole},
                             job_title = ${nextJobTitle},
                             short_bio = ${nextShortBio || null},
-                            role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
-                            role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
-                            role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
+                            role_assignment_status = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? 'confirmed' : 'pending_reassignment'},
+                            role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? actor.id : null},
+                            role_confirmed_at = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? new Date().toISOString() : null},
                             require_password_reset = ${requireReset},
+                            phone = ${body.phone !== undefined ? body.phone : existing.phone},
                             failed_login_attempts = 0,
                             locked_at = NULL
                         WHERE id = ${id}
@@ -437,6 +445,7 @@ export const handler = async (event) => {
                         job_title,
                         short_bio,
                         profile_picture_url,
+                        phone,
                         role_assignment_status,
                         role_confirmed_at,
                         require_password_reset,

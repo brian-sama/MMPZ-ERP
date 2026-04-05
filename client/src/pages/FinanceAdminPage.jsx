@@ -75,6 +75,7 @@ export default function FinanceAdminPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const canCreateRequisition = [
         'DIRECTOR',
+        'SYSTEM_ADMIN',
         'COMMUNITY_DEVELOPMENT_OFFICER',
         'PSYCHOSOCIAL_SUPPORT_OFFICER',
     ].includes(user?.role_code);

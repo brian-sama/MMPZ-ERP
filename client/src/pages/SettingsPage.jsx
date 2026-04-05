@@ -6,6 +6,7 @@ import {
     Globe,
     Save,
     Shield,
+    ShieldCheck,
     Truck,
     Users,
 } from 'lucide-react';
@@ -21,14 +22,24 @@ const formatCurrency = (value) =>
     }).format(Number(value || 0));
 
 export default function SettingsPage() {
-    const { user } = useAuth();
-    const canEditControls = user?.role_code === 'DIRECTOR';
+    const { user, isSuperAdmin } = useAuth();
+    const canEditControls = user?.role_code === 'DIRECTOR' || isSuperAdmin();
     const [thresholdValue, setThresholdValue] = useState('500');
     const [savedThreshold, setSavedThreshold] = useState('500');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
+    
+    // KoBo Configuration State
+    const [koboConfig, setKoboConfig] = useState({
+        server_url: '',
+        api_token: '',
+    });
+    const [koboLoading, setKoboLoading] = useState(false);
+    const [koboSaving, setKoboSaving] = useState(false);
+    const [koboMessage, setKoboMessage] = useState('');
+    const [koboError, setKoboError] = useState('');
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -47,8 +58,25 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchKoboConfig = async () => {
+        setKoboLoading(true);
+        try {
+            const res = await axios.get(`${API_BASE}/kobo/config`, {
+                params: { userId: user.id },
+            });
+            setKoboConfig({
+                server_url: res.data.server_url || 'https://kf.kobotoolbox.org',
+                api_token: res.data.api_token || '',
+            });
+        } catch (err) {
+            console.error('Failed to load KoBo config');
+        } finally {
+            setKoboLoading(false);
+        }
+    };
     useEffect(() => {
         fetchSettings();
+        fetchKoboConfig();
     }, []);
 
     const dirty = useMemo(
@@ -72,6 +100,25 @@ export default function SettingsPage() {
             setError(err.response?.data?.error || 'Unable to update threshold.');
         } finally {
             setSaving(false);
+        }
+    };
+
+    const handleSaveKobo = async (e) => {
+        e.preventDefault();
+        setKoboSaving(true);
+        setKoboMessage('');
+        setKoboError('');
+        try {
+            const res = await axios.post(`${API_BASE}/kobo/config`, {
+                userId: user.id,
+                ...koboConfig,
+            });
+            setKoboMessage(res.data.message || 'KoBo configuration saved and verified.');
+            await fetchKoboConfig();
+        } catch (err) {
+            setKoboError(err.response?.data?.error || 'Failed to save KoBo configuration.');
+        } finally {
+            setKoboSaving(false);
         }
     };
 
@@ -161,7 +208,7 @@ export default function SettingsPage() {
                         </div>
                         {!canEditControls && (
                             <div className="form-hint">
-                                Only the Director can change the authority threshold. Other oversight roles have read-only access here.
+                                Only the Director or System Admin can change the authority threshold.
                             </div>
                         )}
                     </div>
@@ -210,33 +257,52 @@ export default function SettingsPage() {
                 <div className="panel">
                     <div className="panel-header">
                         <div>
-                            <h2 className="panel-title">Logistics Governance</h2>
-                            <div className="panel-subtitle">Operational checks that should happen before goods move.</div>
+                            <h2 className="panel-title">KoBoToolbox Connection</h2>
+                            <div className="panel-subtitle">Connect to the correct KoBoCollect database for field data sync.</div>
                         </div>
                     </div>
-                    <div className="control-stack">
-                        <div className="control-row static">
-                            <div>
-                                <div className="control-title">Budget-linked ordering</div>
-                                <div className="control-copy">Purchasing should only proceed from an approved and funded budget line.</div>
+                    {koboLoading ? (
+                        <div className="empty-state" style={{ height: '100px' }}><div className="spinner"></div></div>
+                    ) : (
+                        <form onSubmit={handleSaveKobo}>
+                            {(koboMessage || koboError) && (
+                                <div className={`page-message ${koboMessage ? 'success' : 'error'}`} style={{ marginBottom: '16px' }}>
+                                    {koboMessage || koboError}
+                                </div>
+                            )}
+                            <div className="form-group">
+                                <label className="form-label">Server URL</label>
+                                <input
+                                    type="url"
+                                    className="form-input"
+                                    value={koboConfig.server_url}
+                                    placeholder="https://kf.kobotoolbox.org"
+                                    disabled={!canEditControls}
+                                    onChange={(e) => setKoboConfig({ ...koboConfig, server_url: e.target.value })}
+                                />
                             </div>
-                            <Truck size={18} />
-                        </div>
-                        <div className="control-row static">
-                            <div>
-                                <div className="control-title">Comparative sourcing</div>
-                                <div className="control-copy">Mid-value and major purchases should carry comparative pricing evidence.</div>
+                            <div className="form-group" style={{ marginTop: '12px' }}>
+                                <label className="form-label">API Token</label>
+                                <input
+                                    type="password"
+                                    className="form-input"
+                                    value={koboConfig.api_token}
+                                    placeholder="Your secret API token"
+                                    disabled={!canEditControls}
+                                    onChange={(e) => setKoboConfig({ ...koboConfig, api_token: e.target.value })}
+                                />
                             </div>
-                            <Shield size={18} />
-                        </div>
-                        <div className="control-row static">
-                            <div>
-                                <div className="control-title">Receiving accountability</div>
-                                <div className="control-copy">The officer receiving goods should not be the same person approving the spend.</div>
+                            <div style={{ marginTop: '16px' }}>
+                                <button
+                                    type="submit"
+                                    className="btn btn-primary btn-sm"
+                                    disabled={!canEditControls || koboSaving || !koboConfig.server_url || !koboConfig.api_token}
+                                >
+                                    <Database size={14} /> {koboSaving ? 'Saving & Testing...' : 'Save & Test Connection'}
+                                </button>
                             </div>
-                            <Users size={18} />
-                        </div>
-                    </div>
+                        </form>
+                    )}
                 </div>
 
                 <div className="panel">
@@ -259,7 +325,7 @@ export default function SettingsPage() {
                                 <div className="control-title">Next hardening target</div>
                                 <div className="control-copy">Move more approval and logistics policies from UI guidance into enforceable backend rules.</div>
                             </div>
-                            <Shield size={18} />
+                            <ShieldCheck size={18} />
                         </div>
                     </div>
                 </div>

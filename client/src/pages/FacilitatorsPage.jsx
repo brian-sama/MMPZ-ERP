@@ -99,6 +99,7 @@ export default function FacilitatorsPage() {
                     role_code: 'DEVELOPMENT_FACILITATOR',
                     system_role: 'FACILITATOR',
                     job_title: 'Development Facilitator',
+                    phone: newFacilitator.phone,
                     userId: user.id
                 });
                 finalUserId = userRes.data.user.id;

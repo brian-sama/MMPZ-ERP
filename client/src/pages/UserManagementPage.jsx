@@ -23,10 +23,12 @@ export default function UserManagementPage() {
         email: '',
         password: '',
         role_code: 'FINANCE_ADMIN_OFFICER',
+        phone: '',
         require_password_reset: true
     });
 
     const roles = [
+        { code: 'SYSTEM_ADMIN', label: 'System Admin' },
         { code: 'DIRECTOR', label: 'Director' },
         { code: 'FINANCE_ADMIN_OFFICER', label: 'Finance & Admin Officer' },
         { code: 'ADMIN_ASSISTANT', label: 'Admin Assistant' },
@@ -65,7 +67,7 @@ export default function UserManagementPage() {
             }
             setShowForm(false);
             setEditingUser(null);
-            setFormData({ name: '', email: '', password: '', role_code: 'FINANCE_ADMIN_OFFICER', require_password_reset: true });
+            setFormData({ name: '', email: '', password: '', role_code: 'FINANCE_ADMIN_OFFICER', phone: '', require_password_reset: true });
             fetchUsers();
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to save user');
@@ -79,6 +81,7 @@ export default function UserManagementPage() {
             email: user.email,
             password: '', // Don't show password
             role_code: user.role_code,
+            phone: user.phone || '',
             require_password_reset: user.require_password_reset
         });
         setShowForm(true);
@@ -133,7 +136,7 @@ export default function UserManagementPage() {
                         <thead>
                             <tr>
                                 <th>User Identity</th>
-                                <th>Role / Group</th>
+                                <th>Role / Phone</th>
                                 <th>Auth Status</th>
                                 <th>Last Login</th>
                                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -152,11 +155,14 @@ export default function UserManagementPage() {
                                         </div>
                                     </td>
                                     <td>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <Shield size={14} className="text-muted" />
-                                            <span className="badge badge-primary" style={{ textTransform: 'capitalize' }}>
-                                                {u.role_code.replace(/_/g, ' ').toLowerCase()}
-                                            </span>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <Shield size={14} className="text-muted" />
+                                                <span className="badge badge-primary" style={{ textTransform: 'capitalize' }}>
+                                                    {u.role_code.replace(/_/g, ' ').toLowerCase()}
+                                                </span>
+                                            </div>
+                                            <div className="form-hint" style={{ fontSize: '11px' }}>{u.phone || 'No phone'}</div>
                                         </div>
                                     </td>
                                     <td>
@@ -246,6 +252,16 @@ export default function UserManagementPage() {
                                             <option key={r.code} value={r.code}>{r.label}</option>
                                         ))}
                                     </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Phone Number</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        placeholder="+263..."
+                                        value={formData.phone}
+                                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                                    />
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                     <input

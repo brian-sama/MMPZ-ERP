@@ -42,10 +42,10 @@ const run = async () => {
             await sql.unsafe(schemaContent);
         }
 
-        // 2. Run JS Migrations
+        // 2. Run Migrations (.js and .sql)
         if (fs.existsSync(migrationsDir)) {
             const files = fs.readdirSync(migrationsDir)
-                .filter(f => f.endsWith('.js'))
+                .filter(f => f.endsWith('.js') || f.endsWith('.sql'))
                 .sort();
 
             for (const file of files) {
@@ -56,20 +56,24 @@ const run = async () => {
                 if (executed.length === 0) {
                     console.log(`Running migration: ${file}`);
                     const migrationPath = path.join(migrationsDir, file);
-                    const { handler } = await import(`file://${migrationPath}`);
                     
-                    if (typeof handler === 'function') {
-                        await handler(sql);
-                        await sql`
-                            INSERT INTO schema_migrations (filename, checksum)
-                            VALUES (${file}, 'js-migration')
-                        `;
-                        console.log(`Migration ${file} completed.`);
-                    } else {
-                        console.warn(`Migration ${file} missing export const handler = async (sql) => { ... }`);
+                    if (file.endsWith('.js')) {
+                        const { handler } = await import(`file://${migrationPath}`);
+                        if (typeof handler === 'function') {
+                            await handler(sql);
+                        } else {
+                            throw new Error(`Migration ${file} missing export const handler = async (sql) => { ... }`);
+                        }
+                    } else if (file.endsWith('.sql')) {
+                        const sqlContent = fs.readFileSync(migrationPath, 'utf8');
+                        await sql.unsafe(sqlContent);
                     }
-                } else {
-                    // console.log(`Skipping ${file} (already executed)`);
+
+                    await sql`
+                        INSERT INTO schema_migrations (filename, checksum)
+                        VALUES (${file}, ${file.endsWith('.js') ? 'js-migration' : 'sql-migration'})
+                    `;
+                    console.log(`Migration ${file} completed.`);
                 }
             }
         }

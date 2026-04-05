@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
       sessionStorage.setItem(SESSION_KEY_STORAGE_KEY, nextSessionKey);
       return userData;
     } catch (err) {
-      const msg = err.response?.data?.error || 'Invalid credentials. Please try again.';
+      const msg = err.response?.data?.error || err.message || 'Invalid credentials. Please try again.';
       setAuthError(msg);
       throw new Error(msg);
     } finally {

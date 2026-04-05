@@ -22,6 +22,7 @@ export const ROLE_CODES = [
     'SOCIAL_SERVICES_INTERN',
     'YOUTH_COMMUNICATIONS_INTERN',
     'DEVELOPMENT_FACILITATOR',
+    'SYSTEM_ADMIN',
 ];
 
 const legacyRoleMap = {
@@ -198,6 +199,10 @@ export const getUserContext = async (userId) => {
         for (const perm of [...permissions]) {
             if (perm.startsWith('settings.') || 
                 (perm.startsWith('user.') && !perm.includes('.view') && !perm.includes('.read'))) {
+                permissions.delete(perm);
+            }
+            // Also restrict finance threshold updates to SYSTEM_ADMIN or DIRECTOR (Director is handled by specific checks in UI/API, but let's be explicit here)
+            if (perm === 'settings.finance_threshold.update' && user.role_code !== 'DIRECTOR' && systemRole !== SYSTEM_ROLES.SUPER_ADMIN) {
                 permissions.delete(perm);
             }
         }
