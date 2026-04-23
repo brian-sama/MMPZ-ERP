@@ -22,6 +22,7 @@ export default function LoginPage() {
     return (
         <div className="auth-page">
             <div className="auth-card">
+                <div className="auth-kicker">Mission Operations</div>
                 <div className="auth-logo">
                     <img src="/mmpz-logo.png" alt="MMPZ" />
                 </div>
@@ -40,7 +41,7 @@ export default function LoginPage() {
                 <form onSubmit={handleSubmit} className="content-stack">
                     <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" htmlFor="email">Email Address</label>
-                        <div className="selection-card" style={{ padding: '0 12px', cursor: 'default' }}>
+                        <div className="selection-card auth-field">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <Mail size={16} color="var(--text-muted)" />
                                 <input
@@ -59,7 +60,7 @@ export default function LoginPage() {
 
                     <div className="form-group" style={{ marginBottom: 0 }}>
                         <label className="form-label" htmlFor="password">Password</label>
-                        <div className="selection-card" style={{ padding: '0 12px', cursor: 'default' }}>
+                        <div className="selection-card auth-field">
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <LockKeyhole size={16} color="var(--text-muted)" />
                                 <input
@@ -76,14 +77,18 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    <button type="submit" className="btn btn-primary btn-lg" disabled={loading} style={{ width: '100%' }}>
+                    <button type="submit" className="btn btn-primary btn-lg auth-submit" disabled={loading}>
                         {loading ? 'Signing In...' : 'Sign In'}
                     </button>
                 </form>
 
-                <p className="form-hint" style={{ textAlign: 'center', marginTop: '18px' }}>
-                    © {new Date().getFullYear()} Million Memory Project Zimbabwe
-                </p>
+                <div className="auth-footer">
+                    <strong>MMPZ Internal Platform</strong>
+                    <p>Coordinating programs, finance, governance, and field reporting in one workspace.</p>
+                    <p className="form-hint" style={{ marginTop: '10px' }}>
+                        © {new Date().getFullYear()} Million Memory Project Zimbabwe
+                    </p>
+                </div>
             </div>
         </div>
     );

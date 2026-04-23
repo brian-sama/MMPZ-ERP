@@ -1189,8 +1189,9 @@ body {
   justify-content: center;
   background: var(--bg-app);
   background-image:
-    radial-gradient(circle at 18% 32%, rgba(47, 93, 80, 0.08) 0%, transparent 42%),
-    radial-gradient(circle at 82% 68%, rgba(143, 99, 48, 0.06) 0%, transparent 38%);
+    radial-gradient(circle at 18% 28%, rgba(47, 93, 80, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 82% 68%, rgba(143, 99, 48, 0.08) 0%, transparent 38%),
+    linear-gradient(135deg, rgba(255, 253, 247, 0.92), rgba(240, 232, 216, 0.88));
   padding: 24px;
 }
 
@@ -1203,6 +1204,16 @@ body {
   max-width: 400px;
   box-shadow: var(--shadow-lg);
   animation: fadeIn 0.18s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--brand-primary), var(--brand-secondary), var(--brand-accent));
 }
 
 .auth-logo {
@@ -1215,6 +1226,21 @@ body {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+}
+
+.auth-kicker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(143, 99, 48, 0.1);
+  color: var(--brand-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
 .auth-logo img {
@@ -1238,7 +1264,8 @@ body {
 .auth-heading p {
   font-size: 13px;
   color: var(--text-muted);
-  margin-top: 4px;
+  margin-top: 6px;
+  line-height: 1.55;
 }
 
 .auth-error {
@@ -1249,6 +1276,69 @@ body {
   font-size: 13px;
   padding: 10px 14px;
   margin-bottom: 16px;
+}
+
+.auth-field {
+  padding: 0 12px;
+  cursor: default;
+  background:
+    linear-gradient(90deg, rgba(255, 248, 196, 0.6), rgba(255, 252, 224, 0.22)),
+    var(--bg-surface);
+}
+
+.auth-field:focus-within {
+  border-color: var(--brand-primary);
+  box-shadow: 0 0 0 3px rgba(47, 93, 80, 0.1);
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 48px;
+  color: #fffdf7 !important;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-h)) !important;
+  border-color: var(--brand-primary-h) !important;
+  box-shadow: 0 14px 28px rgba(47, 93, 80, 0.18);
+}
+
+.auth-submit:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--brand-primary-h), #1c3a32) !important;
+  box-shadow: 0 18px 32px rgba(47, 93, 80, 0.22);
+}
+
+.auth-submit:disabled {
+  opacity: 0.72;
+  color: #fffdf7 !important;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 18px;
+}
+
+.auth-footer strong {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--brand-secondary);
+  margin-bottom: 6px;
+}
+
+.auth-footer p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-primary);
+  -webkit-box-shadow: 0 0 0 1000px rgba(255, 248, 196, 0.58) inset;
+  transition: background-color 9999s ease-in-out 0s;
 }
 
 /* ── Modals ─────────────────────────────────────────────── */
