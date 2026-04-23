@@ -5,13 +5,7 @@ import PageHeader from '../components/PageHeader';
 const getStreamlitUrl = () => {
     const configuredUrl = import.meta.env.VITE_STREAMLIT_URL;
     if (configuredUrl) return configuredUrl;
-
-    const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
-        return '/streamlit/?embed=true';
-    }
-
-    return 'https://streamlit.mmpzmne.co.zw/?embed=true';
+    return '/streamlit/?embed=true';
 };
 
 export default function AnalyticsDashboardPage() {

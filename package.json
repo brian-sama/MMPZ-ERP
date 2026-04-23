@@ -16,7 +16,8 @@
         "db:migrate": "node scripts/db_migrate.js",
         "db:migrate:all": "node scripts/db_migrate_all.js",
         "db:seed": "node scripts/db_seed.js",
-        "db:reset": "node scripts/db_reset.js"
+        "db:reset": "node scripts/db_reset.js",
+        "user:grant-brian-admin": "node scripts/grant_brian_system_admin_and_facilitator.js"
     },
     "devDependencies": {
         "concurrently": "^8.2.2"
