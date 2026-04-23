@@ -22,7 +22,6 @@ export default function LoginPage() {
     return (
         <div className="auth-page">
             <div className="auth-card">
-                <div className="auth-kicker">Mission Operations</div>
                 <div className="auth-logo">
                     <img src="/mmpz-logo.png" alt="MMPZ" />
                 </div>

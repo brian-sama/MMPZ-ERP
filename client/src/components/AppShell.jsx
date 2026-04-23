@@ -29,7 +29,11 @@ export default function AppShell() {
                 });
                 setPendingCount(Number(res.data?.total || 0));
             } catch (err) {
-                console.error('Failed to fetch governance queue count', err);
+                const status = err?.response?.status;
+                setPendingCount(0);
+                if (status !== 401 && status !== 403) {
+                    console.error('Failed to fetch governance queue count', err);
+                }
             }
         };
         fetchCounts();

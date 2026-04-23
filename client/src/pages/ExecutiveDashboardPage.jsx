@@ -25,8 +25,13 @@ export default function ExecutiveDashboardPage() {
                 });
                 setData(res.data);
             } catch (err) {
-                setError('Failed to load dashboard data');
-                console.error(err);
+                const status = err?.response?.status;
+                setError(status === 403
+                    ? 'You do not have access to this dashboard.'
+                    : 'Failed to load dashboard data');
+                if (status !== 401 && status !== 403) {
+                    console.error(err);
+                }
             } finally {
                 setLoading(false);
             }

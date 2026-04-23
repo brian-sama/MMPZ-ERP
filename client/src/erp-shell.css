@@ -1228,21 +1228,6 @@ body {
   overflow: hidden;
 }
 
-.auth-kicker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 14px;
-  padding: 5px 12px;
-  border-radius: 999px;
-  background: rgba(143, 99, 48, 0.1);
-  color: var(--brand-secondary);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
 .auth-logo img {
   width: 100%;
   height: 100%;
