@@ -28,10 +28,12 @@ export function NotificationProvider({ children }) {
     const retryTimeoutRef = useRef(null);
     const serviceWorkerRegistrationRef = useRef(null);
     const pushSyncPromiseRef = useRef(null);
+    const streamFailureCountRef = useRef(0);
     const [notifications, setNotifications] = useState([]);
     const [permission, setPermission] = useState(getNotificationPermission);
     const [pushSupported, setPushSupported] = useState(pushSupportedInBrowser);
     const [pushEnabled, setPushEnabled] = useState(false);
+    const [realtimeAvailable, setRealtimeAvailable] = useState(true);
 
     const fetchNotifications = async () => {
         if (!user?.id) {
@@ -42,7 +44,10 @@ export function NotificationProvider({ children }) {
             const res = await axios.get(`${API_BASE}/notifications`);
             setNotifications(Array.isArray(res.data) ? res.data : []);
         } catch (error) {
-            console.error('Failed to fetch notifications', error);
+            const status = error?.response?.status;
+            if (status !== 401 && status !== 403) {
+                console.error('Failed to fetch notifications', error);
+            }
         }
     };
 
@@ -153,12 +158,19 @@ export function NotificationProvider({ children }) {
     }, [user?.id]);
 
     useEffect(() => {
+        setRealtimeAvailable(true);
+        streamFailureCountRef.current = 0;
+    }, [token, user?.id]);
+
+    useEffect(() => {
         if (permission !== 'granted' || !user?.id || !token) return;
         syncPushSubscription();
     }, [permission, syncPushSubscription, token, user?.id]);
 
     useEffect(() => {
-        if (!user?.id || !token || typeof window === 'undefined') return undefined;
+        if (!user?.id || !token || typeof window === 'undefined' || !realtimeAvailable) {
+            return undefined;
+        }
 
         let isClosed = false;
         const streamUrl = `${window.location.origin}${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`;
@@ -168,6 +180,11 @@ export function NotificationProvider({ children }) {
 
             const source = new EventSource(streamUrl);
             streamRef.current = source;
+
+            source.onopen = () => {
+                streamFailureCountRef.current = 0;
+                setRealtimeAvailable(true);
+            };
 
             source.onmessage = (event) => {
                 try {
@@ -206,6 +223,14 @@ export function NotificationProvider({ children }) {
                     streamRef.current = null;
                 }
                 if (isClosed) return;
+                streamFailureCountRef.current += 1;
+
+                if (streamFailureCountRef.current >= 3) {
+                    setRealtimeAvailable(false);
+                    fetchNotifications();
+                    return;
+                }
+
                 retryTimeoutRef.current = window.setTimeout(connect, 3000);
             };
         };
@@ -221,7 +246,15 @@ export function NotificationProvider({ children }) {
             streamRef.current?.close();
             streamRef.current = null;
         };
-    }, [pushEnabled, token, user?.id]);
+    }, [pushEnabled, realtimeAvailable, token, user?.id]);
+
+    useEffect(() => {
+        if (!user?.id || realtimeAvailable) return undefined;
+
+        fetchNotifications();
+        const intervalId = window.setInterval(fetchNotifications, 60000);
+        return () => window.clearInterval(intervalId);
+    }, [realtimeAvailable, user?.id]);
 
     const markRead = async (id) => {
         await axios.post(`${API_BASE}/notifications/${id}/read`);

@@ -83,6 +83,87 @@ const runtimePermissionOverrides = {
     LOGISTICS_ASSISTANT: ['expense.read'],
 };
 
+const rolePermissionFallbacks = {
+    FINANCE_ADMIN_OFFICER: [
+        'user.view',
+        'indicator.read_all',
+        'activity.read',
+        'expense.read',
+        'expense.review_finance',
+        'settings.finance_threshold.read',
+        'approval.read',
+    ],
+    ADMIN_ASSISTANT: [
+        'user.view',
+        'user.create',
+        'user.update',
+        'user.assign_role',
+        'indicator.read_all',
+        'activity.read',
+        'approval.read',
+        'governance.pending_roles.read',
+    ],
+    LOGISTICS_ASSISTANT: [
+        'indicator.read_assigned',
+        'activity.read',
+        'expense.read',
+        'expense.create',
+    ],
+    PSYCHOSOCIAL_SUPPORT_OFFICER: [
+        'program.read',
+        'project.read',
+        'project.create',
+        'project.update',
+        'indicator.read_assigned',
+        'indicator.create',
+        'indicator.update',
+        'progress.create',
+        'activity.read',
+        'activity.create',
+        'expense.create',
+    ],
+    COMMUNITY_DEVELOPMENT_OFFICER: [
+        'program.read',
+        'project.read',
+        'project.create',
+        'project.update',
+        'indicator.read_assigned',
+        'indicator.create',
+        'indicator.update',
+        'progress.create',
+        'activity.read',
+        'activity.create',
+        'expense.create',
+    ],
+    ME_INTERN_ACTING_OFFICER: [
+        'program.read',
+        'project.read',
+        'indicator.read_all',
+        'indicator.update',
+        'activity.read',
+        'approval.read',
+    ],
+    SOCIAL_SERVICES_INTERN: [
+        'indicator.read_assigned',
+        'progress.create',
+        'activity.read',
+        'volunteer.submit',
+        'volunteer.read_own',
+    ],
+    YOUTH_COMMUNICATIONS_INTERN: [
+        'project.read',
+        'activity.read',
+        'volunteer.submit',
+        'volunteer.read_own',
+    ],
+    DEVELOPMENT_FACILITATOR: [
+        'project.read',
+        'activity.read',
+        'volunteer.submit',
+        'volunteer.read_own',
+    ],
+};
+
 export const toLegacyRole = (roleCode, systemRole) => {
     if (systemRole && systemRoleToLegacy[systemRole]) return systemRoleToLegacy[systemRole];
     return legacyRoleMap[roleCode] || 'intern';
@@ -188,6 +269,21 @@ export const getUserContext = async (userId) => {
     `;
 
     const permissions = new Set(permissionRows.map((row) => row.permission_code));
+    for (const permission of rolePermissionFallbacks[user.role_code] || []) {
+        permissions.add(permission);
+    }
+
+    // Production can lag behind RBAC seed data, especially for executive roles.
+    if (
+        permissions.size === 0 &&
+        (user.role_code === 'DIRECTOR' || user.role_code === 'SYSTEM_ADMIN')
+    ) {
+        const allPermissionRows = await sql`SELECT code FROM permissions`;
+        for (const row of allPermissionRows) {
+            permissions.add(row.code);
+        }
+    }
+
     for (const permission of runtimePermissionOverrides[user.role_code] || []) {
         permissions.add(permission);
     }
