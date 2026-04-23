@@ -60,11 +60,10 @@ export default function AppShell() {
 
     return (
         <div className={`erp-shell${sidebarOpen ? ' sidebar-open' : ''}`}>
-            {/* Animated Background Elements */}
+            {/* Subtle background texture */}
             <div className="erp-bg-effects">
                 <div className="glow-1"></div>
                 <div className="glow-2"></div>
-                <div className="glow-3"></div>
             </div>
 
             <button

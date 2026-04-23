@@ -169,7 +169,7 @@ export default function DocumentLibraryPage() {
                                         <tr key={document.id}>
                                             <td>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    <FileText size={14} style={{ color: '#7B2CBF' }} />
+                                        <FileText size={14} style={{ color: 'var(--brand-primary)' }} />
                                                     <div>
                                                         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                                             {document.title}

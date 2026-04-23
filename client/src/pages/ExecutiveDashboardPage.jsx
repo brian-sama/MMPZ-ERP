@@ -38,11 +38,11 @@ export default function ExecutiveDashboardPage() {
     if (error) return <div className="panel"><div className="auth-error">{error}</div></div>;
 
     const activityFeed = [
-        { icon: FolderKanban, color: '#7B2CBF', text: 'Program "Community Digital Literacy" was created', time: '2 hours ago' },
-        { icon: CheckCircle2, color: '#2BB673', text: 'Expense request #1042 was approved', time: '4 hours ago' },
-        { icon: Users, color: '#2BB673', text: 'T. Moyo was assigned to Harare District', time: '6 hours ago' },
-        { icon: FileText, color: '#9CA3AF', text: 'Quarterly report submitted', time: 'Yesterday' },
-        { icon: AlertCircle, color: '#F59E0B', text: 'Office supplies procurement is pending approval', time: 'Yesterday' },
+        { icon: FolderKanban, color: 'var(--brand-primary)', tint: 'rgba(47, 93, 80, 0.12)', text: 'Program "Community Digital Literacy" was created', time: '2 hours ago' },
+        { icon: CheckCircle2, color: 'var(--brand-success)', tint: 'rgba(63, 125, 74, 0.12)', text: 'Expense request #1042 was approved', time: '4 hours ago' },
+        { icon: Users, color: 'var(--brand-success)', tint: 'rgba(63, 125, 74, 0.12)', text: 'T. Moyo was assigned to Harare District', time: '6 hours ago' },
+        { icon: FileText, color: 'var(--text-muted)', tint: 'var(--bg-elevated)', text: 'Quarterly report submitted', time: 'Yesterday' },
+        { icon: AlertCircle, color: 'var(--brand-warning)', tint: 'rgba(183, 121, 31, 0.12)', text: 'Office supplies procurement is pending approval', time: 'Yesterday' },
     ];
 
     return (
@@ -85,7 +85,7 @@ export default function ExecutiveDashboardPage() {
                 {/* Active Programs — purple */}
                 <div className="kpi-card primary" style={{ animationDelay: '0.05s' }}>
                     <div className="kpi-top" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                        <div className="kpi-icon-wrap" style={{ background: 'rgba(123,44,191,0.15)', color: '#7B2CBF' }}>
+                        <div className="kpi-icon-wrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
                             <Layers size={20} />
                         </div>
                         <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--success)', background: 'rgba(43,182,115,0.1)', padding: '2px 8px', borderRadius: '12px' }}>
@@ -96,14 +96,14 @@ export default function ExecutiveDashboardPage() {
                     <div className="kpi-label">Active Programs</div>
                     <div className="kpi-sub">{data.active_projects} project{data.active_projects !== 1 ? 's' : ''} running</div>
                     <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', marginTop: '12px' }}>
-                        <div style={{ width: '70%', height: '100%', background: 'linear-gradient(90deg, #7B2CBF, #a855f7)', borderRadius: '2px' }}></div>
+                        <div style={{ width: '70%', height: '100%', background: 'linear-gradient(90deg, var(--brand-primary), var(--brand-accent))', borderRadius: '2px' }}></div>
                     </div>
                 </div>
 
                 {/* Development Facilitators — green */}
                 <div className="kpi-card success" style={{ animationDelay: '0.1s' }}>
                     <div className="kpi-top" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
-                        <div className="kpi-icon-wrap" style={{ background: 'rgba(43,182,115,0.15)', color: '#2BB673' }}>
+                        <div className="kpi-icon-wrap" style={{ background: 'var(--brand-success-light)', color: 'var(--brand-success)' }}>
                             <Users size={20} />
                         </div>
                     </div>
@@ -111,7 +111,7 @@ export default function ExecutiveDashboardPage() {
                     <div className="kpi-label">Development Facilitators</div>
                     <div className="kpi-sub">Active in the field</div>
                     <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', marginTop: '12px' }}>
-                        <div style={{ width: '85%', height: '100%', background: 'linear-gradient(90deg, #2BB673, #34d399)', borderRadius: '2px' }}></div>
+                        <div style={{ width: '85%', height: '100%', background: 'linear-gradient(90deg, var(--brand-success), #65a86f)', borderRadius: '2px' }}></div>
                     </div>
                 </div>
 
@@ -232,7 +232,7 @@ export default function ExecutiveDashboardPage() {
                                                     <div style={{
                                                         width: `${ind.progress_percentage}%`,
                                                         height: '100%',
-                                                        background: ind.progress_percentage > 75 ? '#2BB673' : ind.progress_percentage > 40 ? '#F59E0B' : '#EF4444',
+                                                        background: ind.progress_percentage > 75 ? 'var(--brand-success)' : ind.progress_percentage > 40 ? 'var(--brand-warning)' : 'var(--brand-danger)',
                                                         borderRadius: '3px',
                                                     }}></div>
                                                 </div>
@@ -257,7 +257,7 @@ export default function ExecutiveDashboardPage() {
                 <div className="panel-header">
                     <div>
                         <h2 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Activity size={16} style={{ color: '#7B2CBF' }} /> Recent Activity
+                            <Activity size={16} style={{ color: 'var(--brand-primary)' }} /> Recent Activity
                         </h2>
                         <p className="panel-subtitle">Latest actions across the system</p>
                     </div>
@@ -273,7 +273,7 @@ export default function ExecutiveDashboardPage() {
                             }}>
                                 <div style={{
                                     width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
-                                    background: `${evt.color}18`,
+                                    background: evt.tint,
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 }}>
                                     <Icon size={16} style={{ color: evt.color }} />

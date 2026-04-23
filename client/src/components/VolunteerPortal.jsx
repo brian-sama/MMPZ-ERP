@@ -1,39 +1,29 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import API_BASE from '../apiConfig';
 import {
-    Upload,
-    FileText,
-    BarChart,
-    Link,
-    CheckCircle,
     AlertCircle,
+    BarChart,
+    CheckCircle,
     Download,
-    Clock,
-    File
+    File,
+    FileText,
+    Link as LinkIcon,
+    Upload,
 } from 'lucide-react';
+import API_BASE from '../apiConfig';
 
-const VolunteerPortal = ({ user }) => {
+export default function VolunteerPortal({ user }) {
     const [activeTab, setActiveTab] = useState('uploads');
     const [msg, setMsg] = useState({ type: '', text: '' });
-
-    // Data Lists
     const [submissions, setSubmissions] = useState([]);
     const [indicators, setIndicators] = useState([]);
     const [koboForms, setKoboForms] = useState([]);
     const [myKoboRequests, setMyKoboRequests] = useState([]);
-
-    // Forms State
     const [uploadType, setUploadType] = useState('plan');
     const [file, setFile] = useState(null);
     const [description, setDescription] = useState('');
     const [isUploading, setIsUploading] = useState(false);
-
-    // Activity Report State
     const [reportForm, setReportForm] = useState({ indicatorId: '', male: 0, female: 0, notes: '' });
-
-    // Kobo Request State
     const [koboRequest, setKoboRequest] = useState({ formUid: '', formName: '', indicatorId: '' });
 
     useEffect(() => {
@@ -46,45 +36,52 @@ const VolunteerPortal = ({ user }) => {
     const fetchSubmissions = async () => {
         try {
             const res = await axios.get(`${API_BASE}/volunteer/submissions`, {
-                params: { role: user.role, userId: user.id }
+                params: { role: user.role, userId: user.id },
             });
-            setSubmissions(res.data);
-        } catch (err) { console.error(err); }
+            setSubmissions(res.data || []);
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const fetchIndicators = async () => {
         try {
             const res = await axios.get(`${API_BASE}/indicators`, {
-                params: { userId: user.id, role: user.role }
+                params: { userId: user.id, role: user.role },
             });
-            // Only active indicators
-            setIndicators(res.data.filter(i => i.status === 'active'));
-        } catch (err) { console.error(err); }
+            setIndicators((res.data || []).filter((item) => item.status === 'active'));
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const fetchKoboForms = async () => {
         try {
             const res = await axios.get(`${API_BASE}/kobo/forms`, {
-                params: { userId: user.id }
+                params: { userId: user.id },
             });
-            setKoboForms(res.data);
-        } catch (err) { console.error(err); }
+            setKoboForms(res.data || []);
+        } catch (err) {
+            console.error(err);
+        }
     };
 
     const fetchMyKoboRequests = async () => {
         try {
             const res = await axios.get(`${API_BASE}/volunteer/kobo-requests`, {
-                params: { userId: user.id }
+                params: { userId: user.id },
             });
-            setMyKoboRequests(res.data);
-        } catch (err) { console.error(err); }
+            setMyKoboRequests(res.data || []);
+        } catch (err) {
+            console.error(err);
+        }
     };
 
-    const handleFileChange = (e) => {
-        const selectedFile = e.target.files[0];
+    const handleFileChange = (event) => {
+        const selectedFile = event.target.files?.[0];
         if (selectedFile) {
             if (selectedFile.size > 4 * 1024 * 1024) {
-                setMsg({ type: 'error', text: 'File size must be less than 4MB' });
+                setMsg({ type: 'error', text: 'File size must be less than 4MB.' });
                 setFile(null);
                 return;
             }
@@ -92,16 +89,20 @@ const VolunteerPortal = ({ user }) => {
         }
     };
 
-    const convertToBase64 = (file) => new Promise((resolve, reject) => {
+    const convertToBase64 = (value) => new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(value);
         reader.onload = () => resolve(reader.result);
-        reader.onerror = error => reject(error);
+        reader.onerror = (error) => reject(error);
     });
 
-    const handleUploadSubmit = async (e) => {
-        e.preventDefault();
-        if (!file) { setMsg({ type: 'error', text: 'Please select a file' }); return; }
+    const handleUploadSubmit = async (event) => {
+        event.preventDefault();
+        if (!file) {
+            setMsg({ type: 'error', text: 'Select a document before submitting.' });
+            return;
+        }
+
         setIsUploading(true);
         try {
             const base64File = await convertToBase64(file);
@@ -111,32 +112,36 @@ const VolunteerPortal = ({ user }) => {
                 fileData: base64File,
                 fileName: file.name,
                 mimeType: file.type,
-                description: description
+                description,
             });
-            setMsg({ type: 'success', text: 'Upload successful!' });
-            setFile(null); setDescription(''); fetchSubmissions();
+            setMsg({ type: 'success', text: 'Document uploaded successfully.' });
+            setFile(null);
+            setDescription('');
+            fetchSubmissions();
         } catch (err) {
-            setMsg({ type: 'error', text: 'Upload failed' });
-        } finally { setIsUploading(false); }
-    };
-
-    const handleReportSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            await axios.post(`${API_BASE}/volunteer/activity-report`, {
-                userId: user.id, ...reportForm
-            });
-            setMsg({ type: 'success', text: 'Activity report submitted!' });
-            setReportForm({ indicatorId: '', male: 0, female: 0, notes: '' });
-        } catch (err) {
-            setMsg({ type: 'error', text: 'Failed to submit report' });
+            setMsg({ type: 'error', text: 'Upload failed. Please try again.' });
+        } finally {
+            setIsUploading(false);
         }
     };
 
-    const handleKoboRequest = async (e) => {
-        e.preventDefault();
-        // Find form name
-        const form = koboForms.find(f => f.uid === koboRequest.formUid);
+    const handleReportSubmit = async (event) => {
+        event.preventDefault();
+        try {
+            await axios.post(`${API_BASE}/volunteer/activity-report`, {
+                userId: user.id,
+                ...reportForm,
+            });
+            setMsg({ type: 'success', text: 'Activity report submitted.' });
+            setReportForm({ indicatorId: '', male: 0, female: 0, notes: '' });
+        } catch (err) {
+            setMsg({ type: 'error', text: 'Failed to submit activity report.' });
+        }
+    };
+
+    const handleKoboRequest = async (event) => {
+        event.preventDefault();
+        const form = koboForms.find((item) => item.uid === koboRequest.formUid);
         if (!form) return;
 
         try {
@@ -144,13 +149,13 @@ const VolunteerPortal = ({ user }) => {
                 userId: user.id,
                 formUid: koboRequest.formUid,
                 formName: form.name,
-                indicatorId: koboRequest.indicatorId
+                indicatorId: koboRequest.indicatorId,
             });
-            setMsg({ type: 'success', text: 'Connection requested! Waiting for approval.' });
+            setMsg({ type: 'success', text: 'Kobo connection request sent for review.' });
             setKoboRequest({ formUid: '', formName: '', indicatorId: '' });
             fetchMyKoboRequests();
         } catch (err) {
-            setMsg({ type: 'error', text: 'Request failed. Maybe already exists?' });
+            setMsg({ type: 'error', text: 'Request failed. It may already exist.' });
         }
     };
 
@@ -178,175 +183,273 @@ const VolunteerPortal = ({ user }) => {
     };
 
     return (
-        <div className="space-y-8 animate-slideIn">
-            <header className="flex items-center justify-between">
+        <div className="content-stack fade-in">
+            <div className="toolbar-row">
                 <div>
-                    <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">Volunteer Portal</h1>
-                    <p className="text-slate-500 mt-1">Welcome back, {user.name}.</p>
+                    <h1 className="page-title">Volunteer Portal</h1>
+                    <p className="page-subtitle">Submit field documents, report activity data, and request Kobo links.</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="segmented-control">
                     <button
+                        className={`segmented-button ${activeTab === 'uploads' ? 'active' : ''}`}
                         onClick={() => setActiveTab('uploads')}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'uploads' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white text-slate-500 border border-slate-200'}`}
                     >
-                        <div className="flex items-center gap-2"><FileText size={16} /> Documents</div>
+                        Documents
                     </button>
                     <button
+                        className={`segmented-button ${activeTab === 'reporting' ? 'active' : ''}`}
                         onClick={() => setActiveTab('reporting')}
-                        className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'reporting' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white text-slate-500 border border-slate-200'}`}
                     >
-                        <div className="flex items-center gap-2"><BarChart size={16} /> Activity & Kobo</div>
+                        Activity & Kobo
                     </button>
                 </div>
-            </header>
+            </div>
 
             {msg.text && (
-                <div className={`p-4 rounded-xl flex items-center gap-3 ${msg.type === 'error' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                    {msg.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
-                    <span className="font-medium">{msg.text}</span>
+                <div className={`page-alert ${msg.type === 'error' ? 'error' : 'success'}`}>
+                    {msg.type === 'error' ? <AlertCircle size={18} /> : <CheckCircle size={18} />}
+                    <p>{msg.text}</p>
                 </div>
             )}
 
             {activeTab === 'uploads' && (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Document Upload Form */}
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700 h-fit">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-2xl text-blue-600"><Upload size={24} /></div>
+                <div className="panels-row">
+                    <div className="panel">
+                        <div className="panel-header">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Upload Document</h3>
-                                <p className="text-sm text-slate-500">Reports, Plans, etc.</p>
+                                <h2 className="panel-title">Upload Document</h2>
+                                <p className="panel-subtitle">Share plans, reports, and other supporting files.</p>
+                            </div>
+                            <div className="metric-icon primary">
+                                <Upload size={18} />
                             </div>
                         </div>
-                        <form onSubmit={handleUploadSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Type</label>
-                                <select className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={uploadType} onChange={(e) => setUploadType(e.target.value)}>
+
+                        <form onSubmit={handleUploadSubmit} className="content-stack">
+                            <div className="form-group">
+                                <label className="form-label">Document Type</label>
+                                <select className="form-select" value={uploadType} onChange={(event) => setUploadType(event.target.value)}>
                                     <option value="plan">Activity Plan</option>
                                     <option value="report">Activity Report</option>
                                     <option value="concept_note">Concept Note</option>
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Description</label>
-                                <input type="text" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={description} onChange={e => setDescription(e.target.value)} />
+                            <div className="form-group">
+                                <label className="form-label">Description</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    value={description}
+                                    onChange={(event) => setDescription(event.target.value)}
+                                    placeholder="Add context for reviewers or admin staff"
+                                />
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">File</label>
-                                <input type="file" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" accept=".pdf,.doc,.docx" onChange={handleFileChange} />
+                            <div className="form-group">
+                                <label className="form-label">File</label>
+                                <input
+                                    type="file"
+                                    className="form-input"
+                                    accept=".pdf,.doc,.docx"
+                                    onChange={handleFileChange}
+                                />
+                                <p className="form-hint">Accepted formats: PDF, DOC, DOCX. Maximum size: 4MB.</p>
                             </div>
-                            <button type="submit" disabled={isUploading} className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl shadow-lg transition-all">
-                                {isUploading ? 'Uploading...' : 'Submit'}
+                            <button type="submit" disabled={isUploading} className="btn btn-primary">
+                                {isUploading ? 'Uploading...' : 'Submit Document'}
                             </button>
                         </form>
                     </div>
-                    {/* List */}
-                    <div className="lg:col-span-2 space-y-4">
-                        <h3 className="text-xl font-bold dark:text-white">My Uploads</h3>
-                        {submissions.map(sub => (
-                            <div key={sub.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                                <div className="flex gap-4 items-center">
-                                    <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl"><File size={20} /></div>
-                                    <div>
-                                        <div className="font-bold">{sub.type}</div>
-                                        <div className="text-sm text-slate-500">{sub.file_name} | {new Date(sub.created_at).toLocaleDateString()}</div>
-                                    </div>
-                                </div>
-                                <button onClick={() => handleDownload(sub.id)} className="text-slate-400 hover:text-blue-600"><Download size={20} /></button>
+
+                    <div className="panel">
+                        <div className="panel-header">
+                            <div>
+                                <h2 className="panel-title">My Uploads</h2>
+                                <p className="panel-subtitle">Recent files you have already submitted.</p>
                             </div>
-                        ))}
+                            <div className="metric-icon info">
+                                <FileText size={18} />
+                            </div>
+                        </div>
+
+                        {submissions.length === 0 ? (
+                            <div className="empty-state" style={{ padding: '28px 16px' }}>
+                                <div className="empty-state-title">No uploads yet</div>
+                                <p className="empty-state-text">Submitted files will appear here with their upload date.</p>
+                            </div>
+                        ) : (
+                            <div className="stack-list">
+                                {submissions.map((submission) => (
+                                    <div key={submission.id} className="status-card">
+                                        <div className="status-card-header">
+                                            <div>
+                                                <div className="status-card-title">{submission.type.replace(/_/g, ' ')}</div>
+                                                <div className="status-card-copy">
+                                                    {submission.file_name} · {new Date(submission.created_at).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                            <span className="badge badge-primary">
+                                                <File size={12} />
+                                                Filed
+                                            </span>
+                                        </div>
+                                        <div className="status-card-actions">
+                                            <button className="btn btn-secondary btn-sm" onClick={() => handleDownload(submission.id)}>
+                                                <Download size={14} />
+                                                Download
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
 
             {activeTab === 'reporting' && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Activity Report Numbers */}
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl text-emerald-600"><BarChart size={24} /></div>
+                <div className="panels-row">
+                    <div className="panel">
+                        <div className="panel-header">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Activity Numbers</h3>
-                                <p className="text-sm text-slate-500">Report beneficiaries by gender</p>
+                                <h2 className="panel-title">Activity Numbers</h2>
+                                <p className="panel-subtitle">Report beneficiary totals against an approved indicator.</p>
+                            </div>
+                            <div className="metric-icon success">
+                                <BarChart size={18} />
                             </div>
                         </div>
-                        <form onSubmit={handleReportSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Project Indicator</label>
-                                <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={reportForm.indicatorId} onChange={e => setReportForm({ ...reportForm, indicatorId: e.target.value })}>
-                                    <option value="">-- Select Indicator --</option>
-                                    {indicators.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
+
+                        <form onSubmit={handleReportSubmit} className="content-stack">
+                            <div className="form-group">
+                                <label className="form-label">Project Indicator</label>
+                                <select
+                                    required
+                                    className="form-select"
+                                    value={reportForm.indicatorId}
+                                    onChange={(event) => setReportForm({ ...reportForm, indicatorId: event.target.value })}
+                                >
+                                    <option value="">Select indicator</option>
+                                    {indicators.map((indicator) => (
+                                        <option key={indicator.id} value={indicator.id}>
+                                            {indicator.title}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Male Count</label>
-                                    <input type="number" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={reportForm.male} onChange={e => setReportForm({ ...reportForm, male: e.target.value })} />
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label className="form-label">Male Count</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="form-input"
+                                        value={reportForm.male}
+                                        onChange={(event) => setReportForm({ ...reportForm, male: event.target.value })}
+                                    />
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-1">Female Count</label>
-                                    <input type="number" min="0" className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={reportForm.female} onChange={e => setReportForm({ ...reportForm, female: e.target.value })} />
+                                <div className="form-group">
+                                    <label className="form-label">Female Count</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        className="form-input"
+                                        value={reportForm.female}
+                                        onChange={(event) => setReportForm({ ...reportForm, female: event.target.value })}
+                                    />
                                 </div>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Notes</label>
-                                <textarea className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" rows="3" value={reportForm.notes} onChange={e => setReportForm({ ...reportForm, notes: e.target.value })}></textarea>
+                            <div className="form-group">
+                                <label className="form-label">Notes</label>
+                                <textarea
+                                    className="form-textarea"
+                                    rows="4"
+                                    value={reportForm.notes}
+                                    onChange={(event) => setReportForm({ ...reportForm, notes: event.target.value })}
+                                />
                             </div>
-                            <button type="submit" className="w-full py-3 bg-emerald-600 text-white font-bold rounded-xl shadow-lg transition-all">Submit Report</button>
+                            <button type="submit" className="btn btn-primary">Submit Activity Report</button>
                         </form>
                     </div>
 
-                    {/* Kobo Link Request */}
-                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border border-slate-200 dark:border-slate-700">
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-2xl text-orange-600"><Link size={24} /></div>
+                    <div className="panel">
+                        <div className="panel-header">
                             <div>
-                                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Request Kobo Sync</h3>
-                                <p className="text-sm text-slate-500">Link a Kobo Form to an Indicator</p>
+                                <h2 className="panel-title">Request Kobo Sync</h2>
+                                <p className="panel-subtitle">Ask for a Kobo form to be linked to an indicator.</p>
+                            </div>
+                            <div className="metric-icon warning">
+                                <LinkIcon size={18} />
                             </div>
                         </div>
-                        <form onSubmit={handleKoboRequest} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Kobo Form</label>
-                                <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={koboRequest.formUid} onChange={e => setKoboRequest({ ...koboRequest, formUid: e.target.value })}>
-                                    <option value="">-- Select Form --</option>
-                                    {koboForms.map(f => <option key={f.uid} value={f.uid}>{f.name}</option>)}
+
+                        <form onSubmit={handleKoboRequest} className="content-stack">
+                            <div className="form-group">
+                                <label className="form-label">Kobo Form</label>
+                                <select
+                                    required
+                                    className="form-select"
+                                    value={koboRequest.formUid}
+                                    onChange={(event) => setKoboRequest({ ...koboRequest, formUid: event.target.value })}
+                                >
+                                    <option value="">Select form</option>
+                                    {koboForms.map((form) => (
+                                        <option key={form.uid} value={form.uid}>{form.name}</option>
+                                    ))}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Target Indicator</label>
-                                <select required className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl" value={koboRequest.indicatorId} onChange={e => setKoboRequest({ ...koboRequest, indicatorId: e.target.value })}>
-                                    <option value="">-- Select Indicator --</option>
-                                    {indicators.map(i => <option key={i.id} value={i.id}>{i.title}</option>)}
+                            <div className="form-group">
+                                <label className="form-label">Target Indicator</label>
+                                <select
+                                    required
+                                    className="form-select"
+                                    value={koboRequest.indicatorId}
+                                    onChange={(event) => setKoboRequest({ ...koboRequest, indicatorId: event.target.value })}
+                                >
+                                    <option value="">Select indicator</option>
+                                    {indicators.map((indicator) => (
+                                        <option key={indicator.id} value={indicator.id}>{indicator.title}</option>
+                                    ))}
                                 </select>
                             </div>
-                            <button type="submit" className="w-full py-3 bg-orange-600 text-white font-bold rounded-xl shadow-lg transition-all">Request Connection</button>
+                            <button type="submit" className="btn btn-primary">Request Connection</button>
                         </form>
 
-                        {/* Recent Requests List */}
-                        <div className="mt-8">
-                            <h4 className="font-bold text-slate-900 dark:text-white mb-4 text-sm uppercase tracking-wide">My Requests</h4>
-                            <div className="space-y-3">
-                                {myKoboRequests.length === 0 && <p className="text-sm text-slate-400">No pending requests.</p>}
-                                {myKoboRequests.map(req => (
-                                    <div key={req.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 text-sm">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <span className="font-bold text-slate-800 dark:text-zinc-200 truncate pr-2">{req.kobo_form_name}</span>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold capitalize ${req.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                                req.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                                    'bg-amber-100 text-amber-700'
-                                                }`}>{req.status}</span>
-                                        </div>
-                                        <div className="text-slate-500">Linked to: {req.indicator_title}</div>
-                                    </div>
-                                ))}
+                        <div className="divider" />
+
+                        <div className="content-stack">
+                            <div>
+                                <h3 className="panel-title">My Requests</h3>
+                                <p className="panel-subtitle">Track the status of submitted Kobo link requests.</p>
                             </div>
+                            {myKoboRequests.length === 0 ? (
+                                <p className="form-hint">No requests submitted yet.</p>
+                            ) : (
+                                <div className="stack-list">
+                                    {myKoboRequests.map((request) => (
+                                        <div key={request.id} className="status-card">
+                                            <div className="status-card-header">
+                                                <div>
+                                                    <div className="status-card-title">{request.kobo_form_name}</div>
+                                                    <div className="status-card-copy">Linked to: {request.indicator_title}</div>
+                                                </div>
+                                                <span className={`badge ${
+                                                    request.status === 'approved'
+                                                        ? 'badge-success'
+                                                        : request.status === 'rejected'
+                                                            ? 'badge-danger'
+                                                            : 'badge-warning'
+                                                }`}>
+                                                    {request.status}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
             )}
         </div>
     );
-};
-
-export default VolunteerPortal;
+}

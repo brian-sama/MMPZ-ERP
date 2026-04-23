@@ -1,24 +1,22 @@
 import React from 'react';
 
-const Pagination = ({ currentPage, totalPages, onPageChange }) => {
+export default function Pagination({ currentPage, totalPages, onPageChange }) {
     if (totalPages <= 1) return null;
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', alignItems: 'center' }}>
+        <div className="toolbar-row" style={{ justifyContent: 'center', marginTop: '16px' }}>
             <button
-                className="btn btn-secondary"
-                style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
+                className="btn btn-secondary btn-sm"
                 onClick={() => onPageChange(currentPage - 1)}
                 disabled={currentPage === 1}
             >
                 Previous
             </button>
-            <span style={{ fontSize: '0.875rem', color: 'var(--muted)', fontWeight: 500 }}>
+            <span className="form-hint" style={{ marginTop: 0 }}>
                 Page {currentPage} of {totalPages}
             </span>
             <button
-                className="btn btn-secondary"
-                style={{ padding: '0.25rem 0.75rem', fontSize: '0.875rem' }}
+                className="btn btn-secondary btn-sm"
                 onClick={() => onPageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
             >
@@ -26,6 +24,4 @@ const Pagination = ({ currentPage, totalPages, onPageChange }) => {
             </button>
         </div>
     );
-};
-
-export default Pagination;
+}

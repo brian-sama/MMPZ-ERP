@@ -4,7 +4,6 @@ import { AuthProvider } from './context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { ThemeProvider } from './context/ThemeContext';
 import AppRouter from './router';
-import './index.css';
 import './erp-shell.css';
 
 /**
