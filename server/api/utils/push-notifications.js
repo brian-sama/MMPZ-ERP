@@ -9,6 +9,18 @@ const PUSH_CONTACT = process.env.PUSH_CONTACT_EMAIL || 'mailto:admin@mmpz.local'
 
 let vapidConfig = null;
 
+const hasPushSubscriptionsTable = async (dbClient = sql) => {
+    const rows = await dbClient`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'push_subscriptions'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 const ensurePushStorageDir = () => {
     if (!fs.existsSync(PUSH_STORAGE_DIR)) {
         fs.mkdirSync(PUSH_STORAGE_DIR, { recursive: true });
@@ -66,6 +78,15 @@ export const upsertPushSubscription = async (
     userAgent,
     dbClient = sql
 ) => {
+    if (!(await hasPushSubscriptionsTable(dbClient))) {
+        return {
+            id: null,
+            user_id: userId,
+            endpoint: subscription?.endpoint || null,
+            skipped: true,
+        };
+    }
+
     const payload = buildSubscriptionRowPayload(subscription);
     if (!payload.endpoint || !payload.p256dhKey || !payload.authKey) {
         throw new Error('Invalid push subscription payload');
@@ -107,6 +128,7 @@ export const upsertPushSubscription = async (
 
 export const deletePushSubscription = async (userId, endpoint, dbClient = sql) => {
     if (!endpoint) return;
+    if (!(await hasPushSubscriptionsTable(dbClient))) return;
     await dbClient`
         DELETE FROM push_subscriptions
         WHERE endpoint = ${endpoint}
@@ -147,6 +169,7 @@ export const sendPushNotificationsToUsers = async (
 ) => {
     const dedupedUserIds = [...new Set((userIds || []).map((value) => Number(value)).filter(Boolean))];
     if (dedupedUserIds.length === 0) return [];
+    if (!(await hasPushSubscriptionsTable(dbClient))) return [];
 
     const config = ensureVapidConfig();
     if (!config.supported) return [];

@@ -9,6 +9,18 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 
+const hasProgramsTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'programs'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -22,6 +34,9 @@ export const handler = async (event) => {
             ensureAnyPermission(actor, ['program.read', 'indicator.read_all', 'indicator.read_assigned'], {
                 allowPending: true,
             });
+            if (!(await hasProgramsTable())) {
+                return successResponse([]);
+            }
             const rows = await sql`
                 SELECT p.*
                 FROM programs p

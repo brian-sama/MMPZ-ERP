@@ -341,6 +341,7 @@ export const getUserContext = async (userId) => {
 
 export const hasPermission = (userContext, permissionCode) => {
     if (!userContext || !permissionCode) return false;
+    if (userContext.system_role === SYSTEM_ROLES.SUPER_ADMIN) return true;
     return userContext.permissions.has(permissionCode);
 };
 

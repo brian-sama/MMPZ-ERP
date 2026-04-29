@@ -42,6 +42,16 @@ const loadThresholdValue = async () => {
 };
 
 const loadPendingCount = async () => {
+    const tableCheck = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'approvals'
+        ) AS exists
+    `;
+    if (!tableCheck[0]?.exists) return 0;
+
     const rows = await sql`
         SELECT COUNT(*)::int AS total
         FROM approvals

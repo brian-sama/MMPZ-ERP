@@ -12,6 +12,18 @@ import {
     isFacilitatorUser,
 } from './utils/facilitators.js';
 
+const hasDevelopmentFacilitatorsTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'development_facilitators'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -23,11 +35,14 @@ export const handler = async (event) => {
         const actor = await getUserContext(getRequestUserId(event, body) || query.userId);
 
         if (method === 'GET') {
-            await backfillFacilitatorProfiles(sql);
+            const facilitatorTableExists = await hasDevelopmentFacilitatorsTable();
+            if (facilitatorTableExists) {
+                await backfillFacilitatorProfiles(sql);
+            }
             // anyone with read permission
             let rows;
             if (id) {
-                rows = await sql`
+                rows = facilitatorTableExists ? await sql`
                     SELECT
                         u.id AS user_id,
                         u.name,
@@ -48,9 +63,29 @@ export const handler = async (event) => {
                           u.role_code = 'DEVELOPMENT_FACILITATOR'
                           OR u.system_role = 'FACILITATOR'
                       )
+                ` : await sql`
+                    SELECT
+                        u.id AS user_id,
+                        u.name,
+                        u.email,
+                        u.job_title,
+                        u.profile_picture_url,
+                        NULL::text AS gender,
+                        NULL::text AS age_bracket,
+                        NULL::text AS phone,
+                        NULL::text AS address,
+                        'active'::text AS status,
+                        u.created_at::date AS joined_at,
+                        u.created_at
+                    FROM users u
+                    WHERE u.id = ${id}
+                      AND (
+                          u.role_code = 'DEVELOPMENT_FACILITATOR'
+                          OR u.system_role = 'FACILITATOR'
+                      )
                 `;
             } else {
-                rows = await sql`
+                rows = facilitatorTableExists ? await sql`
                     SELECT
                         u.id AS user_id,
                         u.name,
@@ -72,6 +107,25 @@ export const handler = async (event) => {
                         ) AS active_assignments
                     FROM users u
                     LEFT JOIN development_facilitators df ON df.user_id = u.id
+                    WHERE u.role_code = 'DEVELOPMENT_FACILITATOR'
+                       OR u.system_role = 'FACILITATOR'
+                    ORDER BY u.name ASC
+                ` : await sql`
+                    SELECT
+                        u.id AS user_id,
+                        u.name,
+                        u.email,
+                        u.job_title,
+                        u.profile_picture_url,
+                        NULL::text AS gender,
+                        NULL::text AS age_bracket,
+                        NULL::text AS phone,
+                        NULL::text AS address,
+                        'active'::text AS status,
+                        u.created_at::date AS joined_at,
+                        u.created_at,
+                        0::int AS active_assignments
+                    FROM users u
                     WHERE u.role_code = 'DEVELOPMENT_FACILITATOR'
                        OR u.system_role = 'FACILITATOR'
                     ORDER BY u.name ASC

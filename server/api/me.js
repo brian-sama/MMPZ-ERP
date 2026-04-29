@@ -7,6 +7,18 @@ import {
     ensurePermission,
 } from './utils/rbac.js';
 
+const hasTable = async (tableName) => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = ${tableName}
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -21,6 +33,9 @@ export const handler = async (event) => {
 
             // 1. If dashboard summary requested
             if (event.path.includes('/summary')) {
+                if (!(await hasTable('indicator_progress')) || !(await hasTable('indicator_targets'))) {
+                    return successResponse([]);
+                }
                 const performance = await sql`
                     SELECT 
                         reporting_period,
@@ -37,6 +52,9 @@ export const handler = async (event) => {
 
             // 2. detailed progress for an indicator
             if (indicator_id) {
+                if (!(await hasTable('indicator_targets')) || !(await hasTable('indicator_progress'))) {
+                    return successResponse({ targets: [], progress: [] });
+                }
                 const targets = await sql`
                     SELECT * FROM indicator_targets 
                     WHERE indicator_id = ${indicator_id} 

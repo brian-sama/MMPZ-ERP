@@ -18,6 +18,18 @@ import {
 } from './utils/rbac.js';
 import postgres from 'postgres';
 
+const hasTable = async (tableName) => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = ${tableName}
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 const getIndicatorColumns = async () => {
     const rows = await sql`
         SELECT column_name
@@ -67,6 +79,7 @@ const canAccessIndicator = async (actor, indicator) => {
     if (!actor.is_pending_reassignment && hasPermission(actor, 'indicator.read_all')) return true;
     if (indicator.created_by_user_id === actor.id) return true;
     if (!indicator.project_id) return false;
+    if (!(await hasTable('project_assignments'))) return false;
 
     const assignments = await sql`
         SELECT id
@@ -95,6 +108,9 @@ export const handler = async (event) => {
             ensureAnyPermission(actor, ['indicator.read_all', 'indicator.read_assigned', 'project.read'], {
                 allowPending: true,
             });
+            if (!(await hasTable('indicators'))) {
+                return successResponse([]);
+            }
             const indicatorColumns = await getIndicatorColumns();
             const selectList = buildIndicatorSelect(indicatorColumns);
 

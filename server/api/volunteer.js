@@ -57,6 +57,18 @@ const getVolunteerSubmissionColumns = async () => {
     return new Set(rows.map((row) => row.column_name));
 };
 
+const hasVolunteerSubmissionsTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'volunteer_submissions'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 const hasVolunteerRecipientTable = async () => {
     const rows = await sql`
         SELECT EXISTS (
@@ -148,6 +160,12 @@ export const handler = async (event) => {
 
         if (path.startsWith('submit') && method === 'POST') {
             ensurePermission(actor, 'volunteer.submit');
+            if (!(await hasVolunteerSubmissionsTable())) {
+                return errorResponse(
+                    'Submission storage is not available until the latest database migrations are applied.',
+                    503
+                );
+            }
 
             const {
                 type,
@@ -341,6 +359,9 @@ export const handler = async (event) => {
         }
 
         if (path.startsWith('submissions') && method === 'GET') {
+            if (!(await hasVolunteerSubmissionsTable())) {
+                return successResponse([]);
+            }
             const submissionId = path.split('/')[1] || null;
             let result;
             const submissionColumns = await getVolunteerSubmissionColumns();
@@ -408,6 +429,9 @@ export const handler = async (event) => {
         }
 
         if (path.startsWith('download/') && method === 'GET') {
+            if (!(await hasVolunteerSubmissionsTable())) {
+                return errorResponse('File storage is not available yet', 503);
+            }
             const id = path.split('/')[1];
             if (!id) return errorResponse('File ID is required', 400);
 
