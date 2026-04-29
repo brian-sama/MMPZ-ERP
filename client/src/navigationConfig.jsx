@@ -26,8 +26,6 @@ export const NAV_SECTIONS = [
         icon: LayoutDashboard,
         allowedRoles: [
           'DIRECTOR',
-          'FINANCE_ADMIN_OFFICER',
-          'ADMIN_ASSISTANT',
           'COMMUNITY_DEVELOPMENT_OFFICER',
           'PSYCHOSOCIAL_SUPPORT_OFFICER',
           'ME_INTERN_ACTING_OFFICER',
@@ -37,7 +35,7 @@ export const NAV_SECTIONS = [
         to: '/analytics',
         label: 'Analytics',
         icon: LineChart,
-        allowedRoles: ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'ME_INTERN_ACTING_OFFICER'],
+        allowedRoles: ['DIRECTOR', 'ME_INTERN_ACTING_OFFICER'],
       },
     ],
   },
@@ -50,8 +48,6 @@ export const NAV_SECTIONS = [
         icon: FolderKanban,
         allowedRoles: [
           'DIRECTOR',
-          'FINANCE_ADMIN_OFFICER',
-          'LOGISTICS_ASSISTANT',
           'COMMUNITY_DEVELOPMENT_OFFICER',
           'PSYCHOSOCIAL_SUPPORT_OFFICER',
           'ME_INTERN_ACTING_OFFICER',
@@ -75,7 +71,6 @@ export const NAV_SECTIONS = [
         icon: BarChart3,
         allowedRoles: [
           'DIRECTOR',
-          'FINANCE_ADMIN_OFFICER',
           'COMMUNITY_DEVELOPMENT_OFFICER',
           'PSYCHOSOCIAL_SUPPORT_OFFICER',
           'ME_INTERN_ACTING_OFFICER',

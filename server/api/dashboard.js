@@ -4,17 +4,15 @@ import {
     HttpError,
     getRequestUserId,
     getUserContext,
-    ensureAnyPermission,
+    SYSTEM_ROLES,
 } from './utils/rbac.js';
 
 export const handler = async (event) => {
     try {
         const actor = await getUserContext(getRequestUserId(event));
-        ensureAnyPermission(
-            actor,
-            ['approval.read', 'expense.read', 'program.read', 'indicator.read_all', 'indicator.read_assigned'],
-            { allowPending: true }
-        );
+        if (actor.role_code !== 'DIRECTOR' && actor.system_role !== SYSTEM_ROLES.SUPER_ADMIN) {
+            throw new HttpError('Permission denied', 403);
+        }
 
         // ... rest of logic remains correct as it uses the SQL template tags ...
         // (Just ensure the rest of the file uses the correct responses)

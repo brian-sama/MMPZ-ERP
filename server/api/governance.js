@@ -63,7 +63,10 @@ export const handler = async (event) => {
                         u.name AS requester_name,
                         pr.title AS procurement_title,
                         pr.total_estimated_cost,
-                        pr.status AS procurement_status
+                        pr.status AS procurement_status,
+                        pr.bid_analysis_summary,
+                        pr.bid_analysis_recommendation,
+                        pr.bid_analysis_status
                     FROM approvals a
                     JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
@@ -89,10 +92,14 @@ export const handler = async (event) => {
                             pr.*,
                             p.name AS project_name,
                             bl.code AS budget_line_code,
-                            bl.description AS budget_line_name
+                            bl.description AS budget_line_name,
+                            reviewer.name AS bid_analysis_reviewer_name,
+                            approver.name AS bid_analysis_approver_name
                         FROM procurement_requests pr
                         LEFT JOIN projects p ON pr.project_id = p.id
                         LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
+                        LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
+                        LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
                         WHERE pr.id::text = ${approval[0].entity_id}
                         LIMIT 1
                     `;
@@ -125,7 +132,8 @@ export const handler = async (event) => {
                         u.name AS requester_name,
                         pr.title AS procurement_title,
                         pr.total_estimated_cost,
-                        pr.status AS procurement_status
+                        pr.status AS procurement_status,
+                        pr.bid_analysis_status
                     FROM approvals a
                     INNER JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
@@ -202,9 +210,52 @@ export const handler = async (event) => {
                 `;
 
                 if (approval.entity_type === 'procurement') {
+                    const thresholdValue = await loadThresholdValue();
+                    const procurementRows = await tx`
+                        SELECT *
+                        FROM procurement_requests
+                        WHERE id::text = ${approval.entity_id}
+                        LIMIT 1
+                    `;
+
+                    if (procurementRows.length === 0) {
+                        throw new HttpError('Linked procurement request not found', 404);
+                    }
+
+                    const procurement = procurementRows[0];
+                    const policy = buildProcurementPolicy(procurement.total_estimated_cost, thresholdValue);
+                    const needsBidAnalysis =
+                        policy.approval_band === 'finance_review' || policy.approval_band === 'director_review';
+
+                    if (
+                        action === 'approve' &&
+                        needsBidAnalysis &&
+                        !['recommended', 'approved', 'waived'].includes(
+                            String(procurement.bid_analysis_status || 'pending')
+                        )
+                    ) {
+                        throw new HttpError(
+                            'Bid analysis must be completed before approving this procurement request',
+                            400
+                        );
+                    }
+
                     await tx`
                         UPDATE procurement_requests
-                        SET status = ${finalStatus}
+                        SET
+                            status = ${finalStatus},
+                            bid_analysis_status = CASE
+                                WHEN ${action === 'approve'} AND bid_analysis_status = 'recommended' THEN 'approved'
+                                ELSE bid_analysis_status
+                            END,
+                            bid_analysis_approved_by_user_id = CASE
+                                WHEN ${action === 'approve'} THEN ${actor.id}
+                                ELSE bid_analysis_approved_by_user_id
+                            END,
+                            bid_analysis_approved_at = CASE
+                                WHEN ${action === 'approve'} THEN CURRENT_TIMESTAMP
+                                ELSE bid_analysis_approved_at
+                            END
                         WHERE id::text = ${approval.entity_id}
                     `;
                 }

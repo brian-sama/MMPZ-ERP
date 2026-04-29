@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useSearchParams } from 'react-router-dom';
 import {
     ArrowUpRight,
+    ClipboardCheck,
     ClipboardList,
     Clock3,
     DollarSign,
@@ -14,6 +15,7 @@ import {
     Scale,
     ShieldCheck,
     ShoppingBag,
+    Printer,
     Trash2,
     Wallet,
     X,
@@ -37,6 +39,14 @@ const formatDate = (value) =>
               day: 'numeric',
           })
         : 'Not set';
+
+const escapeHtml = (value) =>
+    String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 
 const buildPolicyProfile = (amount, thresholdValue) => {
     const total = Number(amount || 0);
@@ -91,6 +101,7 @@ export default function FinanceAdminPage() {
     const [showRequisitionModal, setShowRequisitionModal] = useState(false);
     const [selectedProcurement, setSelectedProcurement] = useState(null);
     const [submitting, setSubmitting] = useState(false);
+    const [analysisSaving, setAnalysisSaving] = useState(false);
     const [form, setForm] = useState({
         title: '',
         justification: '',
@@ -162,6 +173,15 @@ export default function FinanceAdminPage() {
     const openRequests = procurement.filter((item) =>
         ['pending_approval', 'approved', 'ordered'].includes(item.status)
     );
+    const approvedPlans = procurement.filter((item) =>
+        ['approved', 'ordered', 'received'].includes(item.status)
+    );
+    const canReviewBidAnalysis =
+        user?.system_role === 'SUPER_ADMIN' ||
+        user?.role_code === 'DIRECTOR' ||
+        user?.role_code === 'FINANCE_ADMIN_OFFICER';
+    const canApproveBidAnalysis =
+        user?.system_role === 'SUPER_ADMIN' || user?.role_code === 'DIRECTOR';
 
     const resetForm = () => {
         setForm({
@@ -210,6 +230,134 @@ export default function FinanceAdminPage() {
             setMessage({
                 type: 'error',
                 text: err.response?.data?.error || 'Unable to load requisition details.',
+            });
+        }
+    };
+
+    const updateSelectedProcurementField = (field, value) => {
+        setSelectedProcurement((current) => (current ? { ...current, [field]: value } : current));
+    };
+
+    const submitBidAnalysis = async (action) => {
+        if (!selectedProcurement?.id) return;
+        setAnalysisSaving(true);
+        setMessage(null);
+        try {
+            const res = await axios.patch(`${API_BASE}/procurement/${selectedProcurement.id}`, {
+                userId: user.id,
+                intent: 'bid_analysis',
+                action,
+                bid_analysis_summary: selectedProcurement.bid_analysis_summary || '',
+                bid_analysis_recommendation: selectedProcurement.bid_analysis_recommendation || '',
+            });
+
+            setSelectedProcurement(res.data.procurement);
+            setMessage({
+                type: 'success',
+                text: res.data.message || 'Bid analysis updated.',
+            });
+            await fetchFinanceData({ silent: true });
+        } catch (err) {
+            setMessage({
+                type: 'error',
+                text: err.response?.data?.error || 'Unable to update bid analysis.',
+            });
+        } finally {
+            setAnalysisSaving(false);
+        }
+    };
+
+    const printProcurementPlan = async (procurementRecord) => {
+        try {
+            const detail =
+                procurementRecord?.items
+                    ? procurementRecord
+                    : (await axios.get(`${API_BASE}/procurement/${procurementRecord.id || procurementRecord}`, {
+                          params: { userId: user.id },
+                      })).data;
+
+            const win = window.open('', '_blank', 'width=960,height=780');
+            if (!win) {
+                setMessage({
+                    type: 'error',
+                    text: 'Pop-up blocked. Allow pop-ups to print approved plans.',
+                });
+                return;
+            }
+
+            const itemRows = (detail.items || [])
+                .map(
+                    (item) => `
+                        <tr>
+                            <td>${escapeHtml(item.description)}</td>
+                            <td>${Number(item.quantity || 0)}</td>
+                            <td>${escapeHtml(item.unit)}</td>
+                            <td>${formatCurrency(item.estimated_unit_cost)}</td>
+                            <td>${formatCurrency(Number(item.quantity || 0) * Number(item.estimated_unit_cost || 0))}</td>
+                        </tr>`
+                )
+                .join('');
+
+            win.document.write(`
+                <html>
+                    <head>
+                        <title>Approved Procurement Plan</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; padding: 32px; color: #1f2937; }
+                            h1,h2,h3 { margin: 0 0 12px; }
+                            .meta { margin: 18px 0; display: grid; gap: 8px; }
+                            .section { margin-top: 24px; }
+                            table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                            th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; font-size: 12px; }
+                            th { background: #f3f4f6; }
+                            .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; background: #ecfdf5; color: #065f46; font-size: 12px; font-weight: 700; }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>${escapeHtml(detail.title)}</h1>
+                        <div class="badge">${escapeHtml(String(detail.status || '').replace(/_/g, ' '))}</div>
+                        <div class="meta">
+                            <div><strong>Requester:</strong> ${escapeHtml(detail.requester_name || '')}</div>
+                            <div><strong>Project:</strong> ${escapeHtml(detail.project_name || 'Unassigned project')}</div>
+                            <div><strong>Budget line:</strong> ${escapeHtml(detail.budget_line_code || 'Uncoded')} ${detail.budget_line_name ? `- ${escapeHtml(detail.budget_line_name)}` : ''}</div>
+                            <div><strong>Estimated value:</strong> ${formatCurrency(detail.total_estimated_cost)}</div>
+                            <div><strong>Approval band:</strong> ${escapeHtml(detail.policy?.label || String(detail.approval_band || '').replace(/_/g, ' '))}</div>
+                        </div>
+                        <div class="section">
+                            <h3>Justification</h3>
+                            <p>${escapeHtml(detail.justification || 'No justification provided.')}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Bid Analysis</h3>
+                            <p><strong>Status:</strong> ${escapeHtml(String(detail.bid_analysis_status || 'pending').replace(/_/g, ' '))}</p>
+                            <p><strong>Summary:</strong> ${escapeHtml(detail.bid_analysis_summary || 'Not recorded')}</p>
+                            <p><strong>Recommendation:</strong> ${escapeHtml(detail.bid_analysis_recommendation || 'Not recorded')}</p>
+                        </div>
+                        <div class="section">
+                            <h3>Approved Line Items</h3>
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th>Quantity</th>
+                                        <th>Unit</th>
+                                        <th>Unit Cost</th>
+                                        <th>Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${itemRows}</tbody>
+                            </table>
+                        </div>
+                    </body>
+                </html>
+            `);
+            win.document.close();
+            win.focus();
+            win.print();
+        } catch (err) {
+            setMessage({
+                type: 'error',
+                text: err.response?.data?.error || 'Unable to print approved plan.',
             });
         }
     };
@@ -476,6 +624,11 @@ export default function FinanceAdminPage() {
                             <h3>{openRequests.length} active procurement cases</h3>
                             <p>{summary?.controls?.maker_checker_rule}</p>
                         </div>
+                        <div className="surface-muted">
+                            <div className="domain-kicker">Approved Plans</div>
+                            <h3>{approvedPlans.length} ready to print</h3>
+                            <p>Approved, ordered, and received plans can be printed directly for filing and logistics release.</p>
+                        </div>
                     </div>
 
                     <div className="data-table-wrap" style={{ marginTop: '20px' }}>
@@ -510,6 +663,15 @@ export default function FinanceAdminPage() {
                                             <button className="btn btn-secondary btn-sm" onClick={() => openProcurementDetail(item.id)}>
                                                 <ArrowUpRight size={14} /> Inspect
                                             </button>
+                                            {['approved', 'ordered', 'received'].includes(item.status) && (
+                                                <button
+                                                    className="btn btn-ghost btn-sm"
+                                                    style={{ marginLeft: '8px' }}
+                                                    onClick={() => printProcurementPlan(item.id)}
+                                                >
+                                                    <Printer size={14} /> Print
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -789,6 +951,97 @@ export default function FinanceAdminPage() {
                                 </p>
                             </div>
 
+                            <div className="surface-muted" style={{ marginTop: '18px' }}>
+                                <div className="domain-kicker">Bid Analysis & Comparative Review</div>
+                                <h3>Comparative procurement approval</h3>
+                                <p>
+                                    Capture the quote comparison logic, the recommended supplier path,
+                                    and the review sign-off before the final procurement approval closes.
+                                </p>
+                                <div className="detail-grid" style={{ marginTop: '16px' }}>
+                                    <div className="summary-card muted">
+                                        <div className="summary-label">Bid Analysis Status</div>
+                                        <span className={`badge badge-${
+                                            selectedProcurement.bid_analysis_status === 'approved'
+                                                ? 'success'
+                                                : selectedProcurement.bid_analysis_status === 'recommended'
+                                                ? 'warning'
+                                                : selectedProcurement.bid_analysis_status === 'rejected'
+                                                ? 'danger'
+                                                : 'info'
+                                        }`}>
+                                            {(selectedProcurement.bid_analysis_status || 'pending').replace('_', ' ')}
+                                        </span>
+                                    </div>
+                                    <div className="summary-card muted">
+                                        <div className="summary-label">Reviewed By</div>
+                                        <div className="summary-copy">
+                                            {selectedProcurement.bid_analysis_reviewer_name || 'Not recorded'}
+                                        </div>
+                                    </div>
+                                    <div className="summary-card muted">
+                                        <div className="summary-label">Approved By</div>
+                                        <div className="summary-copy">
+                                            {selectedProcurement.bid_analysis_approver_name || 'Awaiting sign-off'}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="form-group" style={{ marginTop: '16px' }}>
+                                    <label className="form-label">Comparison Summary</label>
+                                    <textarea
+                                        className="form-textarea"
+                                        value={selectedProcurement.bid_analysis_summary || ''}
+                                        onChange={(event) =>
+                                            updateSelectedProcurementField('bid_analysis_summary', event.target.value)
+                                        }
+                                        readOnly={!canReviewBidAnalysis}
+                                        placeholder="Summarize quotes received, delivery readiness, compliance checks, and the value-for-money conclusion."
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Recommendation</label>
+                                    <textarea
+                                        className="form-textarea"
+                                        value={selectedProcurement.bid_analysis_recommendation || ''}
+                                        onChange={(event) =>
+                                            updateSelectedProcurementField('bid_analysis_recommendation', event.target.value)
+                                        }
+                                        readOnly={!canReviewBidAnalysis}
+                                        placeholder="Record the recommended supplier, comparative position, or the reason the request should go back for revision."
+                                    />
+                                </div>
+
+                                {canReviewBidAnalysis && (
+                                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '12px' }}>
+                                        <button
+                                            className="btn btn-secondary btn-sm"
+                                            onClick={() => submitBidAnalysis('recommend')}
+                                            disabled={analysisSaving}
+                                        >
+                                            <ClipboardCheck size={14} /> {analysisSaving ? 'Saving...' : 'Save Recommendation'}
+                                        </button>
+                                        <button
+                                            className="btn btn-ghost btn-sm"
+                                            onClick={() => submitBidAnalysis('waive')}
+                                            disabled={analysisSaving}
+                                        >
+                                            Waive Comparative Review
+                                        </button>
+                                        {canApproveBidAnalysis && (
+                                            <button
+                                                className="btn btn-primary btn-sm"
+                                                onClick={() => submitBidAnalysis('approve')}
+                                                disabled={analysisSaving}
+                                            >
+                                                Approve Bid Analysis
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="data-table-wrap" style={{ marginTop: '18px' }}>
                                 <table className="data-table">
                                     <thead>
@@ -815,6 +1068,14 @@ export default function FinanceAdminPage() {
                             </div>
                         </div>
                         <div className="modal-footer">
+                            {['approved', 'ordered', 'received'].includes(selectedProcurement.status) && (
+                                <button
+                                    className="btn btn-secondary"
+                                    onClick={() => printProcurementPlan(selectedProcurement)}
+                                >
+                                    <Printer size={14} /> Print Approved Plan
+                                </button>
+                            )}
                             <button
                                 className="btn btn-secondary"
                                 onClick={() => {

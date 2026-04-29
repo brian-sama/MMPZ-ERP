@@ -226,6 +226,20 @@ export default function GovernanceApprovalsPage() {
                                             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                                                 {selectedItem.procurement.policy?.control_note || 'Review itemization, budget line and procurement evidence before actioning.'}
                                             </div>
+                                            <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '12px' }}>
+                                                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                                                    Bid analysis
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                                    <strong>Status:</strong> {(selectedItem.procurement.bid_analysis_status || 'pending').replace('_', ' ')}
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                                    <strong>Summary:</strong> {selectedItem.procurement.bid_analysis_summary || 'No comparative review summary recorded yet.'}
+                                                </div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                                    <strong>Recommendation:</strong> {selectedItem.procurement.bid_analysis_recommendation || 'No recommendation recorded yet.'}
+                                                </div>
+                                            </div>
                                             <div className="data-table-wrap">
                                                 <table className="data-table">
                                                     <thead>

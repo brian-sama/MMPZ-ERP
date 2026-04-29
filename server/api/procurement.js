@@ -16,6 +16,7 @@ const PROCUREMENT_READ_PERMISSIONS = [
 ];
 
 const THRESHOLD_KEY = 'major_finance_threshold_usd';
+const BID_ANALYSIS_ACTIONS = new Set(['recommend', 'reject', 'waive', 'approve']);
 
 const loadThresholdValue = async () => {
     const rows = await sql`
@@ -59,6 +60,14 @@ const buildPolicyProfile = (amount, thresholdValue) => {
         control_note: 'Routine operational requisition, subject to documentation and budget availability.',
     };
 };
+
+const canReviewBidAnalysis = (actor) =>
+    actor?.system_role === 'SUPER_ADMIN' ||
+    actor?.role_code === 'DIRECTOR' ||
+    actor?.permissions?.has('expense.review_finance');
+
+const canApproveBidAnalysis = (actor) =>
+    actor?.system_role === 'SUPER_ADMIN' || actor?.role_code === 'DIRECTOR';
 
 const normalizeItems = (items) => {
     if (!Array.isArray(items) || items.length === 0) {
@@ -156,6 +165,8 @@ export const handler = async (event) => {
                         p.name AS project_name,
                         bl.code AS budget_line_code,
                         bl.description AS budget_line_name,
+                        reviewer.name AS bid_analysis_reviewer_name,
+                        approver.name AS bid_analysis_approver_name,
                         bl.allocated_amount,
                         bl.used_amount,
                         COALESCE(pc.committed_amount, 0) AS committed_amount,
@@ -166,6 +177,8 @@ export const handler = async (event) => {
                     JOIN users u ON pr.requested_by_user_id = u.id
                     LEFT JOIN projects p ON pr.project_id = p.id
                     LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
+                    LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
+                    LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
                     LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
                     WHERE pr.id = ${id}
                 `;
@@ -202,6 +215,8 @@ export const handler = async (event) => {
                     p.name AS project_name,
                     bl.code AS budget_line_code,
                     bl.description AS budget_line_name,
+                    reviewer.name AS bid_analysis_reviewer_name,
+                    approver.name AS bid_analysis_approver_name,
                     bl.allocated_amount,
                     bl.used_amount,
                     COALESCE(pc.committed_amount, 0) AS committed_amount,
@@ -217,6 +232,8 @@ export const handler = async (event) => {
                 JOIN users u ON pr.requested_by_user_id = u.id
                 LEFT JOIN projects p ON pr.project_id = p.id
                 LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
+                LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
+                LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
                 LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
                 ORDER BY pr.created_at DESC
             `;
@@ -327,6 +344,116 @@ export const handler = async (event) => {
                 },
                 201
             );
+        }
+
+        if (method === 'PATCH') {
+            if (!id) {
+                return errorResponse('Procurement request ID is required', 400);
+            }
+
+            const intent = body.intent || 'bid_analysis';
+            if (intent !== 'bid_analysis') {
+                return errorResponse('Unsupported procurement update intent', 400);
+            }
+
+            const action = String(body.action || '').trim().toLowerCase();
+            if (!BID_ANALYSIS_ACTIONS.has(action)) {
+                return errorResponse('Invalid bid analysis action', 400);
+            }
+
+            const requests = await sql`
+                SELECT *
+                FROM procurement_requests
+                WHERE id = ${id}
+                LIMIT 1
+            `;
+
+            if (requests.length === 0) {
+                return errorResponse('Procurement request not found', 404);
+            }
+
+            const request = requests[0];
+            const thresholdValue = await loadThresholdValue();
+            const policy = buildPolicyProfile(request.total_estimated_cost, thresholdValue);
+            const requiresComparativeReview =
+                policy.approval_band === 'finance_review' || policy.approval_band === 'director_review';
+
+            if (action === 'approve') {
+                if (!canApproveBidAnalysis(actor)) {
+                    return errorResponse('Only Director or System Admin can approve bid analysis', 403);
+                }
+            } else if (!canReviewBidAnalysis(actor)) {
+                return errorResponse('Finance review permission is required for bid analysis', 403);
+            }
+
+            const summary = String(body.bid_analysis_summary || '').trim();
+            const recommendation = String(body.bid_analysis_recommendation || '').trim();
+
+            if (requiresComparativeReview && action !== 'waive') {
+                if (summary.length < 20) {
+                    return errorResponse('Bid analysis summary must be at least 20 characters for this requisition', 400);
+                }
+                if (recommendation.length < 5) {
+                    return errorResponse('Bid analysis recommendation is required for this requisition', 400);
+                }
+            }
+
+            const nextStatusMap = {
+                recommend: 'recommended',
+                reject: 'rejected',
+                waive: 'waived',
+                approve: 'approved',
+            };
+            const nextBidAnalysisStatus = nextStatusMap[action];
+
+            await sql`
+                UPDATE procurement_requests
+                SET
+                    bid_analysis_summary = ${summary || request.bid_analysis_summary || null},
+                    bid_analysis_recommendation = ${recommendation || request.bid_analysis_recommendation || null},
+                    bid_analysis_status = ${nextBidAnalysisStatus},
+                    bid_analysis_reviewed_by_user_id = ${action === 'approve' ? request.bid_analysis_reviewed_by_user_id : actor.id},
+                    bid_analysis_reviewed_at = ${action === 'approve' ? request.bid_analysis_reviewed_at : new Date().toISOString()},
+                    bid_analysis_approved_by_user_id = ${action === 'approve' ? actor.id : null},
+                    bid_analysis_approved_at = ${action === 'approve' ? new Date().toISOString() : null}
+                WHERE id = ${id}
+            `;
+
+            const refreshed = await sql`
+                SELECT
+                    pr.*,
+                    u.name AS requester_name,
+                    p.name AS project_name,
+                    bl.code AS budget_line_code,
+                    bl.description AS budget_line_name,
+                    reviewer.name AS bid_analysis_reviewer_name,
+                    approver.name AS bid_analysis_approver_name,
+                    (SELECT COUNT(*)::int FROM procurement_items WHERE request_id = pr.id) AS item_count
+                FROM procurement_requests pr
+                JOIN users u ON pr.requested_by_user_id = u.id
+                LEFT JOIN projects p ON pr.project_id = p.id
+                LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
+                LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
+                LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
+                WHERE pr.id = ${id}
+                LIMIT 1
+            `;
+
+            const items = await sql`
+                SELECT *
+                FROM procurement_items
+                WHERE request_id = ${id}
+                ORDER BY created_at ASC
+            `;
+
+            return successResponse({
+                message: `Bid analysis ${nextBidAnalysisStatus}`,
+                procurement: {
+                    ...refreshed[0],
+                    items,
+                    policy,
+                },
+            });
         }
 
         return errorResponse('Method not allowed', 405);

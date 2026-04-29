@@ -1170,14 +1170,55 @@ CREATE TABLE IF NOT EXISTS procurement_requests (
     title VARCHAR(255) NOT NULL,
     justification TEXT,
     total_estimated_cost DECIMAL(15, 2),
+    bid_analysis_summary TEXT,
+    bid_analysis_recommendation TEXT,
+    bid_analysis_status VARCHAR(30) DEFAULT 'pending',
+    bid_analysis_reviewed_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    bid_analysis_reviewed_at TIMESTAMP NULL,
+    bid_analysis_approved_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
+    bid_analysis_approved_at TIMESTAMP NULL,
     status VARCHAR(30) DEFAULT 'draft',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_summary TEXT;
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_recommendation TEXT;
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_status VARCHAR(30) DEFAULT 'pending';
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_reviewed_by_user_id INT NULL;
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_reviewed_at TIMESTAMP NULL;
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_approved_by_user_id INT NULL;
+ALTER TABLE procurement_requests ADD COLUMN IF NOT EXISTS bid_analysis_approved_at TIMESTAMP NULL;
 
 ALTER TABLE procurement_requests DROP CONSTRAINT IF EXISTS procurement_requests_status_check;
 ALTER TABLE procurement_requests
     ADD CONSTRAINT procurement_requests_status_check
     CHECK (status IN ('draft', 'pending_approval', 'approved', 'ordered', 'received', 'cancelled', 'rejected'));
+
+ALTER TABLE procurement_requests DROP CONSTRAINT IF EXISTS procurement_requests_bid_analysis_status_check;
+ALTER TABLE procurement_requests
+    ADD CONSTRAINT procurement_requests_bid_analysis_status_check
+    CHECK (bid_analysis_status IN ('pending', 'recommended', 'approved', 'rejected', 'waived'));
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'procurement_requests_bid_analysis_reviewed_by_user_id_fkey'
+    ) THEN
+        ALTER TABLE procurement_requests
+            ADD CONSTRAINT procurement_requests_bid_analysis_reviewed_by_user_id_fkey
+            FOREIGN KEY (bid_analysis_reviewed_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'procurement_requests_bid_analysis_approved_by_user_id_fkey'
+    ) THEN
+        ALTER TABLE procurement_requests
+            ADD CONSTRAINT procurement_requests_bid_analysis_approved_by_user_id_fkey
+            FOREIGN KEY (bid_analysis_approved_by_user_id) REFERENCES users(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS procurement_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
