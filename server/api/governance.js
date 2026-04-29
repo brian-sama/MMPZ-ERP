@@ -10,6 +10,27 @@ import { createNotification } from './utils/notification-center.js';
 
 const THRESHOLD_KEY = 'major_finance_threshold_usd';
 
+const getProcurementRequestColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'procurement_requests'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const hasBidAnalysisColumns = (columns) =>
+    [
+        'bid_analysis_summary',
+        'bid_analysis_recommendation',
+        'bid_analysis_status',
+        'bid_analysis_reviewed_by_user_id',
+        'bid_analysis_approved_by_user_id',
+        'bid_analysis_reviewed_at',
+        'bid_analysis_approved_at',
+    ].every((column) => columns.has(column));
+
 const loadThresholdValue = async () => {
     const rows = await sql`
         SELECT value_text
@@ -55,9 +76,11 @@ export const handler = async (event) => {
 
         if (method === 'GET') {
             ensurePermission(actor, 'approval.read', { allowPending: true });
+            const procurementColumns = await getProcurementRequestColumns();
+            const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
             if (id) {
-                const approval = await sql`
+                const approval = bidAnalysisEnabled ? await sql`
                     SELECT
                         a.*,
                         u.name AS requester_name,
@@ -67,6 +90,22 @@ export const handler = async (event) => {
                         pr.bid_analysis_summary,
                         pr.bid_analysis_recommendation,
                         pr.bid_analysis_status
+                    FROM approvals a
+                    JOIN users u ON a.requested_by_user_id = u.id
+                    LEFT JOIN procurement_requests pr
+                        ON a.entity_type = 'procurement'
+                       AND pr.id::text = a.entity_id
+                    WHERE a.id = ${id}
+                ` : await sql`
+                    SELECT
+                        a.*,
+                        u.name AS requester_name,
+                        pr.title AS procurement_title,
+                        pr.total_estimated_cost,
+                        pr.status AS procurement_status,
+                        NULL::text AS bid_analysis_summary,
+                        NULL::text AS bid_analysis_recommendation,
+                        'pending'::text AS bid_analysis_status
                     FROM approvals a
                     JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
@@ -87,7 +126,7 @@ export const handler = async (event) => {
                 let procurement = null;
                 if (approval[0].entity_type === 'procurement') {
                     const thresholdValue = await loadThresholdValue();
-                    const requisitions = await sql`
+                    const requisitions = bidAnalysisEnabled ? await sql`
                         SELECT
                             pr.*,
                             p.name AS project_name,
@@ -100,6 +139,22 @@ export const handler = async (event) => {
                         LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
                         LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
                         LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
+                        WHERE pr.id::text = ${approval[0].entity_id}
+                        LIMIT 1
+                    ` : await sql`
+                        SELECT
+                            pr.*,
+                            NULL::text AS bid_analysis_summary,
+                            NULL::text AS bid_analysis_recommendation,
+                            'pending'::text AS bid_analysis_status,
+                            NULL::text AS bid_analysis_reviewer_name,
+                            NULL::text AS bid_analysis_approver_name,
+                            p.name AS project_name,
+                            bl.code AS budget_line_code,
+                            bl.description AS budget_line_name
+                        FROM procurement_requests pr
+                        LEFT JOIN projects p ON pr.project_id = p.id
+                        LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
                         WHERE pr.id::text = ${approval[0].entity_id}
                         LIMIT 1
                     `;
@@ -126,7 +181,7 @@ export const handler = async (event) => {
             }
 
             try {
-                const queue = await sql`
+                const queue = bidAnalysisEnabled ? await sql`
                     SELECT
                         a.*,
                         u.name AS requester_name,
@@ -134,6 +189,20 @@ export const handler = async (event) => {
                         pr.total_estimated_cost,
                         pr.status AS procurement_status,
                         pr.bid_analysis_status
+                    FROM approvals a
+                    INNER JOIN users u ON a.requested_by_user_id = u.id
+                    LEFT JOIN procurement_requests pr
+                        ON a.entity_type = 'procurement'
+                       AND pr.id::text = a.entity_id
+                    ORDER BY a.created_at DESC
+                ` : await sql`
+                    SELECT
+                        a.*,
+                        u.name AS requester_name,
+                        pr.title AS procurement_title,
+                        pr.total_estimated_cost,
+                        pr.status AS procurement_status,
+                        'pending'::text AS bid_analysis_status
                     FROM approvals a
                     INNER JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
@@ -182,6 +251,8 @@ export const handler = async (event) => {
             }
 
             const finalStatus = action === 'approve' ? 'approved' : 'rejected';
+            const procurementColumns = await getProcurementRequestColumns();
+            const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
             await sql.begin(async (tx) => {
                 await tx`
@@ -228,6 +299,7 @@ export const handler = async (event) => {
                         policy.approval_band === 'finance_review' || policy.approval_band === 'director_review';
 
                     if (
+                        bidAnalysisEnabled &&
                         action === 'approve' &&
                         needsBidAnalysis &&
                         !['recommended', 'approved', 'waived'].includes(
@@ -240,7 +312,8 @@ export const handler = async (event) => {
                         );
                     }
 
-                    await tx`
+                    if (bidAnalysisEnabled) {
+                        await tx`
                         UPDATE procurement_requests
                         SET
                             status = ${finalStatus},
@@ -257,7 +330,14 @@ export const handler = async (event) => {
                                 ELSE bid_analysis_approved_at
                             END
                         WHERE id::text = ${approval.entity_id}
-                    `;
+                        `;
+                    } else {
+                        await tx`
+                            UPDATE procurement_requests
+                            SET status = ${finalStatus}
+                            WHERE id::text = ${approval.entity_id}
+                        `;
+                    }
                 }
 
                 if (approval.requested_by_user_id && approval.requested_by_user_id !== actor.id) {

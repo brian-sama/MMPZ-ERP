@@ -18,6 +18,27 @@ const PROCUREMENT_READ_PERMISSIONS = [
 const THRESHOLD_KEY = 'major_finance_threshold_usd';
 const BID_ANALYSIS_ACTIONS = new Set(['recommend', 'reject', 'waive', 'approve']);
 
+const getProcurementRequestColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'procurement_requests'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const hasBidAnalysisColumns = (columns) =>
+    [
+        'bid_analysis_summary',
+        'bid_analysis_recommendation',
+        'bid_analysis_status',
+        'bid_analysis_reviewed_by_user_id',
+        'bid_analysis_approved_by_user_id',
+        'bid_analysis_reviewed_at',
+        'bid_analysis_approved_at',
+    ].every((column) => columns.has(column));
+
 const loadThresholdValue = async () => {
     const rows = await sql`
         SELECT value_text
@@ -147,9 +168,11 @@ export const handler = async (event) => {
         if (method === 'GET') {
             ensureAnyPermission(actor, PROCUREMENT_READ_PERMISSIONS, { allowPending: true });
             const thresholdValue = await loadThresholdValue();
+            const procurementColumns = await getProcurementRequestColumns();
+            const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
             if (id) {
-                const rows = await sql`
+                const rows = bidAnalysisEnabled ? await sql`
                     WITH procurement_control AS (
                         SELECT
                             budget_line_id,
@@ -181,6 +204,39 @@ export const handler = async (event) => {
                     LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
                     LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
                     WHERE pr.id = ${id}
+                ` : await sql`
+                    WITH procurement_control AS (
+                        SELECT
+                            budget_line_id,
+                            COALESCE(SUM(CASE WHEN status IN ('approved', 'ordered') THEN total_estimated_cost ELSE 0 END), 0)::numeric AS committed_amount,
+                            COALESCE(SUM(CASE WHEN status = 'pending_approval' THEN total_estimated_cost ELSE 0 END), 0)::numeric AS pending_amount
+                        FROM procurement_requests
+                        WHERE budget_line_id IS NOT NULL
+                        GROUP BY budget_line_id
+                    )
+                    SELECT
+                        pr.*,
+                        NULL::text AS bid_analysis_summary,
+                        NULL::text AS bid_analysis_recommendation,
+                        'pending'::text AS bid_analysis_status,
+                        NULL::text AS bid_analysis_reviewer_name,
+                        NULL::text AS bid_analysis_approver_name,
+                        u.name AS requester_name,
+                        p.name AS project_name,
+                        bl.code AS budget_line_code,
+                        bl.description AS budget_line_name,
+                        bl.allocated_amount,
+                        bl.used_amount,
+                        COALESCE(pc.committed_amount, 0) AS committed_amount,
+                        COALESCE(pc.pending_amount, 0) AS pending_amount,
+                        (bl.allocated_amount - bl.used_amount - COALESCE(pc.committed_amount, 0) - COALESCE(pc.pending_amount, 0))::numeric AS available_to_commit,
+                        (SELECT COUNT(*)::int FROM procurement_items WHERE request_id = pr.id) AS item_count
+                    FROM procurement_requests pr
+                    JOIN users u ON pr.requested_by_user_id = u.id
+                    LEFT JOIN projects p ON pr.project_id = p.id
+                    LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
+                    LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
+                    WHERE pr.id = ${id}
                 `;
 
                 if (rows.length === 0) return errorResponse('Request not found', 404);
@@ -199,7 +255,7 @@ export const handler = async (event) => {
                 });
             }
 
-            const rows = await sql`
+            const rows = bidAnalysisEnabled ? await sql`
                 WITH procurement_control AS (
                     SELECT
                         budget_line_id,
@@ -234,6 +290,44 @@ export const handler = async (event) => {
                 LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
                 LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
                 LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
+                LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
+                ORDER BY pr.created_at DESC
+            ` : await sql`
+                WITH procurement_control AS (
+                    SELECT
+                        budget_line_id,
+                        COALESCE(SUM(CASE WHEN status IN ('approved', 'ordered') THEN total_estimated_cost ELSE 0 END), 0)::numeric AS committed_amount,
+                        COALESCE(SUM(CASE WHEN status = 'pending_approval' THEN total_estimated_cost ELSE 0 END), 0)::numeric AS pending_amount
+                    FROM procurement_requests
+                    WHERE budget_line_id IS NOT NULL
+                    GROUP BY budget_line_id
+                )
+                SELECT
+                    pr.*,
+                    NULL::text AS bid_analysis_summary,
+                    NULL::text AS bid_analysis_recommendation,
+                    'pending'::text AS bid_analysis_status,
+                    NULL::text AS bid_analysis_reviewer_name,
+                    NULL::text AS bid_analysis_approver_name,
+                    u.name AS requester_name,
+                    p.name AS project_name,
+                    bl.code AS budget_line_code,
+                    bl.description AS budget_line_name,
+                    bl.allocated_amount,
+                    bl.used_amount,
+                    COALESCE(pc.committed_amount, 0) AS committed_amount,
+                    COALESCE(pc.pending_amount, 0) AS pending_amount,
+                    (bl.allocated_amount - bl.used_amount - COALESCE(pc.committed_amount, 0) - COALESCE(pc.pending_amount, 0))::numeric AS available_to_commit,
+                    (SELECT COUNT(*)::int FROM procurement_items WHERE request_id = pr.id) AS item_count,
+                    CASE
+                        WHEN COALESCE(pr.total_estimated_cost, 0) >= ${thresholdValue} THEN 'director_review'
+                        WHEN COALESCE(pr.total_estimated_cost, 0) >= ${thresholdValue / 2} THEN 'finance_review'
+                        ELSE 'routine_review'
+                    END AS approval_band
+                FROM procurement_requests pr
+                JOIN users u ON pr.requested_by_user_id = u.id
+                LEFT JOIN projects p ON pr.project_id = p.id
+                LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
                 LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
                 ORDER BY pr.created_at DESC
             `;
@@ -349,6 +443,14 @@ export const handler = async (event) => {
         if (method === 'PATCH') {
             if (!id) {
                 return errorResponse('Procurement request ID is required', 400);
+            }
+            const procurementColumns = await getProcurementRequestColumns();
+            const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
+            if (!bidAnalysisEnabled) {
+                return errorResponse(
+                    'Bid analysis fields are not available until the latest database migration is applied.',
+                    503
+                );
             }
 
             const intent = body.intent || 'bid_analysis';
