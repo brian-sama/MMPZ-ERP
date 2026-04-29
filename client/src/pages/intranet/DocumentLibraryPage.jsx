@@ -99,6 +99,28 @@ export default function DocumentLibraryPage() {
         }
     };
 
+    const downloadDocument = async (document) => {
+        try {
+            const res = await axios.get(`${API_BASE}/documents/${document.id}/download`, {
+                params: { userId: user.id },
+            });
+            const fileData = res.data?.file_data;
+            if (!fileData) {
+                alert('Document file is not available.');
+                return;
+            }
+
+            const link = window.document.createElement('a');
+            link.href = fileData;
+            link.download = document.file_name || document.title || 'document';
+            window.document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to download document');
+        }
+    };
+
     return (
         <div className="fade-in">
             <PageHeader
@@ -185,15 +207,13 @@ export default function DocumentLibraryPage() {
                                             <td>{new Date(document.updated_at || document.created_at).toLocaleDateString()}</td>
                                             <td>
                                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <a
+                                                    <button
                                                         className="btn btn-ghost btn-sm"
                                                         title="Download"
-                                                        href={document.file_path}
-                                                        target="_blank"
-                                                        rel="noreferrer"
+                                                        onClick={() => downloadDocument(document)}
                                                     >
                                                         <Download size={14} />
-                                                    </a>
+                                                    </button>
                                                     {canManageDocuments && (
                                                         <button className="btn btn-ghost btn-sm" title="Delete" onClick={() => deleteDocument(document.id)}>
                                                             <Trash2 size={14} />

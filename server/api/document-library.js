@@ -16,6 +16,7 @@ import {
 import {
     writeBase64Upload,
     removeUploadedFile,
+    readUploadedFileAsDataUrl,
     DOCUMENT_MIME_TYPES,
 } from './utils/uploads.js';
 
@@ -36,6 +37,33 @@ export const handler = async (event) => {
         const actor = await getUserContext(getRequestUserId(event, body));
 
         if (method === 'GET') {
+            if (id && event.path.endsWith('/download')) {
+                const documentId = String(id).replace(/\/download$/, '');
+                const rows = await sql`
+                    SELECT
+                        d.id,
+                        d.title,
+                        d.file_name,
+                        d.file_path,
+                        d.mime_type
+                    FROM document_library_files d
+                    WHERE d.id = ${documentId}
+                    LIMIT 1
+                `;
+                if (rows.length === 0) return errorResponse('Document not found', 404);
+
+                const document = rows[0];
+                const fileData = readUploadedFileAsDataUrl(document.file_path, document.mime_type || 'application/octet-stream');
+                if (!fileData) {
+                    return errorResponse('Document file is no longer available', 404);
+                }
+
+                return successResponse({
+                    ...document,
+                    file_data: fileData,
+                });
+            }
+
             const category = query.category || null;
 
             if (id) {

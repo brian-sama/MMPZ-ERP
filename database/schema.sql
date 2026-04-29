@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 INSERT INTO roles (code, name, description, is_executive)
 VALUES
     ('DIRECTOR', 'Director', 'Executive authority for strategic and final approvals', TRUE),
+    ('SYSTEM_ADMIN', 'System Administrator', 'Highest level of administrative access and control.', TRUE),
     ('FINANCE_ADMIN_OFFICER', 'Finance and Admin Officer', 'Financial accountability and administrative leadership', FALSE),
     ('ADMIN_ASSISTANT', 'Admin Assistant', 'Operational support and user coordination', FALSE),
     ('LOGISTICS_ASSISTANT', 'Logistics Assistant', 'Procurement and logistics tracking support', FALSE),
@@ -179,6 +180,7 @@ SET role_code = CASE
     WHEN role_code IS NULL THEN 'DEVELOPMENT_FACILITATOR'
     WHEN UPPER(role_code) IN (
         'DIRECTOR',
+        'SYSTEM_ADMIN',
         'FINANCE_ADMIN_OFFICER',
         'ADMIN_ASSISTANT',
         'LOGISTICS_ASSISTANT',
@@ -208,6 +210,7 @@ WHERE role_assignment_status IS NULL
 UPDATE users
 SET system_role = CASE
     WHEN role_code = 'DIRECTOR' THEN 'MANAGEMENT'
+    WHEN role_code = 'SYSTEM_ADMIN' THEN 'SUPER_ADMIN'
     WHEN role_code = 'FINANCE_ADMIN_OFFICER' THEN 'PROGRAM_STAFF'
     WHEN role_code = 'ADMIN_ASSISTANT' THEN 'OPERATIONS'
     WHEN role_code = 'LOGISTICS_ASSISTANT' THEN 'OPERATIONS'
@@ -591,7 +594,18 @@ END $$;
 ALTER TABLE volunteer_submissions DROP CONSTRAINT IF EXISTS volunteer_submissions_type_check;
 ALTER TABLE volunteer_submissions
     ADD CONSTRAINT volunteer_submissions_type_check
-    CHECK (type IN ('plan', 'concept_note', 'report', 'scanned_list'));
+    CHECK (
+        type IN (
+            'plan',
+            'concept_note',
+            'report',
+            'scanned_list',
+            'activity_plan',
+            'activity_report',
+            'leave_application',
+            'request_for_funds_plan'
+        )
+    );
 
 CREATE TABLE IF NOT EXISTS volunteer_participants (
     id SERIAL PRIMARY KEY,
@@ -804,6 +818,11 @@ SELECT 'DIRECTOR', code
 FROM permissions
 ON CONFLICT DO NOTHING;
 
+INSERT INTO role_permissions (role_code, permission_code)
+SELECT 'SYSTEM_ADMIN', code
+FROM permissions
+ON CONFLICT DO NOTHING;
+
 INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('FINANCE_ADMIN_OFFICER', 'user.view'),
     ('FINANCE_ADMIN_OFFICER', 'indicator.read_all'),
@@ -811,7 +830,9 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('FINANCE_ADMIN_OFFICER', 'expense.read'),
     ('FINANCE_ADMIN_OFFICER', 'expense.review_finance'),
     ('FINANCE_ADMIN_OFFICER', 'settings.finance_threshold.read'),
-    ('FINANCE_ADMIN_OFFICER', 'approval.read')
+    ('FINANCE_ADMIN_OFFICER', 'approval.read'),
+    ('FINANCE_ADMIN_OFFICER', 'volunteer.submit'),
+    ('FINANCE_ADMIN_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
@@ -822,14 +843,18 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('ADMIN_ASSISTANT', 'indicator.read_all'),
     ('ADMIN_ASSISTANT', 'activity.read'),
     ('ADMIN_ASSISTANT', 'approval.read'),
-    ('ADMIN_ASSISTANT', 'governance.pending_roles.read')
+    ('ADMIN_ASSISTANT', 'governance.pending_roles.read'),
+    ('ADMIN_ASSISTANT', 'volunteer.submit'),
+    ('ADMIN_ASSISTANT', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('LOGISTICS_ASSISTANT', 'indicator.read_assigned'),
     ('LOGISTICS_ASSISTANT', 'activity.read'),
     ('LOGISTICS_ASSISTANT', 'activity.create'),
-    ('LOGISTICS_ASSISTANT', 'project.read')
+    ('LOGISTICS_ASSISTANT', 'project.read'),
+    ('LOGISTICS_ASSISTANT', 'volunteer.submit'),
+    ('LOGISTICS_ASSISTANT', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
@@ -842,6 +867,8 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.read'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.create'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'expense.create'),
+    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.submit'),
+    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.read_own'),
 
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'program.read'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'project.read'),
@@ -854,13 +881,17 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.read'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.create'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'expense.create'),
+    ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.submit'),
+    ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.read_own'),
 
     ('ME_INTERN_ACTING_OFFICER', 'program.read'),
     ('ME_INTERN_ACTING_OFFICER', 'project.read'),
     ('ME_INTERN_ACTING_OFFICER', 'indicator.read_all'),
     ('ME_INTERN_ACTING_OFFICER', 'indicator.update'),
     ('ME_INTERN_ACTING_OFFICER', 'activity.read'),
-    ('ME_INTERN_ACTING_OFFICER', 'approval.read')
+    ('ME_INTERN_ACTING_OFFICER', 'approval.read'),
+    ('ME_INTERN_ACTING_OFFICER', 'volunteer.submit'),
+    ('ME_INTERN_ACTING_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES

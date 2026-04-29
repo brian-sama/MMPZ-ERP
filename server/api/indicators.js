@@ -16,6 +16,43 @@ import {
     hasPermission,
     setAuditActor,
 } from './utils/rbac.js';
+import postgres from 'postgres';
+
+const getIndicatorColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'indicators'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const buildIndicatorSelect = (columns) => {
+    const has = (column) => columns.has(column);
+    const value = (column, fallback) =>
+        has(column)
+            ? `i.${column}`
+            : fallback;
+
+    return postgres.unsafe(`
+        i.id,
+        ${value('project_id', 'NULL::int')} AS project_id,
+        ${value('title', "''::text")} AS title,
+        ${value('target_value', '0')} AS target_value,
+        ${value('current_value', '0')} AS current_value,
+        ${value('total_budget', '0')} AS total_budget,
+        ${value('current_budget_balance', '0')} AS current_budget_balance,
+        ${value('created_by_user_id', 'NULL::int')} AS created_by_user_id,
+        ${value('priority', "'medium'::text")} AS priority,
+        ${value('status', "'active'::text")} AS status,
+        ${value('reporting_period_start', 'NULL::date')} AS reporting_period_start,
+        ${value('reporting_period_end', 'NULL::date')} AS reporting_period_end,
+        ${value('last_updated', 'NULL::timestamp')} AS last_updated,
+        ${value('created_at', 'CURRENT_TIMESTAMP')} AS created_at,
+        u.name AS owner_name
+    `);
+};
 
 const formatIndicator = (ind) => ({
     ...ind,
@@ -58,10 +95,12 @@ export const handler = async (event) => {
             ensureAnyPermission(actor, ['indicator.read_all', 'indicator.read_assigned', 'project.read'], {
                 allowPending: true,
             });
+            const indicatorColumns = await getIndicatorColumns();
+            const selectList = buildIndicatorSelect(indicatorColumns);
 
             if (id) {
                 const indicators = await sql`
-                    SELECT i.*, u.name AS owner_name
+                    SELECT ${selectList}
                     FROM indicators i
                     LEFT JOIN users u ON i.created_by_user_id = u.id
                     WHERE i.id = ${id}
@@ -76,7 +115,7 @@ export const handler = async (event) => {
             }
 
             let indicatorsQuery = sql`
-                SELECT i.*, u.name AS owner_name
+                SELECT ${selectList}
                 FROM indicators i
                 LEFT JOIN users u ON i.created_by_user_id = u.id
                 WHERE 1=1

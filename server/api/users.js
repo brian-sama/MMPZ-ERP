@@ -19,6 +19,44 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 import { syncFacilitatorProfileForUser } from './utils/facilitators.js';
+import postgres from 'postgres';
+
+const getUserColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'users'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const buildUserSelect = (columns) => {
+    const has = (column) => columns.has(column);
+    const value = (column, fallback) =>
+        has(column)
+            ? `u.${column}`
+            : fallback;
+
+    return postgres.unsafe(`
+        u.id,
+        u.name,
+        u.email,
+        ${value('role_code', 'NULL::text')} AS role_code,
+        ${value('system_role', 'NULL::text')} AS system_role,
+        ${value('job_title', 'NULL::text')} AS job_title,
+        ${value('short_bio', "''::text")} AS short_bio,
+        ${value('profile_picture_url', 'NULL::text')} AS profile_picture_url,
+        ${value('role_assignment_status', "'confirmed'::text")} AS role_assignment_status,
+        ${value('role_confirmed_at', 'NULL::timestamp')} AS role_confirmed_at,
+        ${value('require_password_reset', 'FALSE')} AS require_password_reset,
+        ${value('last_login', 'NULL::timestamp')} AS last_login,
+        ${value('failed_login_attempts', '0')} AS failed_login_attempts,
+        ${value('locked_at', 'NULL::timestamp')} AS locked_at,
+        ${value('phone', "''::text")} AS phone,
+        ${value('created_at', 'CURRENT_TIMESTAMP')} AS created_at
+    `);
+};
 
 const sanitizeUser = (user) => ({
     id: user.id,
@@ -81,26 +119,13 @@ export const handler = async (event) => {
 
         // GET - List users
         if (method === 'GET') {
+            const userColumns = await getUserColumns();
+            const selectList = buildUserSelect(userColumns);
             const data = await sql`
                 SELECT
-                    id,
-                    name,
-                    email,
-                    role_code,
-                    system_role,
-                    job_title,
-                    short_bio,
-                    profile_picture_url,
-                    role_assignment_status,
-                    role_confirmed_at,
-                    require_password_reset,
-                    last_login,
-                    failed_login_attempts,
-                    locked_at,
-                    phone,
-                    created_at
-                FROM users
-                ORDER BY created_at DESC
+                    ${selectList}
+                FROM users u
+                ORDER BY u.created_at DESC NULLS LAST, u.id DESC
             `;
 
             if (hasPermission(actor, 'user.view')) {

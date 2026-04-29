@@ -18,7 +18,22 @@ import {
 } from './utils/rbac.js';
 import { createNotification } from './utils/notification-center.js';
 
+const hasTable = async (tableName) => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = ${tableName}
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 const loadConfig = async () => {
+    if (!(await hasTable('kobo_config'))) {
+        throw new HttpError('KoBo configuration storage is not available yet', 503);
+    }
     const configs = await sql`SELECT * FROM kobo_config LIMIT 1`;
     if (configs.length === 0 || !configs[0].is_connected) {
         throw new HttpError('KoboToolbox not connected', 400);
@@ -163,6 +178,9 @@ export const handler = async (event) => {
                 ensureAnyPermission(actor, ['kobo.manage', 'kobo.sync', 'approval.read'], {
                     allowPending: true,
                 });
+                if (!(await hasTable('kobo_form_links'))) {
+                    return successResponse([]);
+                }
                 const data = await sql`
                     SELECT kfl.*, i.title AS indicator_title
                     FROM kobo_form_links kfl
@@ -174,6 +192,12 @@ export const handler = async (event) => {
 
             if (method === 'POST') {
                 ensurePermission(actor, 'kobo.manage');
+                if (!(await hasTable('kobo_form_links'))) {
+                    return errorResponse(
+                        'KoBo link storage is not available until the latest database migrations are applied.',
+                        503
+                    );
+                }
                 const { kobo_form_uid, kobo_form_name, indicator_id } = body;
                 if (!kobo_form_uid || !indicator_id) {
                     return errorResponse('kobo_form_uid and indicator_id are required', 400);
@@ -205,6 +229,9 @@ export const handler = async (event) => {
 
             if (method === 'DELETE' && id) {
                 ensurePermission(actor, 'kobo.manage');
+                if (!(await hasTable('kobo_form_links'))) {
+                    return successResponse({ message: 'Link storage is not available.' });
+                }
                 await sql.begin(async (tx) => {
                     await setAuditActor(tx, actor.id);
                     await tx`DELETE FROM kobo_form_links WHERE id = ${id}`;
@@ -216,6 +243,12 @@ export const handler = async (event) => {
         // /sync or /sync-all
         if (path.includes('/sync')) {
             ensurePermission(actor, 'kobo.sync');
+            if (!(await hasTable('kobo_form_links')) || !(await hasTable('kobo_submissions'))) {
+                return errorResponse(
+                    'KoBo sync storage is not available until the latest database migrations are applied.',
+                    503
+                );
+            }
             const config = await loadConfig();
 
             if (path.endsWith('/sync-all')) {
@@ -253,6 +286,12 @@ export const handler = async (event) => {
         // /import-participants
         if (path.includes('/import-participants') && method === 'POST') {
             ensurePermission(actor, 'kobo.manage');
+            if (!(await hasTable('kobo_submissions'))) {
+                return errorResponse(
+                    'KoBo submission storage is not available until the latest database migrations are applied.',
+                    503
+                );
+            }
             const { kobo_form_uid, mapping } = body;
             if (!kobo_form_uid || !mapping) return errorResponse('Missing form UID or mapping', 400);
 
@@ -312,6 +351,9 @@ export const handler = async (event) => {
         // /fields/:uid
         if (path.includes('/fields/')) {
             ensureAnyPermission(actor, ['kobo.manage', 'kobo.sync'], { allowPending: true });
+            if (!(await hasTable('kobo_submissions'))) {
+                return errorResponse('No KoBo submissions are available yet.', 404);
+            }
             const uid = path.split('/').pop();
             const sub = await sql`
                 SELECT submission_data
@@ -326,6 +368,9 @@ export const handler = async (event) => {
         // /disconnect
         if (path.endsWith('/disconnect')) {
             ensurePermission(actor, 'kobo.manage');
+            if (!(await hasTable('kobo_form_links'))) {
+                return successResponse({ message: 'KoBo links are already unavailable.' });
+            }
             const config = await loadConfig();
 
             await sql.begin(async (tx) => {

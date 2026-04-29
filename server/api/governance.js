@@ -41,6 +41,17 @@ const loadThresholdValue = async () => {
     return Number.parseFloat(rows[0]?.value_text || '500');
 };
 
+const loadPendingCount = async () => {
+    const rows = await sql`
+        SELECT COUNT(*)::int AS total
+        FROM approvals
+        WHERE status = 'pending'
+    `;
+    return rows[0]?.total || 0;
+};
+
+const FINANCE_TEAM_ROLES = ['FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT'];
+
 const buildProcurementPolicy = (amount, thresholdValue) => {
     const total = Number(amount || 0);
     if (total >= thresholdValue) {
@@ -76,6 +87,17 @@ export const handler = async (event) => {
 
         if (method === 'GET') {
             ensurePermission(actor, 'approval.read', { allowPending: true });
+            if (query.countOnly === 'true') {
+                try {
+                    return successResponse({
+                        total: await loadPendingCount(),
+                    });
+                } catch (err) {
+                    console.error('Database error in governance queue count:', err);
+                    throw new HttpError('Failed to fetch governance queue count', 500);
+                }
+            }
+
             const procurementColumns = await getProcurementRequestColumns();
             const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
@@ -210,11 +232,6 @@ export const handler = async (event) => {
                        AND pr.id::text = a.entity_id
                     ORDER BY a.created_at DESC
                 `;
-                if (query.countOnly === 'true') {
-                    return successResponse({
-                        total: queue.filter((item) => item.status === 'pending').length,
-                    });
-                }
                 return successResponse(queue);
             } catch (err) {
                 console.error('Database error in governance queue:', err);
@@ -340,6 +357,55 @@ export const handler = async (event) => {
                     }
                 }
 
+                if (approval.entity_type === 'volunteer_submission' && action === 'approve') {
+                    const submissionRows = await tx`
+                        SELECT id, type, title, file_name
+                        FROM volunteer_submissions
+                        WHERE id::text = ${approval.entity_id}
+                        LIMIT 1
+                    `;
+
+                    if (submissionRows.length > 0 && submissionRows[0].type === 'request_for_funds_plan') {
+                        const financeTeam = await tx`
+                            SELECT id, name, role_code
+                            FROM users
+                            WHERE role_code = ANY(${FINANCE_TEAM_ROLES})
+                        `;
+
+                        for (const recipient of financeTeam) {
+                            await tx`
+                                INSERT INTO volunteer_submission_recipients (
+                                    submission_id,
+                                    user_id,
+                                    assigned_by_user_id
+                                )
+                                VALUES (
+                                    ${submissionRows[0].id},
+                                    ${recipient.id},
+                                    ${actor.id}
+                                )
+                                ON CONFLICT (submission_id, user_id) DO NOTHING
+                            `;
+                        }
+
+                        if (financeTeam.length > 0) {
+                            await Promise.all(
+                                financeTeam.map((recipient) =>
+                                    createNotification(tx, {
+                                        userId: recipient.id,
+                                        type: 'approval_result',
+                                        title: 'Approved request-for-funds plan',
+                                        message: `${submissionRows[0].title || submissionRows[0].file_name || 'A request-for-funds plan'} has been approved by ${actor.name} and is ready for finance action.`,
+                                        relatedEntityType: 'volunteer_submission',
+                                        relatedEntityId: String(submissionRows[0].id),
+                                        actionUrl: `/reports?submission=${submissionRows[0].id}`,
+                                    })
+                                )
+                            );
+                        }
+                    }
+                }
+
                 if (approval.requested_by_user_id && approval.requested_by_user_id !== actor.id) {
                     await createNotification(tx, {
                         userId: approval.requested_by_user_id,
@@ -351,6 +417,8 @@ export const handler = async (event) => {
                         actionUrl:
                             approval.entity_type === 'procurement'
                                 ? `/finance?procurement=${approval.entity_id}`
+                                : approval.entity_type === 'volunteer_submission'
+                                    ? `/reports?submission=${approval.entity_id}`
                                 : null,
                     });
                 }

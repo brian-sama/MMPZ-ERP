@@ -76,15 +76,21 @@ if (fs.existsSync(clientBuildPath)) {
 
 // Ensure uploads directory exists
 try {
-    const uploadsDir = path.join(__dirname, 'uploads', 'avatars');
-    if (!fs.existsSync(uploadsDir)) {
-        fs.mkdirSync(uploadsDir, { recursive: true });
-        console.log('Created uploads directory');
+    const uploadDirectories = [
+        path.join(__dirname, 'uploads', 'avatars'),
+        path.join(__dirname, 'uploads', 'documents'),
+        path.join(__dirname, 'uploads', 'volunteer-submissions'),
+    ];
+    for (const uploadsDir of uploadDirectories) {
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
     }
+    console.log('Ensured upload directories exist');
 } catch (dirError) {
     console.warn('Could not create uploads directory. File uploads may fail, but server will continue starting.', dirError.message);
 }
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads/avatars', express.static(path.join(__dirname, 'uploads', 'avatars')));
 
 // Health
 app.use('/api/health', functionToExpress(healthHandler));
@@ -215,6 +221,7 @@ app.use('/api/facilitator-attendance', functionToExpress(facilitatorAttendanceHa
 app.use('/api/volunteer', functionToExpress(volunteerHandler));
 app.use('/api/calendar/:id', functionToExpress(calendarEventsHandler));
 app.use('/api/calendar', functionToExpress(calendarEventsHandler));
+app.use('/api/documents/:id/download', functionToExpress(documentLibraryHandler));
 app.use('/api/documents/:id', functionToExpress(documentLibraryHandler));
 app.use('/api/documents', functionToExpress(documentLibraryHandler));
 

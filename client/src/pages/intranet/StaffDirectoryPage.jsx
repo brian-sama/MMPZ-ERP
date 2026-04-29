@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Mail, Search, Shield, Users } from 'lucide-react';
+import { Edit2, ImagePlus, Mail, Phone, Save, Search, Shield, Users, X } from 'lucide-react';
 import API_BASE from '../../apiConfig';
 import PageHeader from '../../components/PageHeader';
+import { useAuth } from '../../context/AuthContext';
 
 const cardStyles = {
     display: 'grid',
@@ -12,10 +13,23 @@ const cardStyles = {
 };
 
 export default function StaffDirectoryPage() {
+    const { user } = useAuth();
     const [search, setSearch] = useState('');
     const [staff, setStaff] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedStaff, setSelectedStaff] = useState(null);
+    const [editMode, setEditMode] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+    const [modalError, setModalError] = useState('');
+    const [form, setForm] = useState({
+        name: '',
+        job_title: '',
+        short_bio: '',
+        phone: '',
+        email: '',
+    });
+    const canManageDirectoryProfiles = user?.system_role === 'SUPER_ADMIN';
 
     const fetchStaff = async () => {
         setLoading(true);
@@ -32,6 +46,24 @@ export default function StaffDirectoryPage() {
     useEffect(() => {
         fetchStaff();
     }, []);
+
+    useEffect(() => {
+        if (!selectedStaff) {
+            setEditMode(false);
+            setModalError('');
+            return;
+        }
+
+        setForm({
+            name: selectedStaff.name || '',
+            job_title: selectedStaff.job_title || '',
+            short_bio: selectedStaff.short_bio || '',
+            phone: selectedStaff.phone || '',
+            email: selectedStaff.email || '',
+        });
+        setModalError('');
+        setEditMode(false);
+    }, [selectedStaff]);
 
     const filteredStaff = useMemo(
         () =>
@@ -78,6 +110,74 @@ export default function StaffDirectoryPage() {
                 {person.name?.charAt(0)?.toUpperCase() || 'U'}
             </div>
         );
+    };
+
+    const updateLocalStaff = (updatedPerson) => {
+        setStaff((current) =>
+            current.map((person) => (person.id === updatedPerson.id ? { ...person, ...updatedPerson } : person))
+        );
+        setSelectedStaff((current) =>
+            current && current.id === updatedPerson.id ? { ...current, ...updatedPerson } : current
+        );
+    };
+
+    const handleSaveProfile = async () => {
+        if (!selectedStaff) return;
+        setSaving(true);
+        setModalError('');
+        try {
+            const payload = {
+                userId: user.id,
+                name: form.name.trim(),
+                email: form.email.trim(),
+                role_code: selectedStaff.role_code,
+                phone: form.phone.trim(),
+                job_title: form.job_title.trim(),
+                short_bio: form.short_bio.trim(),
+                require_password_reset: selectedStaff.require_password_reset ?? false,
+            };
+
+            const res = await axios.put(`${API_BASE}/users/${selectedStaff.id}`, payload);
+            const updatedUser = res.data?.user || {
+                ...selectedStaff,
+                ...payload,
+            };
+            updateLocalStaff(updatedUser);
+            setEditMode(false);
+        } catch (error) {
+            setModalError(error.response?.data?.error || 'Failed to save profile changes.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleAvatarUpload = async (event) => {
+        const file = event.target.files?.[0];
+        if (!file || !selectedStaff) return;
+
+        setUploadingAvatar(true);
+        setModalError('');
+        try {
+            const formData = new FormData();
+            formData.append('avatar', file);
+            formData.append('targetUserId', String(selectedStaff.id));
+
+            const res = await axios.post(`${API_BASE}/upload-avatar`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            updateLocalStaff({
+                ...selectedStaff,
+                profile_picture_url: res.data?.url,
+            });
+        } catch (error) {
+            setModalError(error.response?.data?.error || 'Failed to upload profile picture.');
+        } finally {
+            setUploadingAvatar(false);
+            event.target.value = '';
+        }
     };
 
     return (
@@ -242,8 +342,24 @@ export default function StaffDirectoryPage() {
                                         </div>
                                     </div>
 
+                                    {modalError && (
+                                        <div className="auth-error" style={{ margin: 0 }}>
+                                            {modalError}
+                                        </div>
+                                    )}
+
                                     <div className="surface-muted">
-                                        <div className="control-title">{selectedStaff.job_title || selectedStaff.role_code}</div>
+                                        <div className="control-title">
+                                            {editMode ? (
+                                                <input
+                                                    className="form-input"
+                                                    value={form.job_title}
+                                                    onChange={(event) => setForm((current) => ({ ...current, job_title: event.target.value }))}
+                                                />
+                                            ) : (
+                                                selectedStaff.job_title || selectedStaff.role_code
+                                            )}
+                                        </div>
                                         <div className="control-copy">
                                             Member since {new Date(selectedStaff.created_at).getFullYear()}
                                         </div>
@@ -252,25 +368,92 @@ export default function StaffDirectoryPage() {
                                     <div className="surface-muted">
                                         <div className="control-title">Short Bio</div>
                                         <div className="control-copy">
-                                            {selectedStaff.short_bio || 'This staff member has not added a public bio yet.'}
+                                            {editMode ? (
+                                                <textarea
+                                                    className="form-textarea"
+                                                    value={form.short_bio}
+                                                    onChange={(event) => setForm((current) => ({ ...current, short_bio: event.target.value }))}
+                                                    placeholder="Add a public-facing staff bio"
+                                                />
+                                            ) : (
+                                                selectedStaff.short_bio || 'This staff member has not added a public bio yet.'
+                                            )}
                                         </div>
                                     </div>
 
                                     <div className="surface-muted">
                                         <div className="control-title">Contact</div>
                                         <div className="control-copy" style={{ display: 'grid', gap: '6px', marginTop: '8px' }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                                <Mail size={14} /> {selectedStaff.email}
-                                            </span>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                                                <Users size={14} /> Assignment status: {selectedStaff.role_assignment_status}
-                                            </span>
+                                            {editMode ? (
+                                                <>
+                                                    <label className="form-label">Full name</label>
+                                                    <input
+                                                        className="form-input"
+                                                        value={form.name}
+                                                        onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                                                    />
+                                                    <label className="form-label">Email</label>
+                                                    <input
+                                                        type="email"
+                                                        className="form-input"
+                                                        value={form.email}
+                                                        onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))}
+                                                    />
+                                                    <label className="form-label">Phone</label>
+                                                    <input
+                                                        className="form-input"
+                                                        value={form.phone}
+                                                        onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))}
+                                                        placeholder="+263..."
+                                                    />
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                                        <Mail size={14} /> {selectedStaff.email}
+                                                    </span>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                                        <Phone size={14} /> {selectedStaff.phone || 'No phone listed'}
+                                                    </span>
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                                        <Users size={14} /> Assignment status: {selectedStaff.role_assignment_status}
+                                                    </span>
+                                                </>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div className="modal-footer">
+                            {canManageDirectoryProfiles && (
+                                <>
+                                    {editMode ? (
+                                        <>
+                                            <label className="btn btn-secondary" style={{ marginRight: 'auto', cursor: uploadingAvatar ? 'wait' : 'pointer' }}>
+                                                <ImagePlus size={14} /> {uploadingAvatar ? 'Uploading...' : 'Upload Picture'}
+                                                <input
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/webp"
+                                                    style={{ display: 'none' }}
+                                                    onChange={handleAvatarUpload}
+                                                    disabled={uploadingAvatar}
+                                                />
+                                            </label>
+                                            <button className="btn btn-ghost" onClick={() => setEditMode(false)} disabled={saving}>
+                                                <X size={14} /> Cancel Edit
+                                            </button>
+                                            <button className="btn btn-primary" onClick={handleSaveProfile} disabled={saving}>
+                                                <Save size={14} /> {saving ? 'Saving...' : 'Save Profile'}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button className="btn btn-primary" onClick={() => setEditMode(true)}>
+                                            <Edit2 size={14} /> Edit Profile
+                                        </button>
+                                    )}
+                                </>
+                            )}
                             <button className="btn btn-secondary" onClick={() => setSelectedStaff(null)}>
                                 Close
                             </button>

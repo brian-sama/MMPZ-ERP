@@ -13,15 +13,128 @@ import {
     writeBase64Upload,
     DOCUMENT_MIME_TYPES,
     IMAGE_MIME_TYPES,
+    readUploadedFileAsDataUrl,
     removeUploadedFile,
 } from './utils/uploads.js';
+import postgres from 'postgres';
 
 const VOLUNTEER_UPLOAD_MIME_TYPES = [...DOCUMENT_MIME_TYPES, ...IMAGE_MIME_TYPES];
+const EXCEL_MIME_TYPES = [
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+const LEAVE_APPLICATION_ROLES = new Set([
+    'DIRECTOR',
+    'SYSTEM_ADMIN',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+    'PSYCHOSOCIAL_SUPPORT_OFFICER',
+    'COMMUNITY_DEVELOPMENT_OFFICER',
+    'ME_INTERN_ACTING_OFFICER',
+    'SOCIAL_SERVICES_INTERN',
+    'YOUTH_COMMUNICATIONS_INTERN',
+]);
+const REQUEST_FOR_FUNDS_ROLES = new Set([
+    'SYSTEM_ADMIN',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+    'PSYCHOSOCIAL_SUPPORT_OFFICER',
+    'COMMUNITY_DEVELOPMENT_OFFICER',
+    'ME_INTERN_ACTING_OFFICER',
+    'SOCIAL_SERVICES_INTERN',
+    'YOUTH_COMMUNICATIONS_INTERN',
+]);
+
+const getVolunteerSubmissionColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'volunteer_submissions'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const hasVolunteerRecipientTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'volunteer_submission_recipients'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
+const hasKoboFormLinksTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'kobo_form_links'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
+const buildVolunteerSubmissionSelect = (columns, recipientTableExists, actorId) => {
+    const has = (column) => columns.has(column);
+    const value = (column, fallback) =>
+        has(column)
+            ? `s.${column}`
+            : fallback;
+    const assignedExpr = recipientTableExists
+        ? `EXISTS (
+            SELECT 1
+            FROM volunteer_submission_recipients vsr
+            WHERE vsr.submission_id = s.id
+              AND vsr.user_id = ${Number(actorId) || 0}
+        )`
+        : 'FALSE';
+
+    return postgres.unsafe(`
+        s.id,
+        s.user_id,
+        u.name AS volunteer_name,
+        ${value('type', "''::text")} AS type,
+        ${value('assignment_id', 'NULL::int')} AS assignment_id,
+        ${value('project_id', 'NULL::int')} AS project_id,
+        p.name AS project_name,
+        ${value('title', 'NULL::text')} AS title,
+        ${value('content', 'NULL::text')} AS content,
+        ${value('file_path', 'NULL::text')} AS file_path,
+        ${value('file_name', 'NULL::text')} AS file_name,
+        ${value('mime_type', 'NULL::text')} AS mime_type,
+        ${value('description', 'NULL::text')} AS description,
+        ${value('created_at', 'CURRENT_TIMESTAMP')} AS created_at,
+        (${has('file_data') ? 'COALESCE(LENGTH(s.file_data), 0) > 0' : 'FALSE'} OR ${has('file_path') ? 's.file_path IS NOT NULL' : 'FALSE'}) AS has_file,
+        ${assignedExpr} AS assigned_to_actor
+    `);
+};
 
 const normalizeRecipientIds = (input) =>
     [...new Set((Array.isArray(input) ? input : [])
         .map((value) => Number.parseInt(value, 10))
         .filter((value) => Number.isInteger(value) && value > 0))];
+
+const normalizeUploadType = (value) => String(value || '').trim().toLowerCase();
+
+const isExcelUpload = (mimeType, fileName) =>
+    EXCEL_MIME_TYPES.includes(String(mimeType || '').toLowerCase()) ||
+    /\.(xlsx|xls)$/i.test(String(fileName || ''));
+
+const loadRecipientsByRoles = async (tx, roleCodes) => {
+    if (!Array.isArray(roleCodes) || roleCodes.length === 0) return [];
+    return tx`
+        SELECT id, name, role_code
+        FROM users
+        WHERE role_code = ANY(${roleCodes})
+    `;
+};
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -52,9 +165,23 @@ export const handler = async (event) => {
                 assigned_user_ids,
             } = body;
 
-            if (!type) return errorResponse('Submission type is required', 400);
+            const normalizedType = normalizeUploadType(type);
+
+            if (!normalizedType) return errorResponse('Submission type is required', 400);
             if (!fileData && !content && !description) {
                 return errorResponse('Provide narrative content, a file attachment, or a description', 400);
+            }
+            if (normalizedType === 'leave_application' && !LEAVE_APPLICATION_ROLES.has(actor.role_code)) {
+                return errorResponse('Only internal staff members can upload leave application forms.', 403);
+            }
+            if (normalizedType === 'request_for_funds_plan' && !REQUEST_FOR_FUNDS_ROLES.has(actor.role_code)) {
+                return errorResponse('Only officers and graduate trainees can upload request-for-funds plans.', 403);
+            }
+            if ((normalizedType === 'leave_application' || normalizedType === 'request_for_funds_plan') && !fileData) {
+                return errorResponse('This submission type requires a file attachment.', 400);
+            }
+            if (normalizedType === 'request_for_funds_plan' && !isExcelUpload(mimeType, fileName)) {
+                return errorResponse('Request-for-funds plans must be uploaded as an Excel file (.xls or .xlsx).', 400);
             }
 
             let uploadedFile = null;
@@ -64,7 +191,7 @@ export const handler = async (event) => {
                     fileName,
                     mimeType,
                     subdirectory: 'volunteer-submissions',
-                    prefix: type,
+                    prefix: normalizedType,
                     allowedMimeTypes: VOLUNTEER_UPLOAD_MIME_TYPES,
                     maxBytes: 8 * 1024 * 1024,
                 });
@@ -91,7 +218,7 @@ export const handler = async (event) => {
                         )
                         VALUES (
                             ${actor.id},
-                            ${type},
+                            ${normalizedType},
                             ${assignment_id || assignmentId || null},
                             ${project_id || projectId || null},
                             ${title || null},
@@ -106,15 +233,36 @@ export const handler = async (event) => {
                     `;
 
                     const submission = rows[0];
+                    const targetedRecipients = [];
+                    const addRecipients = (users) => {
+                        for (const user of users || []) {
+                            if (!targetedRecipients.some((recipient) => recipient.id === user.id)) {
+                                targetedRecipients.push(user);
+                            }
+                        }
+                    };
+
                     if (recipientIds.length > 0) {
                         const candidates = await tx`
                             SELECT id, name, role_code
                             FROM users
                             WHERE role_code <> 'DEVELOPMENT_FACILITATOR'
                         `;
-                        const validRecipients = candidates.filter((user) => recipientIds.includes(user.id));
+                        addRecipients(candidates.filter((user) => recipientIds.includes(user.id)));
+                    }
 
-                        for (const recipient of validRecipients) {
+                    if (normalizedType === 'leave_application') {
+                        addRecipients(
+                            await loadRecipientsByRoles(tx, ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'LOGISTICS_ASSISTANT'])
+                        );
+                    }
+
+                    if (normalizedType === 'request_for_funds_plan') {
+                        addRecipients(await loadRecipientsByRoles(tx, ['DIRECTOR']));
+                    }
+
+                    if (targetedRecipients.length > 0) {
+                        for (const recipient of targetedRecipients) {
                             await tx`
                                 INSERT INTO volunteer_submission_recipients (
                                     submission_id,
@@ -132,16 +280,52 @@ export const handler = async (event) => {
 
                         await createNotifications(
                             tx,
-                            validRecipients.map((recipient) => ({
+                            targetedRecipients.map((recipient) => ({
                                 userId: recipient.id,
                                 type: 'system',
-                                title: 'New facilitator report assigned',
-                                message: `${actor.name} assigned "${title || fileName || 'a field report'}" to you for review.`,
+                                title:
+                                    normalizedType === 'leave_application'
+                                        ? 'New leave application submitted'
+                                        : normalizedType === 'request_for_funds_plan'
+                                            ? 'Request-for-funds plan awaiting review'
+                                            : 'New facilitator report assigned',
+                                message:
+                                    normalizedType === 'leave_application'
+                                        ? `${actor.name} submitted a leave application for review.`
+                                        : normalizedType === 'request_for_funds_plan'
+                                            ? `${actor.name} submitted a request-for-funds plan that needs director approval.`
+                                            : `${actor.name} assigned "${title || fileName || 'a field report'}" to you for review.`,
                                 relatedEntityType: 'volunteer_submission',
                                 relatedEntityId: String(submission.id),
-                                actionUrl: uploadedFile?.publicPath || null,
+                                actionUrl:
+                                    normalizedType === 'leave_application' || normalizedType === 'request_for_funds_plan'
+                                        ? `/reports?submission=${submission.id}`
+                                        : '/my-portal',
                             }))
                         );
+                    }
+
+                    if (normalizedType === 'request_for_funds_plan') {
+                        await tx`
+                            INSERT INTO approvals (
+                                entity_type,
+                                entity_id,
+                                requested_by_user_id,
+                                status,
+                                current_step,
+                                amount,
+                                notes
+                            )
+                            VALUES (
+                                'volunteer_submission',
+                                ${String(submission.id)},
+                                ${actor.id},
+                                'pending',
+                                1,
+                                NULL,
+                                ${description || title || fileName || 'Request-for-funds plan'}
+                            )
+                        `;
                     }
 
                     return submission;
@@ -159,30 +343,17 @@ export const handler = async (event) => {
         if (path.startsWith('submissions') && method === 'GET') {
             const submissionId = path.split('/')[1] || null;
             let result;
+            const submissionColumns = await getVolunteerSubmissionColumns();
+            const recipientTableExists = await hasVolunteerRecipientTable();
+            const baseSelectColumns = buildVolunteerSubmissionSelect(
+                submissionColumns,
+                recipientTableExists,
+                actor.id
+            );
 
             const baseSelect = sql`
                 SELECT
-                    s.id,
-                    s.user_id,
-                    u.name AS volunteer_name,
-                    s.type,
-                    s.assignment_id,
-                    s.project_id,
-                    p.name AS project_name,
-                    s.title,
-                    s.content,
-                    s.file_path,
-                    s.file_name,
-                    s.mime_type,
-                    s.description,
-                    s.created_at,
-                    (COALESCE(LENGTH(s.file_data), 0) > 0 OR s.file_path IS NOT NULL) AS has_file,
-                    EXISTS (
-                        SELECT 1
-                        FROM volunteer_submission_recipients vsr
-                        WHERE vsr.submission_id = s.id
-                          AND vsr.user_id = ${actor.id}
-                    ) AS assigned_to_actor
+                    ${baseSelectColumns}
                 FROM volunteer_submissions s
                 JOIN users u ON s.user_id = u.id
                 LEFT JOIN projects p ON s.project_id = p.id
@@ -200,12 +371,12 @@ export const handler = async (event) => {
                         WHERE s.id = ${submissionId}
                           AND (
                               s.user_id = ${actor.id}
-                              OR EXISTS (
+                              OR ${recipientTableExists ? sql`EXISTS (
                                   SELECT 1
                                   FROM volunteer_submission_recipients vsr
                                   WHERE vsr.submission_id = s.id
                                     AND vsr.user_id = ${actor.id}
-                              )
+                              )` : sql`FALSE`}
                           )
                         LIMIT 1
                     `;
@@ -223,12 +394,12 @@ export const handler = async (event) => {
                 result = await sql`
                     ${baseSelect}
                     WHERE s.user_id = ${actor.id}
-                       OR EXISTS (
+                       OR ${recipientTableExists ? sql`EXISTS (
                             SELECT 1
                             FROM volunteer_submission_recipients vsr
                             WHERE vsr.submission_id = s.id
                               AND vsr.user_id = ${actor.id}
-                       )
+                       )` : sql`FALSE`}
                     ORDER BY s.created_at DESC
                 `;
             }
@@ -264,7 +435,12 @@ export const handler = async (event) => {
             if (!file.file_data && !file.file_path) {
                 return errorResponse('File is no longer available', 404);
             }
-            return successResponse(file);
+            return successResponse({
+                ...file,
+                file_data:
+                    file.file_data ||
+                    readUploadedFileAsDataUrl(file.file_path, file.mime_type || 'application/octet-stream'),
+            });
         }
 
         if (path.startsWith('activity-report') && method === 'POST') {
@@ -302,6 +478,12 @@ export const handler = async (event) => {
         if (path.startsWith('kobo-request')) {
             if (method === 'POST') {
                 ensurePermission(actor, 'volunteer.submit');
+                if (!(await hasKoboFormLinksTable())) {
+                    return errorResponse(
+                        'KoBo request storage is not available until the latest database migrations are applied.',
+                        503
+                    );
+                }
                 const { formUid, formName, indicatorId } = body;
                 if (!formUid || !indicatorId) return errorResponse('formUid and indicatorId are required', 400);
 
@@ -329,6 +511,9 @@ export const handler = async (event) => {
 
             if (method === 'GET') {
                 ensurePermission(actor, 'volunteer.read_own', { allowPending: true });
+                if (!(await hasKoboFormLinksTable())) {
+                    return successResponse([]);
+                }
                 const requests = await sql`
                     SELECT
                         kfl.*,

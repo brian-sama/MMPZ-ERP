@@ -4,9 +4,9 @@ services:
     container_name: mmpz_erp_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: mmpz_admin
-      POSTGRES_PASSWORD: Brian7350
-      POSTGRES_DB: mmpz_db
+      POSTGRES_USER: ${MMPZ_DB_USER:-mmpz_admin}
+      POSTGRES_PASSWORD: ${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}
+      POSTGRES_DB: ${MMPZ_DB_NAME:-mmpz_db}
     volumes:
       - mmpz_db_data:/var/lib/postgresql/data
       - ./database:/docker-init-scripts
@@ -31,9 +31,11 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
+      DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
       MMPZ_API_URL: https://mmpzmne.co.zw/api
+      MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:?MMPZ_AUTH_SECRET is required}
       PORT: 3000
+      RUN_DB_MIGRATIONS_ON_STARTUP: "false"
     healthcheck:
       test:
         [
@@ -63,7 +65,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://mmpz_admin:Brian7350@db:5432/mmpz_db
+      - DATABASE_URL=postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
     healthcheck:
       test:
         [

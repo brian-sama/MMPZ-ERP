@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 import API_BASE from '../apiConfig';
 import {
     FilePieChart, Download, FileText, Table,
-    Filter, Calendar, ChevronRight, BarChartHorizontal
+    Filter, Calendar, ChevronRight, BarChartHorizontal, Upload, ClipboardList
 } from 'lucide-react';
 
 const REPORT_TEMPLATES = [
@@ -15,6 +15,14 @@ const REPORT_TEMPLATES = [
     { id: 'procurement_audit', name: 'Procurement Audit Trail', icon: BarChartHorizontal, desc: 'Full lifecycle of all purchase requests and management approvals.' }
 ];
 
+const fileToBase64 = (file) =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+    });
+
 export default function ReportsPage() {
     const { user } = useAuth();
     const [selectedReport, setSelectedReport] = useState(null);
@@ -22,6 +30,38 @@ export default function ReportsPage() {
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [format, setFormat] = useState('pdf');
+    const [submissionType, setSubmissionType] = useState('leave_application');
+    const [submissionTitle, setSubmissionTitle] = useState('');
+    const [submissionDescription, setSubmissionDescription] = useState('');
+    const [submissionFile, setSubmissionFile] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const [submissions, setSubmissions] = useState([]);
+
+    const canUploadLeaveApplication = user?.role_code !== 'DEVELOPMENT_FACILITATOR';
+    const canUploadRequestForFunds = [
+        'FINANCE_ADMIN_OFFICER',
+        'ADMIN_ASSISTANT',
+        'LOGISTICS_ASSISTANT',
+        'COMMUNITY_DEVELOPMENT_OFFICER',
+        'PSYCHOSOCIAL_SUPPORT_OFFICER',
+        'ME_INTERN_ACTING_OFFICER',
+        'SOCIAL_SERVICES_INTERN',
+        'YOUTH_COMMUNICATIONS_INTERN',
+    ].includes(user?.role_code);
+    const availableSubmissionTypes = [
+        canUploadLeaveApplication ? {
+            value: 'leave_application',
+            label: 'Leave Application Form',
+            helper: 'Route staff leave documentation to the Director, Finance, and Logistics reviewers.',
+            accept: '.pdf,.doc,.docx,.jpg,.jpeg,.png',
+        } : null,
+        canUploadRequestForFunds ? {
+            value: 'request_for_funds_plan',
+            label: 'Request for Funds Plan',
+            helper: 'Upload the Excel plan for director approval before it reaches the finance team.',
+            accept: '.xls,.xlsx',
+        } : null,
+    ].filter(Boolean);
 
     const handleGenerate = async () => {
         if (!selectedReport) return;
@@ -67,6 +107,90 @@ export default function ReportsPage() {
             alert('Failed to generate report');
         } finally {
             setGenerating(false);
+        }
+    };
+
+    const fetchOperationalSubmissions = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/volunteer/submissions`, {
+                params: { userId: user.id },
+            });
+            setSubmissions(
+                (res.data || []).filter((item) =>
+                    ['leave_application', 'request_for_funds_plan'].includes(item.type)
+                )
+            );
+        } catch (error) {
+            console.error('Failed to load operational submissions', error);
+        }
+    };
+
+    useEffect(() => {
+        if (availableSubmissionTypes.length > 0) {
+            setSubmissionType((current) =>
+                availableSubmissionTypes.some((option) => option.value === current)
+                    ? current
+                    : availableSubmissionTypes[0].value
+            );
+        }
+        fetchOperationalSubmissions();
+    }, [user.id]);
+
+    const handleSubmission = async (event) => {
+        event.preventDefault();
+        if (!submissionFile) {
+            alert('Please attach the completed file first.');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const fileData = await fileToBase64(submissionFile);
+            await axios.post(`${API_BASE}/volunteer/submit`, {
+                userId: user.id,
+                type: submissionType,
+                title: submissionTitle || submissionFile.name,
+                description: submissionDescription,
+                fileData,
+                fileName: submissionFile.name,
+                mimeType: submissionFile.type,
+            });
+            setSubmissionTitle('');
+            setSubmissionDescription('');
+            setSubmissionFile(null);
+            setSubmissionType(availableSubmissionTypes[0]?.value || 'leave_application');
+            await fetchOperationalSubmissions();
+            alert(
+                submissionType === 'request_for_funds_plan'
+                    ? 'Request-for-funds plan sent to the Director for approval.'
+                    : 'Leave application sent to the Director, Finance, and Logistics reviewers.'
+            );
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to submit document');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const downloadSubmission = async (submission) => {
+        try {
+            const res = await axios.get(`${API_BASE}/volunteer/download/${submission.id}`, {
+                params: { userId: user.id },
+            });
+            const fileData = res.data?.file_data;
+            if (!fileData) {
+                alert('Attachment is no longer available.');
+                return;
+            }
+
+            const link = document.createElement('a');
+            link.href = fileData;
+            link.download = submission.file_name || submission.title || 'submission';
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (error) {
+            alert(error.response?.data?.error || 'Failed to download attachment');
         }
     };
 
@@ -163,6 +287,123 @@ export default function ReportsPage() {
                         </div>
                     )}
                 </div>
+            </div>
+
+            {availableSubmissionTypes.length > 0 && (
+                <div className="panel" style={{ marginTop: '24px' }}>
+                    <div className="panel-header">
+                        <h2 className="panel-title">Operational Uploads</h2>
+                    </div>
+                    <form onSubmit={handleSubmission} style={{ padding: '24px', display: 'grid', gap: '18px' }}>
+                        <div className="form-group">
+                            <label className="form-label">Submission Type</label>
+                            <select
+                                className="form-input"
+                                value={submissionType}
+                                onChange={(event) => {
+                                    setSubmissionType(event.target.value);
+                                    setSubmissionFile(null);
+                                }}
+                            >
+                                {availableSubmissionTypes.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                        {option.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <div className="form-hint">
+                                {availableSubmissionTypes.find((option) => option.value === submissionType)?.helper}
+                            </div>
+                        </div>
+
+                        <div className="reports-date-range" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div className="form-group">
+                                <label className="form-label">Title</label>
+                                <input
+                                    className="form-input"
+                                    value={submissionTitle}
+                                    onChange={(event) => setSubmissionTitle(event.target.value)}
+                                    placeholder={submissionType === 'request_for_funds_plan' ? 'April request for funds plan' : 'Annual leave application'}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Attachment</label>
+                                <input
+                                    type="file"
+                                    className="form-input"
+                                    accept={availableSubmissionTypes.find((option) => option.value === submissionType)?.accept}
+                                    onChange={(event) => setSubmissionFile(event.target.files?.[0] || null)}
+                                    required
+                                />
+                            </div>
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">Notes</label>
+                            <textarea
+                                className="form-input"
+                                style={{ minHeight: '110px' }}
+                                value={submissionDescription}
+                                onChange={(event) => setSubmissionDescription(event.target.value)}
+                                placeholder="Add context for the reviewers and approvers."
+                            />
+                        </div>
+
+                        <button type="submit" className="btn btn-primary" disabled={submitting}>
+                            <Upload size={16} /> {submitting ? 'Submitting...' : 'Submit for Review'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            <div className="panel" style={{ marginTop: '24px' }}>
+                <div className="panel-header">
+                    <h2 className="panel-title">Operational Inbox</h2>
+                </div>
+                {submissions.length === 0 ? (
+                    <div className="empty-state" style={{ padding: '36px 20px' }}>
+                        <div className="empty-state-icon"><ClipboardList size={28} /></div>
+                        <div className="empty-state-title">No leave or funds submissions yet</div>
+                        <p className="empty-state-text">Submitted operational forms will appear here for follow-up and download.</p>
+                    </div>
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Title</th>
+                                    <th>Submitted By</th>
+                                    <th>Date</th>
+                                    <th>File</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {submissions.map((submission) => (
+                                    <tr key={submission.id}>
+                                        <td>
+                                            <span className="badge badge-info">
+                                                {submission.type === 'request_for_funds_plan' ? 'Request for Funds' : 'Leave Application'}
+                                            </span>
+                                        </td>
+                                        <td>{submission.title || submission.file_name || 'Untitled submission'}</td>
+                                        <td>{submission.volunteer_name || 'Staff member'}</td>
+                                        <td>{new Date(submission.created_at).toLocaleDateString()}</td>
+                                        <td>
+                                            {submission.has_file ? (
+                                                <button className="btn btn-ghost btn-sm" onClick={() => downloadSubmission(submission)}>
+                                                    <Download size={14} />
+                                                </button>
+                                            ) : (
+                                                <span className="form-hint">No file</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
             </div>
         </div>
     );

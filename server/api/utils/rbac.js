@@ -92,6 +92,8 @@ const rolePermissionFallbacks = {
         'expense.review_finance',
         'settings.finance_threshold.read',
         'approval.read',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     ADMIN_ASSISTANT: [
         'user.view',
@@ -102,12 +104,16 @@ const rolePermissionFallbacks = {
         'activity.read',
         'approval.read',
         'governance.pending_roles.read',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     LOGISTICS_ASSISTANT: [
         'indicator.read_assigned',
         'activity.read',
         'expense.read',
         'expense.create',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     PSYCHOSOCIAL_SUPPORT_OFFICER: [
         'program.read',
@@ -121,6 +127,8 @@ const rolePermissionFallbacks = {
         'activity.read',
         'activity.create',
         'expense.create',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     COMMUNITY_DEVELOPMENT_OFFICER: [
         'program.read',
@@ -134,6 +142,8 @@ const rolePermissionFallbacks = {
         'activity.read',
         'activity.create',
         'expense.create',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     ME_INTERN_ACTING_OFFICER: [
         'program.read',
@@ -142,6 +152,8 @@ const rolePermissionFallbacks = {
         'indicator.update',
         'activity.read',
         'approval.read',
+        'volunteer.submit',
+        'volunteer.read_own',
     ],
     SOCIAL_SERVICES_INTERN: [
         'indicator.read_assigned',
@@ -273,10 +285,19 @@ export const getUserContext = async (userId) => {
         permissions.add(permission);
     }
 
+    // System admins should always resolve to full platform permissions even when
+    // production RBAC seed data is partial or stale.
+    if (user.role_code === 'SYSTEM_ADMIN') {
+        const allPermissionRows = await sql`SELECT code FROM permissions`;
+        for (const row of allPermissionRows) {
+            permissions.add(row.code);
+        }
+    }
+
     // Production can lag behind RBAC seed data, especially for executive roles.
     if (
         permissions.size === 0 &&
-        (user.role_code === 'DIRECTOR' || user.role_code === 'SYSTEM_ADMIN')
+        user.role_code === 'DIRECTOR'
     ) {
         const allPermissionRows = await sql`SELECT code FROM permissions`;
         for (const row of allPermissionRows) {

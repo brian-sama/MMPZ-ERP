@@ -40,6 +40,7 @@ export default function SettingsPage() {
     const [koboSaving, setKoboSaving] = useState(false);
     const [koboMessage, setKoboMessage] = useState('');
     const [koboError, setKoboError] = useState('');
+    const [koboStorageReady, setKoboStorageReady] = useState(true);
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -60,16 +61,19 @@ export default function SettingsPage() {
 
     const fetchKoboConfig = async () => {
         setKoboLoading(true);
+        setKoboError('');
         try {
             const res = await axios.get(`${API_BASE}/kobo/config`, {
                 params: { userId: user.id },
             });
+            setKoboStorageReady(res.data?.storage_ready !== false);
             setKoboConfig({
                 server_url: res.data.server_url || 'https://kf.kobotoolbox.org',
                 api_token: res.data.api_token || '',
             });
         } catch (err) {
-            console.error('Failed to load KoBo config');
+            setKoboStorageReady(false);
+            setKoboError(err.response?.data?.error || 'Failed to load KoBo configuration.');
         } finally {
             setKoboLoading(false);
         }
@@ -108,6 +112,11 @@ export default function SettingsPage() {
         setKoboSaving(true);
         setKoboMessage('');
         setKoboError('');
+        if (!koboStorageReady) {
+            setKoboError('KoBo configuration storage is not available until the latest database migrations are applied.');
+            setKoboSaving(false);
+            return;
+        }
         try {
             const res = await axios.post(`${API_BASE}/kobo/config`, {
                 userId: user.id,

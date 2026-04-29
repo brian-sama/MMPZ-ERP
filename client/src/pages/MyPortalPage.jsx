@@ -48,6 +48,8 @@ export default function MyPortalPage() {
     const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
     const [attendanceStatus, setAttendanceStatus] = useState('present');
     const [attendanceSaved, setAttendanceSaved] = useState(false);
+    const [portalMessage, setPortalMessage] = useState('');
+    const isDocumentReport = reportType === 'activity_plan' || reportType === 'activity_report';
 
     useEffect(() => {
         fetchPortalData();
@@ -69,8 +71,9 @@ export default function MyPortalPage() {
 
     const fetchPortalData = async () => {
         setLoading(true);
+        setPortalMessage('');
         try {
-            const [assignmentRes, indicatorRes, userRes, submissionRes] = await Promise.all([
+            const [assignmentRes, indicatorRes, userRes, submissionRes] = await Promise.allSettled([
                 axios.get(`${API_BASE}/facilitator-assignments`, {
                     params: { facilitator_id: user.id, userId: user.id },
                 }),
@@ -79,18 +82,41 @@ export default function MyPortalPage() {
                 axios.get(`${API_BASE}/volunteer/submissions`, { params: { userId: user.id } }),
             ]);
 
-            setAssignments(assignmentRes.data || []);
-            setIndicators(indicatorRes.data || []);
-            setRecipients(
-                (userRes.data || []).filter((item) => item.role_code !== 'DEVELOPMENT_FACILITATOR')
-            );
-            setSubmissions(submissionRes.data || []);
+            const nextAssignments =
+                assignmentRes.status === 'fulfilled' ? (assignmentRes.value.data || []) : [];
+            const nextIndicators =
+                indicatorRes.status === 'fulfilled' ? (indicatorRes.value.data || []) : [];
+            const nextRecipients = userRes.status === 'fulfilled'
+                ? (userRes.value.data || []).filter((item) => item.role_code !== 'DEVELOPMENT_FACILITATOR')
+                : [];
+            const nextSubmissions =
+                submissionRes.status === 'fulfilled' ? (submissionRes.value.data || []) : [];
 
-            if ((assignmentRes.data || []).length > 0) {
-                setSelectedAsgn(assignmentRes.data[0]);
+            setAssignments(nextAssignments);
+            setIndicators(nextIndicators);
+            setRecipients(nextRecipients);
+            setSubmissions(nextSubmissions);
+
+            if (nextAssignments.length > 0) {
+                setSelectedAsgn((current) =>
+                    nextAssignments.find((assignment) => assignment.id === current?.id) || nextAssignments[0]
+                );
+            } else {
+                setSelectedAsgn(null);
+            }
+
+            const failedSections = [];
+            if (assignmentRes.status === 'rejected') failedSections.push('assignments');
+            if (indicatorRes.status === 'rejected') failedSections.push('indicator data');
+            if (userRes.status === 'rejected') failedSections.push('recipient directory');
+            if (submissionRes.status === 'rejected') failedSections.push('submission history');
+
+            if (failedSections.length > 0) {
+                setPortalMessage(`Some portal sections could not be loaded: ${failedSections.join(', ')}.`);
             }
         } catch (error) {
             console.error('Failed to fetch facilitator portal data', error);
+            setPortalMessage('Some portal information could not be loaded right now.');
         } finally {
             setLoading(false);
         }
@@ -134,27 +160,27 @@ export default function MyPortalPage() {
 
     const submitReport = async (event) => {
         event.preventDefault();
-        if (!selectedAsgn) return;
-        if (reportType === 'weekly' && newReport.recipients.length === 0) {
+        if (reportType === 'activity' && !selectedAsgn) return;
+        if (isDocumentReport && newReport.recipients.length === 0) {
             alert('Select at least one non-facilitator recipient for this report.');
             return;
         }
 
         setSubmittingReport(true);
         try {
-            if (reportType === 'weekly') {
+            if (isDocumentReport) {
                 const fileData = newReport.attachment ? await fileToBase64(newReport.attachment) : null;
                 await axios.post(`${API_BASE}/volunteer/submit`, {
                     userId: user.id,
-                    type: 'report',
+                    type: reportType,
                     title: newReport.title,
                     content: newReport.content,
                     description: `${newReport.title}: ${newReport.content}`.trim(),
                     fileData,
                     fileName: newReport.attachment?.name || null,
                     mimeType: newReport.attachment?.type || null,
-                    assignmentId: selectedAsgn.id,
-                    projectId: selectedAsgn.project_id,
+                    assignmentId: selectedAsgn?.id || null,
+                    projectId: selectedAsgn?.project_id || null,
                     recipients: newReport.recipients,
                 });
             } else {
@@ -189,8 +215,14 @@ export default function MyPortalPage() {
         <div className="fade-in">
             <PageHeader
                 title="Facilitator Portal"
-                subtitle="Log attendance, submit field reports, and route weekly narratives to the right staff."
+                subtitle="Log attendance, upload activity plans and reports, and route field updates to the right staff."
             />
+
+            {portalMessage && (
+                <div className="page-message error" style={{ marginBottom: '20px' }}>
+                    {portalMessage}
+                </div>
+            )}
 
             <div className="panels-row facilitator-portal-layout">
                 <div className="facilitator-portal-sidebar" style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -321,14 +353,26 @@ export default function MyPortalPage() {
                                 </div>
                             </button>
 
-                            <button className="control-row" onClick={() => openReportModal('weekly')} style={{ minHeight: '110px' }}>
+                            <button className="control-row" onClick={() => openReportModal('activity_plan')} style={{ minHeight: '110px' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                     <div className="kpi-icon-wrap" style={{ width: '36px', height: '36px', background: '#3b82f61a', color: '#3b82f6' }}>
                                         <Calendar size={18} />
                                     </div>
                                     <div>
-                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Weekly Narrative</div>
-                                        <div className="form-hint" style={{ fontSize: '11px' }}>Save a report and assign it to HQ staff</div>
+                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Upload Activity Plan</div>
+                                        <div className="form-hint" style={{ fontSize: '11px' }}>Share the planned work with HQ staff</div>
+                                    </div>
+                                </div>
+                            </button>
+
+                            <button className="control-row" onClick={() => openReportModal('activity_report')} style={{ minHeight: '110px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div className="kpi-icon-wrap" style={{ width: '36px', height: '36px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb' }}>
+                                        <Send size={18} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Upload Activity Report</div>
+                                        <div className="form-hint" style={{ fontSize: '11px' }}>Save a completed report and assign it to HQ staff</div>
                                     </div>
                                 </div>
                             </button>
@@ -362,7 +406,7 @@ export default function MyPortalPage() {
                                 </div>
                                 <div className="empty-state-title">No submissions yet</div>
                                 <p className="empty-state-text">
-                                    Save your first weekly narrative or activity update from the shortcuts above.
+                                    Save your first activity plan, report, or field update from the shortcuts above.
                                 </p>
                             </div>
                         )}
@@ -374,7 +418,7 @@ export default function MyPortalPage() {
                             <div>
                                 <div style={{ fontWeight: 600, fontSize: '13px' }}>Reporting note</div>
                                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                    Weekly narratives can include PDF or Word evidence files and can be assigned to one or multiple non-facilitator staff members.
+                                    Activity plans and reports can include PDF or Word files and can be assigned to one or multiple non-facilitator staff members.
                                 </p>
                             </div>
                         </div>
@@ -387,7 +431,11 @@ export default function MyPortalPage() {
                     <div className="modal-box lg" onClick={(event) => event.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title">
-                                {reportType === 'weekly' ? 'Submit Weekly Narrative' : 'Log Field Activity Data'}
+                                {reportType === 'activity'
+                                    ? 'Log Field Activity Data'
+                                    : reportType === 'activity_plan'
+                                        ? 'Upload Activity Plan'
+                                        : 'Upload Activity Report'}
                             </div>
                             <button className="modal-close" onClick={() => setShowReportModal(false)}>
                                 ×
@@ -403,15 +451,21 @@ export default function MyPortalPage() {
                                     </div>
                                 </div>
 
-                                {reportType === 'weekly' ? (
+                                {isDocumentReport ? (
                                     <>
                                         <div className="form-group">
-                                            <label className="form-label">Report Title</label>
+                                            <label className="form-label">
+                                                {reportType === 'activity_plan' ? 'Plan Title' : 'Report Title'}
+                                            </label>
                                             <input
                                                 type="text"
                                                 className="form-input"
                                                 required
-                                                placeholder="e.g. Week 4 Implementation - Harare South"
+                                                placeholder={
+                                                    reportType === 'activity_plan'
+                                                        ? 'e.g. May Community Outreach Plan - Harare South'
+                                                        : 'e.g. Week 4 Implementation Report - Harare South'
+                                                }
                                                 value={newReport.title}
                                                 onChange={(event) =>
                                                     setNewReport((current) => ({ ...current, title: event.target.value }))
@@ -420,12 +474,18 @@ export default function MyPortalPage() {
                                         </div>
 
                                         <div className="form-group">
-                                            <label className="form-label">Executive Summary / Narrative</label>
+                                            <label className="form-label">
+                                                {reportType === 'activity_plan' ? 'Plan Summary' : 'Executive Summary / Narrative'}
+                                            </label>
                                             <textarea
                                                 className="form-input"
                                                 required
                                                 style={{ minHeight: '180px' }}
-                                                placeholder="Describe the key activities, achievements and challenges..."
+                                                placeholder={
+                                                    reportType === 'activity_plan'
+                                                        ? 'Describe the planned activities, intended outputs, timeline and support required...'
+                                                        : 'Describe the key activities, achievements and challenges...'
+                                                }
                                                 value={newReport.content}
                                                 onChange={(event) =>
                                                     setNewReport((current) => ({ ...current, content: event.target.value }))
@@ -434,7 +494,9 @@ export default function MyPortalPage() {
                                         </div>
 
                                         <div className="form-group">
-                                            <label className="form-label">Attach PDF or Word Report</label>
+                                            <label className="form-label">
+                                                {reportType === 'activity_plan' ? 'Attach PDF or Word Plan' : 'Attach PDF or Word Report'}
+                                            </label>
                                             <input
                                                 type="file"
                                                 className="form-input"
@@ -447,7 +509,7 @@ export default function MyPortalPage() {
                                                 }
                                             />
                                             <p className="form-hint">
-                                                Optional, but recommended when you have a formatted report or supporting evidence.
+                                                Optional, but recommended when you have a formatted document or supporting evidence.
                                             </p>
                                         </div>
 
@@ -472,7 +534,7 @@ export default function MyPortalPage() {
                                                 ))}
                                             </div>
                                             <p className="form-hint">
-                                                Select one or more staff members who should receive this weekly narrative.
+                                                Select one or more staff members who should receive this submission.
                                             </p>
                                         </div>
                                     </>

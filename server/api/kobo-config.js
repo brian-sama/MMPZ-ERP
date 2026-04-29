@@ -10,6 +10,18 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 
+const hasKoboConfigTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'kobo_config'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -24,6 +36,14 @@ export const handler = async (event) => {
             ensureAnyPermission(actor, ['kobo.manage', 'kobo.sync', 'approval.read'], {
                 allowPending: true,
             });
+            if (!(await hasKoboConfigTable())) {
+                return successResponse({
+                    server_url: 'https://kf.kobotoolbox.org',
+                    api_token: '',
+                    is_connected: false,
+                    storage_ready: false,
+                });
+            }
             const configs = await sql`SELECT * FROM kobo_config LIMIT 1`;
             const data = configs.length > 0 ? configs[0] : null;
             return successResponse(
@@ -38,6 +58,12 @@ export const handler = async (event) => {
         // POST - Save config
         if (method === 'POST') {
             ensurePermission(actor, 'kobo.manage');
+            if (!(await hasKoboConfigTable())) {
+                return errorResponse(
+                    'KoBo configuration storage is not available until the database migrations are applied.',
+                    503
+                );
+            }
             const { server_url, api_token } = body;
             if (!server_url || !api_token) {
                 return errorResponse('server_url and api_token are required', 400);

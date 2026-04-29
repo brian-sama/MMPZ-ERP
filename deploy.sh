@@ -85,6 +85,9 @@ log "Starting database first."
 $DC_CMD up -d db
 wait_for_health "$DB_CONTAINER" 120
 
+log "Running controlled database migration step."
+$DC_CMD run --rm -e RUN_DB_MIGRATIONS_ON_STARTUP=false app npm run db:migrate:all
+
 log "Starting application and analytics services."
 $DC_CMD up -d --remove-orphans app streamlit
 wait_for_health "$APP_CONTAINER" 240

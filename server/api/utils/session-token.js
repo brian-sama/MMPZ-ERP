@@ -4,8 +4,13 @@ const DEFAULT_TTL_SECONDS = 60 * 60 * 12;
 const TOKEN_SECRET =
     process.env.MMPZ_AUTH_SECRET ||
     process.env.AUTH_SECRET ||
-    process.env.SESSION_SECRET ||
-    'mmpz-local-dev-secret-change-me';
+    process.env.SESSION_SECRET;
+
+if (!TOKEN_SECRET) {
+    throw new Error(
+        'Missing session token secret. Set MMPZ_AUTH_SECRET (or AUTH_SECRET / SESSION_SECRET) before starting the server.'
+    );
+}
 
 const base64UrlEncode = (value) =>
     Buffer.from(value)

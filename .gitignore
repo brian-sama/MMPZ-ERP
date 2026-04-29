@@ -49,6 +49,7 @@ Thumbs.db
 npm-debug.log*
 
 # Runtime data
+uploads/
 platform/uploads/*
 !platform/uploads/documents/
 !platform/uploads/avatars/

@@ -74,7 +74,7 @@ export default function TopBar({ title, onToggleMenu, mobileMenuOpen }) {
         setShowNotifications(false);
         if (!notification.action_url) return;
         if (notification.action_url.startsWith('/uploads/')) {
-            window.open(notification.action_url, '_blank', 'noopener,noreferrer');
+            navigate('/my-portal');
             return;
         }
         if (notification.action_url.startsWith('/')) {

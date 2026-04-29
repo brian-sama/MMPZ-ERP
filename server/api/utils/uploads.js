@@ -104,6 +104,20 @@ export const removeUploadedFile = (publicPath) => {
     }
 };
 
+export const resolveUploadedFilePath = (publicPath) => {
+    if (!publicPath) return null;
+    const relativePath = String(publicPath).replace(/^\/?uploads[\\/]/, '');
+    const absolutePath = path.join(UPLOADS_ROOT, relativePath);
+    return fs.existsSync(absolutePath) ? absolutePath : null;
+};
+
+export const readUploadedFileAsDataUrl = (publicPath, mimeType = 'application/octet-stream') => {
+    const absolutePath = resolveUploadedFilePath(publicPath);
+    if (!absolutePath) return null;
+    const fileBuffer = fs.readFileSync(absolutePath);
+    return `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+};
+
 export const DOCUMENT_MIME_TYPES = [
     'application/pdf',
     'application/msword',

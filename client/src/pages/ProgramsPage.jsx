@@ -36,7 +36,7 @@ const createBlankForm = (type, userId) => ({
 });
 
 export default function ProgramsPage() {
-    const { user, hasRole } = useAuth();
+    const { user, hasRole, isSuperAdmin } = useAuth();
     const [view, setView] = useState('programs');
     const [programs, setPrograms] = useState([]);
     const [projects, setProjects] = useState([]);
@@ -53,7 +53,9 @@ export default function ProgramsPage() {
     const [formData, setFormData] = useState(createBlankForm('program', user?.id));
     const currentEntityType = view === 'activities' ? 'activity' : view.slice(0, -1);
 
-    const canCreate = hasRole('DIRECTOR', 'ADMIN_ASSISTANT', 'COMMUNITY_DEVELOPMENT_OFFICER');
+    const canCreate =
+        isSuperAdmin() ||
+        hasRole('DIRECTOR', 'ADMIN_ASSISTANT', 'COMMUNITY_DEVELOPMENT_OFFICER');
 
     const fetchPrograms = async () => {
         setLoading(true);

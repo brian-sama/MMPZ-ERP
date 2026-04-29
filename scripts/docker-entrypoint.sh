@@ -24,7 +24,7 @@ if [ $attempts -eq $max_attempts ]; then
     exit 1
 fi
 
-if [ "${RUN_DB_MIGRATIONS_ON_STARTUP:-true}" = "true" ]; then
+if [ "${RUN_DB_MIGRATIONS_ON_STARTUP:-false}" = "true" ]; then
     echo "Running database migrations..."
     if ! npm run db:migrate:all; then
         echo "Migration failed. Check logs for details."

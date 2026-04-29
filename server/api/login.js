@@ -5,6 +5,11 @@ import { comparePassword } from './utils/auth.js';
 import { resolveSystemRole, toLegacyRole } from './utils/rbac.js';
 import { issueSessionToken } from './utils/session-token.js';
 
+const ACCOUNT_LOCK_DURATION_MS = 15 * 60 * 1000;
+const IP_WINDOW_MS = 15 * 60 * 1000;
+const IP_MAX_ATTEMPTS = 10;
+const ipAttemptTracker = new Map();
+
 const getUserColumns = async () => {
     const rows = await sql`
         SELECT column_name
@@ -90,6 +95,50 @@ const updateSuccessfulLoginState = async (availableColumns, userId) => {
     );
 };
 
+const getClientIp = (event) => {
+    const headers = event?.headers || {};
+    const forwardedFor =
+        headers['x-forwarded-for'] ||
+        headers['X-Forwarded-For'] ||
+        headers['x-real-ip'] ||
+        headers['X-Real-IP'] ||
+        '';
+    return String(forwardedFor).split(',')[0].trim() || 'unknown';
+};
+
+const getIpRecord = (ip) => {
+    const now = Date.now();
+    const current = ipAttemptTracker.get(ip);
+    if (!current || now > current.resetAt) {
+        const nextRecord = { attempts: 0, resetAt: now + IP_WINDOW_MS };
+        ipAttemptTracker.set(ip, nextRecord);
+        return nextRecord;
+    }
+    return current;
+};
+
+const ensureIpAllowed = (ip) => {
+    const record = getIpRecord(ip);
+    if (record.attempts >= IP_MAX_ATTEMPTS) {
+        const retryAfterSeconds = Math.max(60, Math.ceil((record.resetAt - Date.now()) / 1000));
+        return errorResponse(
+            `Too many failed login attempts from this network. Try again in about ${Math.ceil(retryAfterSeconds / 60)} minutes.`,
+            429
+        );
+    }
+    return null;
+};
+
+const recordIpFailure = (ip) => {
+    const record = getIpRecord(ip);
+    record.attempts += 1;
+    ipAttemptTracker.set(ip, record);
+};
+
+const clearIpFailures = (ip) => {
+    ipAttemptTracker.delete(ip);
+};
+
 export const handler = async (event) => {
     // Handle CORS preflight
     if (event.httpMethod === 'OPTIONS') {
@@ -103,11 +152,15 @@ export const handler = async (event) => {
 
     try {
         const { email, password } = parseBody(event);
+        const clientIp = getClientIp(event);
 
         // Validate input
         if (!email || !password) {
             return errorResponse('Email and password are required', 400);
         }
+
+        const ipLimitResponse = ensureIpAllowed(clientIp);
+        if (ipLimitResponse) return ipLimitResponse;
 
         // Query user from PostgreSQL
         let users;
@@ -122,6 +175,7 @@ export const handler = async (event) => {
         }
 
         if (!users || users.length === 0) {
+            recordIpFailure(clientIp);
             return errorResponse('Invalid email or password', 401);
         }
 
@@ -133,13 +187,24 @@ export const handler = async (event) => {
 
         // Check if account is locked
         if (user.locked_at) {
-            return errorResponse('Account is locked due to multiple failed login attempts. Please contact a System Administrator to reset your password.', 403);
+            const lockAgeMs = Date.now() - new Date(user.locked_at).getTime();
+            if (Number.isFinite(lockAgeMs) && lockAgeMs >= ACCOUNT_LOCK_DURATION_MS) {
+                await updateSuccessfulLoginState(availableColumns, user.id);
+                user.locked_at = null;
+                user.failed_login_attempts = 0;
+            } else {
+                return errorResponse(
+                    'Account is temporarily locked due to multiple failed login attempts. Please try again later or contact a System Administrator.',
+                    403
+                );
+            }
         }
 
         // Verify password
         const isValid = await comparePassword(password, user.password_hash);
 
         if (!isValid) {
+            recordIpFailure(clientIp);
             const newFailedAttempts = (user.failed_login_attempts || 0) + 1;
             
             if (newFailedAttempts >= 3) {
@@ -155,6 +220,7 @@ export const handler = async (event) => {
         const systemRole = resolveSystemRole(user.role_code, user.system_role);
         try {
             await updateSuccessfulLoginState(availableColumns, user.id);
+            clearIpFailures(clientIp);
         } catch (updateError) {
             console.error('Error updating user login stats:', updateError);
         }

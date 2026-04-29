@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { sql } from './utils/db.js';
 import { getAuthenticatedUserId } from './utils/rbac.js';
+import { getUserContext } from './utils/rbac.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,9 +49,23 @@ export const handler = (req, res) => {
         try {
             // Get user from authentication (assuming session token is passed in headers)
             // Note: Since multer is used, req.headers is available
-            const userId = getAuthenticatedUserId({ headers: req.headers });
-            if (!userId) {
+            const authenticatedUserId = getAuthenticatedUserId({ headers: req.headers });
+            if (!authenticatedUserId) {
                 return res.status(401).json({ error: 'Unauthorized' });
+            }
+
+            const actor = await getUserContext(authenticatedUserId);
+            const requestedTargetId = Number.parseInt(
+                req.body?.targetUserId || req.body?.userId || '',
+                10
+            );
+            const targetUserId =
+                Number.isInteger(requestedTargetId) && requestedTargetId > 0
+                    ? requestedTargetId
+                    : authenticatedUserId;
+
+            if (targetUserId !== authenticatedUserId && actor.system_role !== 'SUPER_ADMIN') {
+                return res.status(403).json({ error: 'Only a System Admin can upload profile photos for other users' });
             }
 
             const avatarUrl = `/uploads/avatars/${req.file.filename}`;
@@ -61,12 +76,13 @@ export const handler = (req, res) => {
                 SET
                     profile_picture_url = ${avatarUrl},
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = ${userId}
+                WHERE id = ${targetUserId}
             `;
 
             res.status(200).json({ 
                 message: 'Avatar uploaded successfully',
-                url: avatarUrl
+                url: avatarUrl,
+                userId: targetUserId
             });
         } catch (dbErr) {
             console.error('Error updating profile picture in DB:', dbErr);
