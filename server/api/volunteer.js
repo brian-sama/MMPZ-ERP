@@ -230,7 +230,6 @@ export const handler = async (event) => {
                             project_id,
                             title,
                             content,
-                            file_data,
                             file_path,
                             file_name,
                             mime_type,
@@ -243,7 +242,6 @@ export const handler = async (event) => {
                             ${project_id || projectId || null},
                             ${title || null},
                             ${content || null},
-                            ${null},
                             ${uploadedFile?.publicPath || null},
                             ${fileName || uploadedFile?.fileName || null},
                             ${mimeType || uploadedFile?.mimeType || null},
@@ -302,7 +300,7 @@ export const handler = async (event) => {
                             tx,
                             targetedRecipients.map((recipient) => ({
                                 userId: recipient.id,
-                                type: 'system',
+                                type: 'governance',
                                 title:
                                     normalizedType === 'leave_application'
                                         ? 'New leave application submitted'

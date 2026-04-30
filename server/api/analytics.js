@@ -11,20 +11,55 @@ import {
 const canSeeAllIndicators = (actor) =>
     canSeeOrganizationIndicators(actor);
 
-const scopedIndicatorFilter = (actor) => {
-    if (canSeeAllIndicators(actor)) return '';
-    return `
-        AND (
-            i.created_by_user_id = ${Number(actor.id)}
-            OR EXISTS (
-                SELECT 1
-                FROM project_assignments pa
-                WHERE pa.project_id = i.project_id
-                  AND pa.user_id = ${Number(actor.id)}
-                  AND pa.is_active = TRUE
-            )
-        )
+const hasTable = async (tableName) => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = ${tableName}
+        ) AS exists
     `;
+    return Boolean(rows[0]?.exists);
+};
+
+const getIndicatorColumns = async () => {
+    const rows = await sql`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'indicators'
+    `;
+    return new Set(rows.map((row) => row.column_name));
+};
+
+const scopedIndicatorFilter = async (actor) => {
+    if (canSeeAllIndicators(actor)) return '';
+
+    const hasAssignments = await hasTable('project_assignments');
+    const indicatorCols = await getIndicatorColumns();
+    const hasCreatedBy = indicatorCols.has('created_by_user_id');
+
+    let filter = ' AND (';
+    const conditions = [];
+
+    if (hasCreatedBy) {
+        conditions.push(`i.created_by_user_id = ${Number(actor.id)}`);
+    }
+
+    if (hasAssignments) {
+        conditions.push(`EXISTS (
+            SELECT 1
+            FROM project_assignments pa
+            WHERE pa.project_id = i.project_id
+              AND pa.user_id = ${Number(actor.id)}
+              AND pa.is_active = TRUE
+        )`);
+    }
+
+    if (conditions.length === 0) return '';
+    
+    return ` AND (${conditions.join(' OR ')})`;
 };
 
 const riskLevel = (score) => {
@@ -50,6 +85,13 @@ const calculateRisk = (row) => {
 };
 
 const loadRiskRows = async (actor) => {
+    const indicatorCols = await getIndicatorColumns();
+    const filter = await scopedIndicatorFilter(actor);
+
+    // Build resilient column selections
+    const lastUpdatedCol = indicatorCols.has('last_updated') ? 'i.last_updated' : 'NULL::timestamp';
+    const createdAtCol = indicatorCols.has('created_at') ? 'i.created_at' : 'CURRENT_TIMESTAMP';
+
     const rows = await sql.unsafe(`
         WITH latest_update AS (
             SELECT
@@ -85,7 +127,7 @@ const loadRiskRows = async (actor) => {
                 ELSE 0
             END AS budget_utilization_percent,
             GREATEST(
-                EXTRACT(DAY FROM (NOW() - COALESCE(lu.last_progress_update, i.last_updated, i.created_at))),
+                EXTRACT(DAY FROM (NOW() - COALESCE(lu.last_progress_update, ${lastUpdatedCol}, ${createdAtCol}))),
                 0
             )::int AS days_since_update,
             CASE
@@ -104,8 +146,8 @@ const loadRiskRows = async (actor) => {
         LEFT JOIN projects p ON p.id = i.project_id
         LEFT JOIN programs pr ON pr.id = p.program_id
         WHERE COALESCE(i.status, 'active') != 'archived'
-        ${scopedIndicatorFilter(actor)}
-        ORDER BY i.priority DESC, i.last_updated DESC NULLS LAST, i.created_at DESC
+        ${filter}
+        ORDER BY i.priority DESC, ${lastUpdatedCol} DESC NULLS LAST, ${createdAtCol} DESC
     `);
 
     return rows.map((row) => {
@@ -141,14 +183,19 @@ export const handler = async (event) => {
         const riskRows = await loadRiskRows(actor);
 
         if (path.includes('/multi-year')) {
+            const filter = await scopedIndicatorFilter(actor);
+            const indicatorCols = await getIndicatorColumns();
+            const lastUpdatedCol = indicatorCols.has('last_updated') ? 'i.last_updated' : 'NULL::timestamp';
+            const createdAtCol = indicatorCols.has('created_at') ? 'i.created_at' : 'CURRENT_TIMESTAMP';
+
             const rows = await sql.unsafe(`
                 SELECT
-                    EXTRACT(YEAR FROM COALESCE(i.last_updated, i.created_at))::int AS year,
+                    EXTRACT(YEAR FROM COALESCE(${lastUpdatedCol}, ${createdAtCol}))::int AS year,
                     ROUND(AVG(CASE WHEN i.target_value > 0 THEN (i.current_value::numeric / i.target_value::numeric) * 100 ELSE 0 END), 2)::float AS avg_performance,
                     ROUND(AVG(CASE WHEN i.total_budget > 0 THEN ((i.total_budget - i.current_budget_balance)::numeric / i.total_budget::numeric) * 100 ELSE 0 END), 2)::float AS avg_budget_used
                 FROM indicators i
                 WHERE COALESCE(i.status, 'active') != 'archived'
-                ${scopedIndicatorFilter(actor)}
+                ${filter}
                 GROUP BY year
                 ORDER BY year ASC
             `);
