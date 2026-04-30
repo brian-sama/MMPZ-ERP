@@ -257,6 +257,32 @@ export const handler = async (event) => {
                     `;
 
                     const submission = rows[0];
+
+                    if (normalizedType === 'request_for_funds_plan') {
+                        await tx`
+                            INSERT INTO approvals (
+                                entity_type,
+                                entity_id,
+                                requested_by_user_id,
+                                status,
+                                current_step,
+                                notes
+                            )
+                            VALUES (
+                                'volunteer_submission',
+                                ${String(submission.id)},
+                                ${actor.id},
+                                'pending',
+                                1,
+                                ${description || title || fileName || 'Request-for-funds plan'}
+                            )
+                        `;
+                    }
+
+                    return submission;
+                });
+
+                try {
                     const targetedRecipients = [];
                     const addRecipients = (users) => {
                         for (const user of users || []) {
@@ -267,7 +293,7 @@ export const handler = async (event) => {
                     };
 
                     if (recipientIds.length > 0) {
-                        const candidates = await tx`
+                        const candidates = await sql`
                             SELECT id, name, role_code
                             FROM users
                             WHERE role_code <> 'DEVELOPMENT_FACILITATOR'
@@ -277,83 +303,65 @@ export const handler = async (event) => {
 
                     if (normalizedType === 'leave_application') {
                         addRecipients(
-                            await loadRecipientsByRoles(tx, ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'LOGISTICS_ASSISTANT'])
+                            await loadRecipientsByRoles(sql, ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'LOGISTICS_ASSISTANT'])
                         );
                     }
 
                     if (normalizedType === 'request_for_funds_plan') {
-                        addRecipients(await loadRecipientsByRoles(tx, ['DIRECTOR']));
+                        addRecipients(await loadRecipientsByRoles(sql, ['DIRECTOR']));
                     }
 
                     if (targetedRecipients.length > 0) {
-                        for (const recipient of targetedRecipients) {
-                            await tx`
-                                INSERT INTO volunteer_submission_recipients (
-                                    submission_id,
-                                    user_id,
-                                    assigned_by_user_id
-                                )
-                                VALUES (
-                                    ${submission.id},
-                                    ${recipient.id},
-                                    ${actor.id}
-                                )
-                                ON CONFLICT (submission_id, user_id) DO NOTHING
-                            `;
-                        }
+                        await sql.begin(async (tx) => {
+                            await setAuditActor(tx, actor.id);
+                            if (await hasVolunteerRecipientTable()) {
+                                for (const recipient of targetedRecipients) {
+                                    await tx`
+                                        INSERT INTO volunteer_submission_recipients (
+                                            submission_id,
+                                            user_id,
+                                            assigned_by_user_id
+                                        )
+                                        VALUES (
+                                            ${result.id},
+                                            ${recipient.id},
+                                            ${actor.id}
+                                        )
+                                        ON CONFLICT (submission_id, user_id) DO NOTHING
+                                    `;
+                                }
+                            }
 
-                        await createNotifications(
-                            tx,
-                            targetedRecipients.map((recipient) => ({
-                                userId: recipient.id,
-                                type: 'system',
-                                title:
-                                    normalizedType === 'leave_application'
-                                        ? 'New leave application submitted'
-                                        : normalizedType === 'request_for_funds_plan'
-                                            ? 'Request-for-funds plan awaiting review'
-                                            : 'New facilitator report assigned',
-                                message:
-                                    normalizedType === 'leave_application'
-                                        ? `${actor.name} submitted a leave application for review.`
-                                        : normalizedType === 'request_for_funds_plan'
-                                            ? `${actor.name} submitted a request-for-funds plan that needs director approval.`
-                                            : `${actor.name} assigned "${title || fileName || 'a field report'}" to you for review.`,
-                                relatedEntityType: 'volunteer_submission',
-                                relatedEntityId: String(submission.id),
-                                actionUrl:
-                                    normalizedType === 'leave_application' || normalizedType === 'request_for_funds_plan'
-                                        ? `/reports?submission=${submission.id}`
-                                        : '/my-portal',
-                            }))
-                        );
+                            await createNotifications(
+                                tx,
+                                targetedRecipients.map((recipient) => ({
+                                    userId: recipient.id,
+                                    type: 'system',
+                                    title:
+                                        normalizedType === 'leave_application'
+                                            ? 'New leave application submitted'
+                                            : normalizedType === 'request_for_funds_plan'
+                                                ? 'Request-for-funds plan awaiting review'
+                                                : 'New facilitator report assigned',
+                                    message:
+                                        normalizedType === 'leave_application'
+                                            ? `${actor.name} submitted a leave application for review.`
+                                            : normalizedType === 'request_for_funds_plan'
+                                                ? `${actor.name} submitted a request-for-funds plan that needs director approval.`
+                                                : `${actor.name} assigned "${title || fileName || 'a field report'}" to you for review.`,
+                                    relatedEntityType: 'volunteer_submission',
+                                    relatedEntityId: String(result.id),
+                                    actionUrl:
+                                        normalizedType === 'leave_application' || normalizedType === 'request_for_funds_plan'
+                                            ? `/reports?submission=${result.id}`
+                                            : '/my-portal',
+                                }))
+                            );
+                        });
                     }
-
-                    if (normalizedType === 'request_for_funds_plan') {
-                        await tx`
-                            INSERT INTO approvals (
-                                entity_type,
-                                entity_id,
-                                requested_by_user_id,
-                                status,
-                                current_step,
-                                amount,
-                                notes
-                            )
-                            VALUES (
-                                'volunteer_submission',
-                                ${String(submission.id)},
-                                ${actor.id},
-                                'pending',
-                                1,
-                                NULL,
-                                ${description || title || fileName || 'Request-for-funds plan'}
-                            )
-                        `;
-                    }
-
-                    return submission;
-                });
+                } catch (notifyError) {
+                    console.error('Non-fatal post-submit notification error:', notifyError);
+                }
 
                 return successResponse({ message: 'Submission successful', submission: result });
             } catch (dbError) {
@@ -361,7 +369,7 @@ export const handler = async (event) => {
                 if (uploadedFile?.publicPath) {
                     removeUploadedFile(uploadedFile.publicPath);
                 }
-                return errorResponse('Failed to process submission', 500, dbError.message + '\n' + dbError.stack);
+                return errorResponse('Failed to process submission', 500, dbError.message);
             }
         }
 
@@ -381,10 +389,13 @@ export const handler = async (event) => {
                 actor.id
             );
 
+            const projectJoin = submissionColumns.has('project_id')
+                ? 'LEFT JOIN projects p ON s.project_id = p.id'
+                : 'LEFT JOIN LATERAL (SELECT NULL::text AS name) p ON TRUE';
             const baseFrom = `
                 FROM volunteer_submissions s
                 JOIN users u ON s.user_id = u.id
-                LEFT JOIN projects p ON s.project_id = p.id
+                ${projectJoin}
             `;
 
             let result;

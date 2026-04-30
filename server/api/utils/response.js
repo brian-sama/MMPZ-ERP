@@ -1,4 +1,5 @@
 // Response helper utilities for function-style API handlers.
+const isProduction = process.env.NODE_ENV === 'production';
 
 /**
  * Create a successful JSON response
@@ -32,7 +33,7 @@ export const errorResponse = (message, statusCode = 500, details = null) => {
         error: message,
     };
 
-    if (details) {
+    if (details && !isProduction) {
         errorBody.details = details;
     }
 

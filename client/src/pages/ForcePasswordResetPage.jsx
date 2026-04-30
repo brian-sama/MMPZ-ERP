@@ -140,32 +140,17 @@ export default function ForcePasswordResetPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        style={{
-                            marginTop: '8px',
-                            background: 'var(--clr-primary)',
-                            color: 'white',
-                            border: 'none',
-                            padding: '12px',
-                            borderRadius: '8px',
-                            fontWeight: '600',
-                            cursor: loading ? 'not-allowed' : 'pointer',
-                            opacity: loading ? 0.7 : 1
-                        }}
+                        className="btn btn-primary"
+                        style={{ marginTop: '8px', width: '100%' }}
                     >
                         {loading ? 'Updating...' : 'Update Password'}
                     </button>
 
                     <button
                         type="button"
+                        className="btn btn-ghost"
                         onClick={logout}
-                        style={{
-                            background: 'transparent',
-                            color: 'var(--text-secondary)',
-                            border: 'none',
-                            fontSize: '13px',
-                            cursor: 'pointer',
-                            marginTop: '8px'
-                        }}
+                        style={{ marginTop: '8px', width: '100%' }}
                     >
                         Sign Out
                     </button>

@@ -1310,9 +1310,12 @@ CREATE TABLE IF NOT EXISTS approvals (
     requested_by_user_id INT REFERENCES users(id) ON DELETE SET NULL,
     current_step INT DEFAULT 1,
     status VARCHAR(20) DEFAULT 'pending',
+    notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+ALTER TABLE approvals ADD COLUMN IF NOT EXISTS notes TEXT;
 
 ALTER TABLE approvals DROP CONSTRAINT IF EXISTS approvals_status_check;
 ALTER TABLE approvals

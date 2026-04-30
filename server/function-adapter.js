@@ -38,6 +38,10 @@ export const functionToExpress = (handler) => async (req, res) => {
         return res.send(response.body);
     } catch (error) {
         console.error('Function adapter error:', error);
-        return res.status(500).json({ error: 'Internal Server Error', details: error.message });
+        const body = { error: 'Internal Server Error' };
+        if (process.env.NODE_ENV !== 'production') {
+            body.details = error.message;
+        }
+        return res.status(500).json(body);
     }
 };

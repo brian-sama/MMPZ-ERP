@@ -41,6 +41,9 @@ export const handler = async (event) => {
             status: statusCode === 200 ? 'ok' : 'degraded',
             message: statusCode === 200 ? 'MMPZ API is running' : 'MMPZ API is up but dependencies are not ready',
             timestamp: new Date().toISOString(),
+            build: {
+                sha: process.env.APP_BUILD_SHA || process.env.VITE_APP_BUILD_SHA || 'unknown',
+            },
             env: {
                 hasDatabaseUrl,
                 provider,

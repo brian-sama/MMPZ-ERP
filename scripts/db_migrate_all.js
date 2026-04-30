@@ -3,6 +3,7 @@ import path from 'path';
 import postgres from 'postgres';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
+import crypto from 'crypto';
 
 dotenv.config();
 
@@ -18,6 +19,9 @@ if (!databaseUrl) {
 }
 
 const sql = postgres(databaseUrl, { max: 1 });
+
+const sha256 = (content) =>
+    crypto.createHash('sha256').update(content).digest('hex');
 
 const ensureMigrationTable = async () => {
     await sql`
@@ -49,13 +53,31 @@ const run = async () => {
                 .sort();
 
             for (const file of files) {
+                const migrationPath = path.join(migrationsDir, file);
+                const content = fs.readFileSync(migrationPath, 'utf8');
+                const migrationChecksum = sha256(content);
                 const executed = await sql`
-                    SELECT id FROM schema_migrations WHERE filename = ${file}
+                    SELECT checksum FROM schema_migrations WHERE filename = ${file}
                 `;
+
+                if (
+                    executed.length > 0 &&
+                    ['js-migration', 'sql-migration'].includes(executed[0].checksum)
+                ) {
+                    await sql`
+                        UPDATE schema_migrations
+                        SET checksum = ${migrationChecksum}
+                        WHERE filename = ${file}
+                    `;
+                    executed[0].checksum = migrationChecksum;
+                }
+
+                if (executed.length > 0 && executed[0].checksum !== migrationChecksum) {
+                    throw new Error(`Applied migration was modified after execution: ${file}`);
+                }
 
                 if (executed.length === 0) {
                     console.log(`Running migration: ${file}`);
-                    const migrationPath = path.join(migrationsDir, file);
                     
                     if (file.endsWith('.js')) {
                         const { handler } = await import(`file://${migrationPath}`);
@@ -65,13 +87,12 @@ const run = async () => {
                             throw new Error(`Migration ${file} missing export const handler = async (sql) => { ... }`);
                         }
                     } else if (file.endsWith('.sql')) {
-                        const sqlContent = fs.readFileSync(migrationPath, 'utf8');
-                        await sql.unsafe(sqlContent);
+                        await sql.unsafe(content);
                     }
 
                     await sql`
                         INSERT INTO schema_migrations (filename, checksum)
-                        VALUES (${file}, ${file.endsWith('.js') ? 'js-migration' : 'sql-migration'})
+                        VALUES (${file}, ${migrationChecksum})
                     `;
                     console.log(`Migration ${file} completed.`);
                 }

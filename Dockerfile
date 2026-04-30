@@ -1,5 +1,7 @@
 # Stage 1: Build Client
 FROM node:20-alpine AS frontend-builder
+ARG GIT_SHA=unknown
+ENV VITE_APP_BUILD_SHA=$GIT_SHA
 WORKDIR /app/client
 COPY client/package*.json ./
 RUN npm install
@@ -14,6 +16,8 @@ RUN npm install --omit=dev
 
 # Stage 3: Production Image
 FROM node:20-alpine
+ARG GIT_SHA=unknown
+ENV APP_BUILD_SHA=$GIT_SHA
 WORKDIR /app
 
 # Copy server dependencies
