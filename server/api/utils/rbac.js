@@ -275,11 +275,16 @@ export const getUserContext = async (userId) => {
     // To keep it clean, we'll continue using the role_permissions table but we might
     // need to ensure it has entries for the system roles.
     
-    const permissionRows = await sql`
-        SELECT rp.permission_code
-        FROM role_permissions rp
-        WHERE rp.role_code = ${user.role_code}
-    `;
+    let permissionRows = [];
+    try {
+        permissionRows = await sql`
+            SELECT rp.permission_code
+            FROM role_permissions rp
+            WHERE rp.role_code = ${user.role_code}
+        `;
+    } catch (rpErr) {
+        console.warn('Could not load permissions from role_permissions table:', rpErr.message);
+    }
 
     const permissions = new Set(permissionRows.map((row) => row.permission_code));
     for (const permission of rolePermissionFallbacks[user.role_code] || []) {
@@ -289,9 +294,13 @@ export const getUserContext = async (userId) => {
     // System admins should always resolve to full platform permissions even when
     // production RBAC seed data is partial or stale.
     if (user.role_code === 'SYSTEM_ADMIN') {
-        const allPermissionRows = await sql`SELECT code FROM permissions`;
-        for (const row of allPermissionRows) {
-            permissions.add(row.code);
+        try {
+            const allPermissionRows = await sql`SELECT code FROM permissions`;
+            for (const row of allPermissionRows) {
+                permissions.add(row.code);
+            }
+        } catch (permErr) {
+            console.warn('Could not load all permissions for SYSTEM_ADMIN (permissions table may not exist yet):', permErr.message);
         }
     }
 
@@ -300,9 +309,13 @@ export const getUserContext = async (userId) => {
         permissions.size === 0 &&
         user.role_code === 'DIRECTOR'
     ) {
-        const allPermissionRows = await sql`SELECT code FROM permissions`;
-        for (const row of allPermissionRows) {
-            permissions.add(row.code);
+        try {
+            const allPermissionRows = await sql`SELECT code FROM permissions`;
+            for (const row of allPermissionRows) {
+                permissions.add(row.code);
+            }
+        } catch (permErr) {
+            console.warn('Could not load all permissions for DIRECTOR (permissions table may not exist yet):', permErr.message);
         }
     }
 

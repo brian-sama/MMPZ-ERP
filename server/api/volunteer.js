@@ -92,12 +92,10 @@ const hasKoboFormLinksTable = async () => {
     return Boolean(rows[0]?.exists);
 };
 
-const buildVolunteerSubmissionSelect = (columns, recipientTableExists, actorId) => {
+const buildVolunteerSubmissionSelectSQL = (columns, recipientTableExists, actorId) => {
     const has = (column) => columns.has(column);
     const value = (column, fallback) =>
-        has(column)
-            ? `s.${column}`
-            : fallback;
+        has(column) ? `s.${column}` : fallback;
     const assignedExpr = recipientTableExists
         ? `EXISTS (
             SELECT 1
@@ -107,7 +105,10 @@ const buildVolunteerSubmissionSelect = (columns, recipientTableExists, actorId) 
         )`
         : 'FALSE';
 
-    return sql.unsafe(`
+    // Returns a plain SQL string to be embedded via sql.unsafe() — do NOT return a
+    // sql.unsafe() fragment here because postgres.js cannot interpolate those fragments
+    // inside another sql`` tagged template (they are not composable that way).
+    return `
         s.id,
         s.user_id,
         u.name AS volunteer_name,
@@ -124,7 +125,7 @@ const buildVolunteerSubmissionSelect = (columns, recipientTableExists, actorId) 
         ${value('created_at', 'CURRENT_TIMESTAMP')} AS created_at,
         (${has('file_data') ? 'COALESCE(LENGTH(s.file_data), 0) > 0' : 'FALSE'} OR ${has('file_path') ? 's.file_path IS NOT NULL' : 'FALSE'}) AS has_file,
         ${assignedExpr} AS assigned_to_actor
-    `);
+    `;
 };
 
 const normalizeRecipientIds = (input) =>
@@ -158,7 +159,9 @@ export const handler = async (event) => {
         const actor = await getUserContext(getRequestUserId(event, body));
 
         if (path.startsWith('submit') && method === 'POST') {
-            ensurePermission(actor, 'volunteer.submit');
+            // Allow users whose role is pending confirmation to still submit reports —
+            // blocking them with a 403 here would silently lock out volunteers/facilitators.
+            ensurePermission(actor, 'volunteer.submit', { allowPending: true });
             if (!(await hasVolunteerSubmissionsTable())) {
                 return errorResponse(
                     'Submission storage is not available until the latest database migrations are applied.',
@@ -362,67 +365,66 @@ export const handler = async (event) => {
                 return successResponse([]);
             }
             const submissionId = path.split('/')[1] || null;
-            let result;
             const submissionColumns = await getVolunteerSubmissionColumns();
             const recipientTableExists = await hasVolunteerRecipientTable();
-            const baseSelectColumns = buildVolunteerSubmissionSelect(
+            // Build the column list as a plain string — postgres.js cannot nest a
+            // sql.unsafe() fragment inside another sql`` template, so we compose the
+            // full query as one sql.unsafe() string with parameterised values inlined.
+            const selectCols = buildVolunteerSubmissionSelectSQL(
                 submissionColumns,
                 recipientTableExists,
                 actor.id
             );
 
-            const baseSelect = sql`
-                SELECT
-                    ${baseSelectColumns}
+            const baseFrom = `
                 FROM volunteer_submissions s
                 JOIN users u ON s.user_id = u.id
                 LEFT JOIN projects p ON s.project_id = p.id
             `;
 
+            let result;
+
             if (submissionId) {
-                const detail = hasPermission(actor, 'volunteer.read_all')
-                    ? await sql`
-                        ${baseSelect}
-                        WHERE s.id = ${submissionId}
-                        LIMIT 1
-                    `
-                    : await sql`
-                        ${baseSelect}
-                        WHERE s.id = ${submissionId}
-                          AND (
-                              s.user_id = ${actor.id}
-                              OR ${recipientTableExists ? sql`EXISTS (
-                                  SELECT 1
-                                  FROM volunteer_submission_recipients vsr
-                                  WHERE vsr.submission_id = s.id
-                                    AND vsr.user_id = ${actor.id}
-                              )` : sql`FALSE`}
-                          )
-                        LIMIT 1
-                    `;
+                const safeId = Number.parseInt(submissionId, 10);
+                if (!Number.isInteger(safeId) || safeId <= 0) {
+                    return errorResponse('Invalid submission ID', 400);
+                }
+
+                let whereClause;
+                if (hasPermission(actor, 'volunteer.read_all')) {
+                    whereClause = `WHERE s.id = ${safeId}`;
+                } else {
+                    const recipientCheck = recipientTableExists
+                        ? `OR EXISTS (
+                            SELECT 1 FROM volunteer_submission_recipients vsr
+                            WHERE vsr.submission_id = s.id AND vsr.user_id = ${Number(actor.id)}
+                        )`
+                        : '';
+                    whereClause = `WHERE s.id = ${safeId} AND (s.user_id = ${Number(actor.id)} ${recipientCheck})`;
+                }
+
+                const detail = await sql.unsafe(
+                    `SELECT ${selectCols} ${baseFrom} ${whereClause} LIMIT 1`
+                );
 
                 if (detail.length === 0) return errorResponse('Submission not found', 404);
                 return successResponse(detail[0]);
             }
 
-            if (hasPermission(actor, 'volunteer.read_all')) {
-                result = await sql`
-                    ${baseSelect}
-                    ORDER BY s.created_at DESC
-                `;
-            } else {
-                result = await sql`
-                    ${baseSelect}
-                    WHERE s.user_id = ${actor.id}
-                       OR ${recipientTableExists ? sql`EXISTS (
-                            SELECT 1
-                            FROM volunteer_submission_recipients vsr
-                            WHERE vsr.submission_id = s.id
-                              AND vsr.user_id = ${actor.id}
-                       )` : sql`FALSE`}
-                    ORDER BY s.created_at DESC
-                `;
+            let whereClause = '';
+            if (!hasPermission(actor, 'volunteer.read_all')) {
+                const recipientCheck = recipientTableExists
+                    ? `OR EXISTS (
+                        SELECT 1 FROM volunteer_submission_recipients vsr
+                        WHERE vsr.submission_id = s.id AND vsr.user_id = ${Number(actor.id)}
+                    )`
+                    : '';
+                whereClause = `WHERE s.user_id = ${Number(actor.id)} ${recipientCheck}`;
             }
+
+            result = await sql.unsafe(
+                `SELECT ${selectCols} ${baseFrom} ${whereClause} ORDER BY s.created_at DESC`
+            );
 
             return successResponse(result);
         }
