@@ -72,7 +72,7 @@ const approvalScopeFilter = (actor, alias = 'a') => {
                 FROM procurement_requests pr
                 JOIN projects p ON p.id = pr.project_id
                 WHERE ${alias}.entity_type = 'procurement'
-                  AND ${alias}.entity_id = pr.id
+                  AND ${alias}.entity_id = pr.id::text
                   ${projectScopeFilter(actor, 'p')}
             )
         )
@@ -145,7 +145,7 @@ export const handler = async (event) => {
                 END as progress_percentage,
                 ${priorityExpr},
                 ${statusExpr}
-            FROM indicators
+            FROM indicators i
             ${indicatorStatusFilter}
             ORDER BY priority DESC, created_at DESC
             LIMIT 5

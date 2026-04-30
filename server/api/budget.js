@@ -226,17 +226,18 @@ export const handler = async (event) => {
             allowPending: true,
         });
 
-        const [programs, indicators, activities] = await Promise.all([
-            loadProgramBudgets(actor),
-            loadIndicatorBudgets(actor),
-            loadActivityBudgets(actor),
-        ]);
-
         const path = event.path || '';
-        if (path.includes('/programs')) return successResponse(programs);
-        if (path.includes('/indicators')) return successResponse(indicators);
-        if (path.includes('/activities')) return successResponse(activities);
-        if (path.includes('/overview')) return successResponse(buildOverview(programs, indicators, activities));
+        if (path.includes('/programs')) return successResponse(await loadProgramBudgets(actor));
+        if (path.includes('/indicators')) return successResponse(await loadIndicatorBudgets(actor));
+        if (path.includes('/activities')) return successResponse(await loadActivityBudgets(actor));
+        if (path.includes('/overview')) {
+            const [programs, indicators, activities] = await Promise.all([
+                loadProgramBudgets(actor),
+                loadIndicatorBudgets(actor),
+                loadActivityBudgets(actor),
+            ]);
+            return successResponse(buildOverview(programs, indicators, activities));
+        }
 
         return errorResponse('Unsupported budget route', 404);
     } catch (error) {

@@ -173,12 +173,14 @@ export function NotificationProvider({ children }) {
         }
 
         let isClosed = false;
-        const streamUrl = `${window.location.origin}${API_BASE}/notifications/stream?token=${encodeURIComponent(token)}`;
+        const apiRoot = new URL(API_BASE, window.location.origin);
+        const streamUrl = new URL(`${apiRoot.pathname.replace(/\/$/, '')}/notifications/stream`, apiRoot.origin);
+        streamUrl.searchParams.set('token', token);
 
         const connect = () => {
             if (isClosed) return;
 
-            const source = new EventSource(streamUrl);
+            const source = new EventSource(streamUrl.toString());
             streamRef.current = source;
 
             source.onopen = () => {

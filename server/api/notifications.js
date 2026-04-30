@@ -7,6 +7,23 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 
+const isMissingNotificationStorageError = (error) =>
+    error?.code === '42P01' ||
+    error?.code === '42703' ||
+    /notifications/i.test(error?.message || '') && /does not exist|column/i.test(error?.message || '');
+
+const hasNotificationsTable = async () => {
+    const rows = await sql`
+        SELECT EXISTS (
+            SELECT 1
+            FROM information_schema.tables
+            WHERE table_schema = current_schema()
+              AND table_name = 'notifications'
+        ) AS exists
+    `;
+    return Boolean(rows[0]?.exists);
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -19,6 +36,10 @@ export const handler = async (event) => {
 
         // GET - list notifications for actor
         if (method === 'GET') {
+            if (!(await hasNotificationsTable())) {
+                return successResponse([]);
+            }
+
             const data = await sql`
                 SELECT *
                 FROM notifications
@@ -31,6 +52,10 @@ export const handler = async (event) => {
 
         // PATCH/POST - mark notifications as read
         if (method === 'POST' || method === 'PATCH') {
+            if (!(await hasNotificationsTable())) {
+                return successResponse({ message: 'Notification storage is not available yet' });
+            }
+
             const path = event.path;
 
             if (path.endsWith('/read') && id) {
@@ -64,6 +89,10 @@ export const handler = async (event) => {
     } catch (error) {
         if (error instanceof HttpError) {
             return errorResponse(error.message, error.statusCode);
+        }
+        if (isMissingNotificationStorageError(error)) {
+            if (event.httpMethod === 'GET') return successResponse([]);
+            return successResponse({ message: 'Notification storage is not available yet' });
         }
         console.error('Notifications function error:', error);
         return errorResponse('Internal server error', 500, error.message);

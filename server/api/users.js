@@ -98,6 +98,9 @@ const assertCanAssignRole = (actor, targetRoleCode) => {
     }
 };
 
+const canConfirmRoleImmediately = (actor) =>
+    actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN';
+
 const resolveIncomingRole = (body) => {
     const resolved = normalizeRoleCodeInput(body.role_code || body.role);
     if (!resolved) {
@@ -162,7 +165,7 @@ export const handler = async (event) => {
             const requireReset =
                 body.require_password_reset === true || body.requirePasswordReset === true;
 
-            const roleStatus = (roleCode === 'DIRECTOR' && actor.role_code === 'DIRECTOR') || 
+            const roleStatus = (roleCode === 'DIRECTOR' && actor.role_code === 'DIRECTOR') ||
                                  actor.system_role === 'SUPER_ADMIN'
                 ? 'confirmed'
                 : 'pending_reassignment';
@@ -346,7 +349,7 @@ export const handler = async (event) => {
             if (existingRows.length === 0) return errorResponse('User not found', 404);
 
             const existing = existingRows[0];
-            const status = actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment';
+            const status = canConfirmRoleImmediately(actor) ? 'confirmed' : 'pending_reassignment';
 
             await sql.begin(async (tx) => {
                 await setAuditActor(tx, actor.id);
@@ -438,9 +441,9 @@ export const handler = async (event) => {
                             system_role = ${nextSystemRole},
                             job_title = ${nextJobTitle},
                             short_bio = ${nextShortBio || null},
-                            role_assignment_status = ${actor.role_code === 'DIRECTOR' ? 'confirmed' : 'pending_reassignment'},
-                            role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' ? actor.id : null},
-                            role_confirmed_at = ${actor.role_code === 'DIRECTOR' ? new Date().toISOString() : null},
+                            role_assignment_status = ${canConfirmRoleImmediately(actor) ? 'confirmed' : 'pending_reassignment'},
+                            role_confirmed_by_user_id = ${canConfirmRoleImmediately(actor) ? actor.id : null},
+                            role_confirmed_at = ${canConfirmRoleImmediately(actor) ? new Date().toISOString() : null},
                             password_hash = ${passwordHash},
                             require_password_reset = ${requireReset},
                             phone = ${body.phone !== undefined ? body.phone : existing.phone},
@@ -458,9 +461,9 @@ export const handler = async (event) => {
                             system_role = ${nextSystemRole},
                             job_title = ${nextJobTitle},
                             short_bio = ${nextShortBio || null},
-                            role_assignment_status = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? 'confirmed' : 'pending_reassignment'},
-                            role_confirmed_by_user_id = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? actor.id : null},
-                            role_confirmed_at = ${actor.role_code === 'DIRECTOR' || actor.system_role === 'SUPER_ADMIN' ? new Date().toISOString() : null},
+                            role_assignment_status = ${canConfirmRoleImmediately(actor) ? 'confirmed' : 'pending_reassignment'},
+                            role_confirmed_by_user_id = ${canConfirmRoleImmediately(actor) ? actor.id : null},
+                            role_confirmed_at = ${canConfirmRoleImmediately(actor) ? new Date().toISOString() : null},
                             require_password_reset = ${requireReset},
                             phone = ${body.phone !== undefined ? body.phone : existing.phone},
                             failed_login_attempts = 0,
