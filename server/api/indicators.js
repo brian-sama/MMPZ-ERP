@@ -16,7 +16,6 @@ import {
     canSeeOrganizationIndicators,
     setAuditActor,
 } from './utils/rbac.js';
-import postgres from 'postgres';
 
 const hasTable = async (tableName) => {
     const rows = await sql`
@@ -47,7 +46,7 @@ const buildIndicatorSelect = (columns) => {
             ? `i.${column}`
             : fallback;
 
-    return postgres.unsafe(`
+    return sql.unsafe(`
         i.id,
         ${value('project_id', 'NULL::int')} AS project_id,
         ${value('title', "''::text")} AS title,
