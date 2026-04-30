@@ -430,13 +430,14 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
+  opacity: 1;
   transition: opacity var(--transition);
   cursor: pointer;
 }
 
 .sidebar-user:hover .sidebar-avatar-overlay {
   opacity: 1;
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .sidebar-user-info {
@@ -2677,4 +2678,21 @@ select:-webkit-autofill {
   50% {
     opacity: 0.5;
   }
+}
+
+/* ── Global Button Visibility Fix ───────────────────────── */
+/* Ensure all buttons are always visible - no hover-only opacity */
+.btn,
+button,
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Remove any hover-only visibility tricks from interactive elements */
+[class*="btn"],
+[role="button"] {
+  opacity: 1 !important;
 }

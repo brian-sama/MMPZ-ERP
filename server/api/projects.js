@@ -6,7 +6,7 @@ import {
     getUserContext,
     ensureAnyPermission,
     ensurePermission,
-    hasPermission,
+    canSeeOrganizationIndicators,
     setAuditActor,
 } from './utils/rbac.js';
 
@@ -27,7 +27,7 @@ export const handler = async (event) => {
 
             let rows;
             if (!id) {
-                if (!actor.is_pending_reassignment && hasPermission(actor, 'indicator.read_all')) {
+                if (canSeeOrganizationIndicators(actor)) {
                     rows = await sql`
                         SELECT p.*, pr.name AS program_name, u.name AS owner_name
                         FROM projects p
@@ -61,7 +61,7 @@ export const handler = async (event) => {
             if (rows.length === 0) return errorResponse('Project not found', 404);
 
             const project = rows[0];
-            if (!hasPermission(actor, 'indicator.read_all')) {
+            if (!canSeeOrganizationIndicators(actor)) {
                 const assignment = await sql`
                     SELECT id
                     FROM project_assignments

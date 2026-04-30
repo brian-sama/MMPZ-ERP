@@ -13,17 +13,26 @@ import {
 export default function ExecutiveDashboardPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const isOrganizationExecutive =
+        user?.system_role === 'SUPER_ADMIN' || user?.role_code === 'DIRECTOR';
     const [data, setData] = useState(null);
+    const [riskSummary, setRiskSummary] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     useEffect(() => {
         const fetchDashboard = async () => {
             try {
-                const res = await axios.get(`${API_BASE}/dashboard/executive-summary`, {
-                    params: { userId: user.id }
-                });
-                setData(res.data);
+                const [dashboardRes, riskRes] = await Promise.all([
+                    axios.get(`${API_BASE}/dashboard/executive-summary`, {
+                        params: { userId: user.id }
+                    }),
+                    axios.get(`${API_BASE}/analytics/risk-summary`, {
+                        params: { userId: user.id }
+                    }),
+                ]);
+                setData(dashboardRes.data);
+                setRiskSummary(riskRes.data);
             } catch (err) {
                 const status = err?.response?.status;
                 setError(status === 403
@@ -50,11 +59,22 @@ export default function ExecutiveDashboardPage() {
         { icon: AlertCircle, color: 'var(--brand-warning)', tint: 'rgba(183, 121, 31, 0.12)', text: 'Office supplies procurement is pending approval', time: 'Yesterday' },
     ];
 
+    const quickActions = [
+        { label: 'Create Program', path: '/programs', roles: ['DIRECTOR', 'SYSTEM_ADMIN', 'COMMUNITY_DEVELOPMENT_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN'] },
+        { label: 'Add Staff Member', path: '/facilitators', roles: ['DIRECTOR', 'SYSTEM_ADMIN', 'COMMUNITY_DEVELOPMENT_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN'] },
+        { label: 'Approve Expense', path: '/governance', roles: ['DIRECTOR', 'SYSTEM_ADMIN'] },
+        { label: 'Generate Report', path: '/reports', roles: ['DIRECTOR', 'SYSTEM_ADMIN', 'COMMUNITY_DEVELOPMENT_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'ME_INTERN_ACTING_OFFICER'] },
+    ].filter((action) => user?.system_role === 'SUPER_ADMIN' || action.roles.includes(user?.role_code));
+
     return (
         <div className="fade-in">
             <PageHeader
-                title="Executive Dashboard"
-                subtitle="Overview of programs, finances, and approvals."
+                title={isOrganizationExecutive ? 'Executive Dashboard' : 'My Operational Dashboard'}
+                subtitle={
+                    isOrganizationExecutive
+                        ? 'Overview of programs, finances, and approvals.'
+                        : 'Overview of the programs, indicators, budgets, and approvals connected to your assigned work.'
+                }
             />
 
             {/* Quick Actions */}
@@ -69,12 +89,7 @@ export default function ExecutiveDashboardPage() {
                 <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginRight: '8px' }}>
                     Actions
                 </span>
-                {[
-                    { label: 'Create Program', path: '/programs' },
-                    { label: 'Add Staff Member', path: '/facilitators' },
-                    { label: 'Approve Expense', path: '/governance' },
-                    { label: 'Generate Report', path: '/reports' },
-                ].map(({ label, path }) => (
+                {quickActions.map(({ label, path }) => (
                     <button
                         key={label}
                         className="btn btn-secondary btn-sm"
@@ -150,6 +165,20 @@ export default function ExecutiveDashboardPage() {
                     <div className="kpi-sub">Needs your review</div>
                     <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', marginTop: '12px' }}>
                         <div style={{ width: '40%', height: '100%', background: 'linear-gradient(90deg, #EF4444, #f87171)', borderRadius: '2px' }}></div>
+                    </div>
+                </div>
+
+                <div className="kpi-card danger" style={{ animationDelay: '0.25s' }}>
+                    <div className="kpi-top" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '14px' }}>
+                        <div className="kpi-icon-wrap" style={{ background: 'rgba(239,68,68,0.15)', color: '#EF4444' }}>
+                            <AlertCircle size={20} />
+                        </div>
+                    </div>
+                    <div className="kpi-value">{riskSummary?.high_risk_count || 0}</div>
+                    <div className="kpi-label">High Risk Indicators</div>
+                    <div className="kpi-sub">Budget, progress, and update risk</div>
+                    <div style={{ height: '3px', background: 'var(--border-subtle)', borderRadius: '2px', marginTop: '12px' }}>
+                        <div style={{ width: `${Math.min((riskSummary?.high_risk_count || 0) * 15, 100)}%`, height: '100%', background: 'linear-gradient(90deg, #EF4444, #f87171)', borderRadius: '2px' }}></div>
                     </div>
                 </div>
             </div>

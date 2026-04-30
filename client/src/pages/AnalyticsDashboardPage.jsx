@@ -35,6 +35,8 @@ export default function AnalyticsDashboardPage() {
     const [projects, setProjects] = useState([]);
     const [indicators, setIndicators] = useState([]);
     const [governanceItems, setGovernanceItems] = useState([]);
+    const [riskSummary, setRiskSummary] = useState(null);
+    const [multiYear, setMultiYear] = useState([]);
 
     useEffect(() => {
         const loadAnalytics = async () => {
@@ -47,9 +49,11 @@ export default function AnalyticsDashboardPage() {
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/governance/queue`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/analytics/multi-year`, { params: { userId: user.id } }),
             ]);
 
-            const [summaryRes, perfRes, programRes, projectRes, indicatorRes, governanceRes] = results;
+            const [summaryRes, perfRes, programRes, projectRes, indicatorRes, governanceRes, riskRes, multiYearRes] = results;
 
             if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value.data);
             if (perfRes.status === 'fulfilled') setPerformance(perfRes.value.data || []);
@@ -57,6 +61,8 @@ export default function AnalyticsDashboardPage() {
             if (projectRes.status === 'fulfilled') setProjects(projectRes.value.data || []);
             if (indicatorRes.status === 'fulfilled') setIndicators(indicatorRes.value.data || []);
             if (governanceRes.status === 'fulfilled') setGovernanceItems(governanceRes.value.data || []);
+            if (riskRes.status === 'fulfilled') setRiskSummary(riskRes.value.data || null);
+            if (multiYearRes.status === 'fulfilled') setMultiYear(multiYearRes.value.data || []);
 
             const failed = results.every((result) => result.status === 'rejected');
             if (failed) {
@@ -136,9 +142,9 @@ export default function AnalyticsDashboardPage() {
                 </div>
                 <div className="kpi-card danger">
                     <div className="kpi-icon-wrap"><AlertCircle size={20} /></div>
-                    <div className="kpi-label">Pending Governance</div>
-                    <div className="kpi-value">{summary?.pending_approvals ?? governanceItems.filter((item) => item.status === 'pending').length}</div>
-                    <div className="kpi-sub">Items still waiting for action</div>
+                    <div className="kpi-label">High Risk</div>
+                    <div className="kpi-value">{riskSummary?.high_risk_count ?? 0}</div>
+                    <div className="kpi-sub">Indicators needing budget or progress attention</div>
                 </div>
             </div>
 
@@ -207,6 +213,69 @@ export default function AnalyticsDashboardPage() {
                             </div>
                         )}
                     </div>
+                </div>
+            </div>
+
+            <div className="panels-row">
+                <div className="panel">
+                    <div className="panel-header">
+                        <div>
+                            <h2 className="panel-title">Multi-Year Comparison</h2>
+                            <p className="panel-subtitle">Average performance and budget use by year.</p>
+                        </div>
+                    </div>
+                    <div style={{ height: '280px' }}>
+                        {multiYear.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={multiYear}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                                    <XAxis dataKey="year" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="avg_performance" fill="var(--brand-primary)" radius={[6, 6, 0, 0]} />
+                                    <Bar dataKey="avg_budget_used" fill="var(--brand-warning)" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="empty-state" style={{ height: '100%' }}>
+                                <div className="empty-state-icon"><BarChart3 size={28} /></div>
+                                <div className="empty-state-title">No multi-year data yet</div>
+                                <p className="empty-state-text">Yearly comparisons appear after indicators have dated updates.</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="panel">
+                    <div className="panel-header">
+                        <div>
+                            <h2 className="panel-title">Risk Watchlist</h2>
+                            <p className="panel-subtitle">Indicators with the highest combined risk score.</p>
+                        </div>
+                    </div>
+                    {(riskSummary?.indicators || []).length > 0 ? (
+                        <div className="control-stack">
+                            {riskSummary.indicators.slice(0, 6).map((indicator) => (
+                                <div key={indicator.id} className="control-row static">
+                                    <div>
+                                        <div className="control-title">{indicator.title}</div>
+                                        <div className="control-copy">
+                                            {indicator.project_name || 'No project'} · {indicator.progress_percentage}% progress · {indicator.budget_utilization_percent}% budget used
+                                        </div>
+                                    </div>
+                                    <span className={`badge badge-${indicator.risk_level === 'high' ? 'danger' : indicator.risk_level === 'medium' ? 'warning' : 'success'}`}>
+                                        {indicator.auto_risk_score}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="empty-state" style={{ padding: '36px 20px' }}>
+                            <div className="empty-state-icon"><CheckCircle2 size={28} /></div>
+                            <div className="empty-state-title">No risk data yet</div>
+                            <p className="empty-state-text">Risk signals appear as indicators collect progress and budget data.</p>
+                        </div>
+                    )}
                 </div>
             </div>
 

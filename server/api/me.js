@@ -5,6 +5,8 @@ import {
     getRequestUserId,
     getUserContext,
     ensurePermission,
+    ensureAnyPermission,
+    canSeeOrganizationIndicators,
 } from './utils/rbac.js';
 
 const hasTable = async (tableName) => {
@@ -19,6 +21,41 @@ const hasTable = async (tableName) => {
     return Boolean(rows[0]?.exists);
 };
 
+const indicatorScopeFilter = (actor, alias = 'i') => {
+    if (canSeeOrganizationIndicators(actor)) return '';
+    const actorId = Number(actor.id);
+    return `
+        AND (
+            ${alias}.created_by_user_id = ${actorId}
+            OR EXISTS (
+                SELECT 1
+                FROM project_assignments pa
+                WHERE pa.project_id = ${alias}.project_id
+                  AND pa.user_id = ${actorId}
+                  AND pa.is_active = TRUE
+            )
+        )
+    `;
+};
+
+const ensureIndicatorAccess = async (actor, indicatorId) => {
+    if (canSeeOrganizationIndicators(actor)) return;
+    const rows = await sql`
+        SELECT i.id
+        FROM indicators i
+        LEFT JOIN project_assignments pa
+          ON pa.project_id = i.project_id
+         AND pa.user_id = ${actor.id}
+         AND pa.is_active = TRUE
+        WHERE i.id = ${indicatorId}
+          AND (i.created_by_user_id = ${actor.id} OR pa.id IS NOT NULL)
+        LIMIT 1
+    `;
+    if (rows.length === 0) {
+        throw new HttpError('Permission denied', 403);
+    }
+};
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -29,6 +66,9 @@ export const handler = async (event) => {
         const actor = await getUserContext(getRequestUserId(event, body) || query.userId);
 
         if (method === 'GET') {
+            ensureAnyPermission(actor, ['indicator.read_all', 'indicator.read_assigned', 'project.read'], {
+                allowPending: true,
+            });
             const { indicator_id, period } = query;
 
             // 1. If dashboard summary requested
@@ -36,17 +76,25 @@ export const handler = async (event) => {
                 if (!(await hasTable('indicator_progress')) || !(await hasTable('indicator_targets'))) {
                     return successResponse([]);
                 }
-                const performance = await sql`
+                const performance = await sql.unsafe(`
                     SELECT 
                         reporting_period,
                         SUM(value) as total_reached,
-                        (SELECT SUM(target_value) FROM indicator_targets WHERE reporting_period = ip.reporting_period) as total_target
+                        (
+                            SELECT SUM(it.target_value)
+                            FROM indicator_targets it
+                            JOIN indicators ti ON ti.id = it.indicator_id
+                            WHERE it.reporting_period = ip.reporting_period
+                            ${indicatorScopeFilter(actor, 'ti')}
+                        ) as total_target
                     FROM indicator_progress ip
-                    WHERE status = 'approved'
+                    JOIN indicators i ON i.id = ip.indicator_id
+                    WHERE ip.status = 'approved'
+                    ${indicatorScopeFilter(actor, 'i')}
                     GROUP BY reporting_period
                     ORDER BY reporting_period DESC
                     LIMIT 6
-                `;
+                `);
                 return successResponse(performance);
             }
 
@@ -55,6 +103,7 @@ export const handler = async (event) => {
                 if (!(await hasTable('indicator_targets')) || !(await hasTable('indicator_progress'))) {
                     return successResponse({ targets: [], progress: [] });
                 }
+                await ensureIndicatorAccess(actor, indicator_id);
                 const targets = await sql`
                     SELECT * FROM indicator_targets 
                     WHERE indicator_id = ${indicator_id} 
@@ -78,6 +127,7 @@ export const handler = async (event) => {
             if (!indicator_id || !reporting_period || value === undefined) {
                 return errorResponse('indicator_id, reporting_period, and value are required', 400);
             }
+            await ensureIndicatorAccess(actor, indicator_id);
 
             const result = await sql.begin(async (tx) => {
                 // Find or create target

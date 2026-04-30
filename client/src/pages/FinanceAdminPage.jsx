@@ -83,11 +83,22 @@ const createBlankItem = () => ({
 export default function FinanceAdminPage() {
     const { user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
+    const financeLogisticsRoles = [
+        'DIRECTOR',
+        'SYSTEM_ADMIN',
+        'FINANCE_ADMIN_OFFICER',
+        'ADMIN_ASSISTANT',
+        'LOGISTICS_ASSISTANT',
+    ];
+    const isFinanceLogisticsView =
+        user?.system_role === 'SUPER_ADMIN' || financeLogisticsRoles.includes(user?.role_code);
     const canCreateRequisition = [
         'DIRECTOR',
         'SYSTEM_ADMIN',
         'COMMUNITY_DEVELOPMENT_OFFICER',
         'PSYCHOSOCIAL_SUPPORT_OFFICER',
+        'SOCIAL_SERVICES_INTERN',
+        'YOUTH_COMMUNICATIONS_INTERN',
     ].includes(user?.role_code);
     const [tab, setTab] = useState('overview');
     const [summary, setSummary] = useState(null);
@@ -405,8 +416,12 @@ export default function FinanceAdminPage() {
     return (
         <div className="fade-in finance-workspace">
             <PageHeader
-                title="Finance, Administration & Logistics"
-                subtitle="Track commitments, protect budget lines, and route procurement through documented controls."
+                title={isFinanceLogisticsView ? 'Finance, Administration & Logistics' : 'Program Budget View'}
+                subtitle={
+                    isFinanceLogisticsView
+                        ? 'Track commitments, protect budget lines, and route procurement through documented controls.'
+                        : 'Track budgets, spending, pending commitments, and remaining balances for your assigned programs, indicators, and activities.'
+                }
                 actions={
                     <div className="page-actions">
                         <button
@@ -433,11 +448,16 @@ export default function FinanceAdminPage() {
 
             <section className="domain-hero">
                 <div>
-                    <div className="domain-kicker">Stewardship Lens</div>
-                    <h2>Spend only against funded lines, separate request from approval, and treat approvals as commitments before cash leaves the bank.</h2>
+                    <div className="domain-kicker">{isFinanceLogisticsView ? 'Stewardship Lens' : 'Assigned Budget Lens'}</div>
+                    <h2>
+                        {isFinanceLogisticsView
+                            ? 'Spend only against funded lines, separate request from approval, and treat approvals as commitments before cash leaves the bank.'
+                            : 'See what has been allocated, what has been spent, what is pending, and what remains for the work assigned to you.'}
+                    </h2>
                     <p>
-                        This workspace reflects three operating principles: budget discipline,
-                        maker-checker segregation, and logistics readiness before approval.
+                        {isFinanceLogisticsView
+                            ? 'This workspace reflects three operating principles: budget discipline, maker-checker segregation, and logistics readiness before approval.'
+                            : 'This workspace is scoped to your programs, projects, indicators, activities, and requisitions so operational teams do not see unrelated organisational balances.'}
                     </p>
                 </div>
                 <div className="hero-control-card">
@@ -451,15 +471,19 @@ export default function FinanceAdminPage() {
                 <div className="signal-card">
                     <div className="signal-icon primary"><Landmark size={18} /></div>
                     <div className="signal-meta">
-                        <div className="signal-label">Donor Commitments</div>
+                        <div className="signal-label">{isFinanceLogisticsView ? 'Donor Commitments' : 'Assigned Commitments'}</div>
                         <div className="signal-value">{formatCurrency(metrics.commitment_total)}</div>
-                        <div className="signal-note">{metrics.total_grants || 0} active grants across {metrics.total_donors || 0} donors</div>
+                        <div className="signal-note">
+                            {isFinanceLogisticsView
+                                ? `${metrics.total_grants || 0} active grants across ${metrics.total_donors || 0} donors`
+                                : `${metrics.total_grants || 0} grants linked to your assigned budget lines`}
+                        </div>
                     </div>
                 </div>
                 <div className="signal-card">
                     <div className="signal-icon success"><Wallet size={18} /></div>
                     <div className="signal-meta">
-                        <div className="signal-label">Available After Commitments</div>
+                        <div className="signal-label">{isFinanceLogisticsView ? 'Available After Commitments' : 'Available To Your Work'}</div>
                         <div className="signal-value">{formatCurrency(metrics.available_balance_total)}</div>
                         <div className="signal-note">Allocated less actual spend and approved commitments</div>
                     </div>

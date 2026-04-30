@@ -11,7 +11,7 @@ import {
     getRequestUserId,
     getUserContext,
     ensurePermission,
-    hasPermission,
+    canSeeOrganizationIndicators,
     setAuditActor,
 } from './utils/rbac.js';
 
@@ -55,7 +55,7 @@ export const handler = async (event) => {
                 query = sql`${query} AND a.indicator_id = ${indicatorId}`;
             }
 
-            if (!actor.is_pending_reassignment && hasPermission(actor, 'indicator.read_all')) {
+            if (canSeeOrganizationIndicators(actor)) {
                 query = sql`${query} ORDER BY a.activity_date DESC`;
             } else {
                 const scope = getAccessibleIndicatorClause(actor);
@@ -84,7 +84,7 @@ export const handler = async (event) => {
             if (indicators.length === 0) return errorResponse('Indicator not found', 404);
             const indicator = indicators[0];
 
-            if (!hasPermission(actor, 'indicator.read_all')) {
+            if (!canSeeOrganizationIndicators(actor)) {
                 const canAccess = indicator.created_by_user_id === actor.id || (await sql`
                     SELECT id
                     FROM project_assignments

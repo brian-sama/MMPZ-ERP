@@ -6,6 +6,7 @@ import {
     getUserContext,
     ensurePermission,
     ensureAnyPermission,
+    canSeeOrganizationIndicators,
     setAuditActor,
 } from './utils/rbac.js';
 
@@ -37,11 +38,22 @@ export const handler = async (event) => {
             if (!(await hasProgramsTable())) {
                 return successResponse([]);
             }
-            const rows = await sql`
-                SELECT p.*
-                FROM programs p
-                ORDER BY p.created_at DESC
-            `;
+            const rows = canSeeOrganizationIndicators(actor)
+                ? await sql`
+                    SELECT p.*
+                    FROM programs p
+                    ORDER BY p.created_at DESC
+                `
+                : await sql`
+                    SELECT DISTINCT p.*
+                    FROM programs p
+                    JOIN projects pr ON pr.program_id = p.id
+                    LEFT JOIN project_assignments pa ON pa.project_id = pr.id
+                    WHERE p.created_by_user_id = ${actor.id}
+                       OR pr.owner_user_id = ${actor.id}
+                       OR (pa.user_id = ${actor.id} AND pa.is_active = TRUE)
+                    ORDER BY p.created_at DESC
+                `;
             return successResponse(rows);
         }
 

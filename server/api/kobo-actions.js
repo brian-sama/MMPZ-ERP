@@ -351,18 +351,32 @@ export const handler = async (event) => {
         // /fields/:uid
         if (path.includes('/fields/')) {
             ensureAnyPermission(actor, ['kobo.manage', 'kobo.sync'], { allowPending: true });
-            if (!(await hasTable('kobo_submissions'))) {
-                return errorResponse('No KoBo submissions are available yet.', 404);
-            }
             const uid = path.split('/').pop();
-            const sub = await sql`
-                SELECT submission_data
-                FROM kobo_submissions
-                WHERE kobo_form_uid = ${uid}
-                LIMIT 1
-            `;
-            if (sub.length === 0) return errorResponse('No data found for this form', 404);
-            return successResponse(Object.keys(sub[0].submission_data || {}));
+            if ((await hasTable('kobo_submissions'))) {
+                const sub = await sql`
+                    SELECT submission_data
+                    FROM kobo_submissions
+                    WHERE kobo_form_uid = ${uid}
+                    LIMIT 1
+                `;
+                if (sub.length > 0) {
+                    return successResponse(Object.keys(sub[0].submission_data || {}));
+                }
+            }
+
+            const config = await loadConfig();
+            const response = await axios.get(`${config.server_url}/api/v2/assets/${uid}/data.json`, {
+                headers: { Authorization: `Token ${config.api_token}` },
+                params: { limit: 1 },
+            });
+            const firstSubmission = response.data?.results?.[0] || null;
+            if (!firstSubmission) {
+                return successResponse([]);
+            }
+            const fields = Object.keys(firstSubmission).filter(
+                (key) => !key.startsWith('_') && !key.startsWith('meta/')
+            );
+            return successResponse(fields);
         }
 
         // /disconnect

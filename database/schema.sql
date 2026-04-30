@@ -867,6 +867,8 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.read'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.create'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'expense.create'),
+    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'kobo.manage'),
+    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'kobo.sync'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.submit'),
     ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.read_own'),
 
@@ -881,6 +883,8 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.read'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.create'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'expense.create'),
+    ('COMMUNITY_DEVELOPMENT_OFFICER', 'kobo.manage'),
+    ('COMMUNITY_DEVELOPMENT_OFFICER', 'kobo.sync'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.submit'),
     ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.read_own'),
 
@@ -890,19 +894,42 @@ INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('ME_INTERN_ACTING_OFFICER', 'indicator.update'),
     ('ME_INTERN_ACTING_OFFICER', 'activity.read'),
     ('ME_INTERN_ACTING_OFFICER', 'approval.read'),
+    ('ME_INTERN_ACTING_OFFICER', 'kobo.manage'),
+    ('ME_INTERN_ACTING_OFFICER', 'kobo.sync'),
     ('ME_INTERN_ACTING_OFFICER', 'volunteer.submit'),
     ('ME_INTERN_ACTING_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
     ('SOCIAL_SERVICES_INTERN', 'indicator.read_assigned'),
+    ('SOCIAL_SERVICES_INTERN', 'program.read'),
+    ('SOCIAL_SERVICES_INTERN', 'project.read'),
+    ('SOCIAL_SERVICES_INTERN', 'project.create'),
+    ('SOCIAL_SERVICES_INTERN', 'project.update'),
+    ('SOCIAL_SERVICES_INTERN', 'indicator.create'),
+    ('SOCIAL_SERVICES_INTERN', 'indicator.update'),
     ('SOCIAL_SERVICES_INTERN', 'progress.create'),
     ('SOCIAL_SERVICES_INTERN', 'activity.read'),
+    ('SOCIAL_SERVICES_INTERN', 'activity.create'),
+    ('SOCIAL_SERVICES_INTERN', 'expense.create'),
+    ('SOCIAL_SERVICES_INTERN', 'kobo.manage'),
+    ('SOCIAL_SERVICES_INTERN', 'kobo.sync'),
     ('SOCIAL_SERVICES_INTERN', 'volunteer.submit'),
     ('SOCIAL_SERVICES_INTERN', 'volunteer.read_own'),
 
+    ('YOUTH_COMMUNICATIONS_INTERN', 'program.read'),
     ('YOUTH_COMMUNICATIONS_INTERN', 'project.read'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'project.create'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'project.update'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.read_assigned'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.create'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.update'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'progress.create'),
     ('YOUTH_COMMUNICATIONS_INTERN', 'activity.read'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'activity.create'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'expense.create'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.manage'),
+    ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.sync'),
     ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.submit'),
     ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;

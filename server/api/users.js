@@ -162,7 +162,8 @@ export const handler = async (event) => {
             const requireReset =
                 body.require_password_reset === true || body.requirePasswordReset === true;
 
-            const roleStatus = roleCode === 'DIRECTOR' && actor.role_code === 'DIRECTOR'
+            const roleStatus = (roleCode === 'DIRECTOR' && actor.role_code === 'DIRECTOR') || 
+                                 actor.system_role === 'SUPER_ADMIN'
                 ? 'confirmed'
                 : 'pending_reassignment';
 

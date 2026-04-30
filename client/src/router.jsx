@@ -14,6 +14,7 @@ import ProgramsPage from './pages/ProgramsPage';
 import FacilitatorsPage from './pages/FacilitatorsPage';
 import MonitoringEvaluationPage from './pages/MonitoringEvaluationPage';
 import FinanceAdminPage from './pages/FinanceAdminPage';
+import BudgetTrackerPage from './pages/BudgetTrackerPage';
 import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
@@ -64,6 +65,7 @@ export default function AppRouter() {
                 <Route path="/facilitators" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/facilitators')}><FacilitatorsPage /></ProtectedRoute>} />
                 <Route path="/me" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/me')}><MonitoringEvaluationPage /></ProtectedRoute>} />
                 <Route path="/finance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/finance')}><FinanceAdminPage /></ProtectedRoute>} />
+                <Route path="/budget" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/budget')}><BudgetTrackerPage /></ProtectedRoute>} />
                 <Route path="/governance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance')}><GovernanceApprovalsPage /></ProtectedRoute>} />
                 <Route path="/reports" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/reports')}><ReportsPage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/settings')}><SettingsPage /></ProtectedRoute>} />

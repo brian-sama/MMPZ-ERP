@@ -13,7 +13,7 @@ import {
     getUserContext,
     ensurePermission,
     ensureAnyPermission,
-    hasPermission,
+    canSeeOrganizationIndicators,
     setAuditActor,
 } from './utils/rbac.js';
 import postgres from 'postgres';
@@ -76,7 +76,7 @@ const formatIndicator = (ind) => ({
 
 const canAccessIndicator = async (actor, indicator) => {
     if (!indicator) return false;
-    if (!actor.is_pending_reassignment && hasPermission(actor, 'indicator.read_all')) return true;
+    if (canSeeOrganizationIndicators(actor)) return true;
     if (indicator.created_by_user_id === actor.id) return true;
     if (!indicator.project_id) return false;
     if (!(await hasTable('project_assignments'))) return false;
@@ -143,7 +143,7 @@ export const handler = async (event) => {
 
             // Pending reassignment users are always restricted to own/assigned scope.
             const shouldRestrictScope =
-                actor.is_pending_reassignment || !hasPermission(actor, 'indicator.read_all');
+                actor.is_pending_reassignment || !canSeeOrganizationIndicators(actor);
 
             if (shouldRestrictScope) {
                 indicatorsQuery = sql`${indicatorsQuery}

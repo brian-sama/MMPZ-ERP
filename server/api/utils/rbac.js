@@ -83,6 +83,44 @@ const runtimePermissionOverrides = {
     LOGISTICS_ASSISTANT: ['expense.read'],
 };
 
+export const FINANCE_LOGISTICS_ROLE_CODES = new Set([
+    'DIRECTOR',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+    'SYSTEM_ADMIN',
+]);
+
+export const canSeeOrganizationFinance = (actor) =>
+    actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
+    FINANCE_LOGISTICS_ROLE_CODES.has(actor?.role_code);
+
+export const canSeeOrganizationDashboard = (actor) =>
+    actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
+    actor?.role_code === 'DIRECTOR';
+
+export const canSeeOrganizationIndicators = (actor) =>
+    actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
+    actor?.role_code === 'DIRECTOR';
+
+const programOfficerPermissions = [
+    'program.read',
+    'project.read',
+    'project.create',
+    'project.update',
+    'indicator.read_assigned',
+    'indicator.create',
+    'indicator.update',
+    'progress.create',
+    'activity.read',
+    'activity.create',
+    'expense.create',
+    'kobo.manage',
+    'kobo.sync',
+    'volunteer.submit',
+    'volunteer.read_own',
+];
+
 const rolePermissionFallbacks = {
     FINANCE_ADMIN_OFFICER: [
         'user.view',
@@ -115,36 +153,8 @@ const rolePermissionFallbacks = {
         'volunteer.submit',
         'volunteer.read_own',
     ],
-    PSYCHOSOCIAL_SUPPORT_OFFICER: [
-        'program.read',
-        'project.read',
-        'project.create',
-        'project.update',
-        'indicator.read_assigned',
-        'indicator.create',
-        'indicator.update',
-        'progress.create',
-        'activity.read',
-        'activity.create',
-        'expense.create',
-        'volunteer.submit',
-        'volunteer.read_own',
-    ],
-    COMMUNITY_DEVELOPMENT_OFFICER: [
-        'program.read',
-        'project.read',
-        'project.create',
-        'project.update',
-        'indicator.read_assigned',
-        'indicator.create',
-        'indicator.update',
-        'progress.create',
-        'activity.read',
-        'activity.create',
-        'expense.create',
-        'volunteer.submit',
-        'volunteer.read_own',
-    ],
+    PSYCHOSOCIAL_SUPPORT_OFFICER: programOfficerPermissions,
+    COMMUNITY_DEVELOPMENT_OFFICER: programOfficerPermissions,
     ME_INTERN_ACTING_OFFICER: [
         'program.read',
         'project.read',
@@ -152,22 +162,13 @@ const rolePermissionFallbacks = {
         'indicator.update',
         'activity.read',
         'approval.read',
+        'kobo.manage',
+        'kobo.sync',
         'volunteer.submit',
         'volunteer.read_own',
     ],
-    SOCIAL_SERVICES_INTERN: [
-        'indicator.read_assigned',
-        'progress.create',
-        'activity.read',
-        'volunteer.submit',
-        'volunteer.read_own',
-    ],
-    YOUTH_COMMUNICATIONS_INTERN: [
-        'project.read',
-        'activity.read',
-        'volunteer.submit',
-        'volunteer.read_own',
-    ],
+    SOCIAL_SERVICES_INTERN: programOfficerPermissions,
+    YOUTH_COMMUNICATIONS_INTERN: programOfficerPermissions,
     DEVELOPMENT_FACILITATOR: [
         'project.read',
         'activity.read',

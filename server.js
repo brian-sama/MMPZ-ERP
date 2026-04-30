@@ -27,6 +27,8 @@ import { handler as expensesHandler } from './server/api/expenses.js';
 import { handler as governanceApprovalsHandler } from './server/api/governance-approvals.js';
 import { handler as reportsHandler } from './server/api/reports.js';
 import { handler as dashboardHandler } from './server/api/dashboard.js';
+import { handler as budgetHandler } from './server/api/budget.js';
+import { handler as analyticsHandler } from './server/api/analytics.js';
 import { handler as outputsHandler } from './server/api/outputs.js';
 import { handler as facilitatorsHandler } from './server/api/facilitators.js';
 import { handler as facilitatorAssignmentsHandler } from './server/api/facilitator-assignments.js';
@@ -166,12 +168,19 @@ app.use('/api/governance/pending-role-assignments', functionToExpress(pendingRol
 
 // Dashboard
 app.use('/api/dashboard/executive-summary', functionToExpress(dashboardHandler));
+app.use('/api/analytics/risk-summary', functionToExpress(analyticsHandler));
+app.use('/api/analytics/multi-year', functionToExpress(analyticsHandler));
+app.use('/api/analytics/indicator-velocity', functionToExpress(analyticsHandler));
 
 // Finance & Procurement
 app.use('/api/finance/summary', functionToExpress(financeCoreHandler));
 app.use('/api/finance/grants', functionToExpress(financeCoreHandler));
 app.use('/api/finance/budget-lines', functionToExpress(financeCoreHandler));
 app.use('/api/finance/budgets', functionToExpress(financeCoreHandler));
+app.use('/api/budget/overview', functionToExpress(budgetHandler));
+app.use('/api/budget/programs', functionToExpress(budgetHandler));
+app.use('/api/budget/indicators', functionToExpress(budgetHandler));
+app.use('/api/budget/activities', functionToExpress(budgetHandler));
 app.use('/api/procurement/:id', functionToExpress(procurementHandler));
 app.use('/api/procurement', functionToExpress(procurementHandler));
 

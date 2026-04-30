@@ -70,3 +70,8 @@ sudo certbot --nginx -d mmpzmne.co.zw -d streamlit.mmpzmne.co.zw
 ```
 
 Follow the prompts to enable HTTPS. You're done!
+
+## 6. Optional Operations Hardening
+
+Production hardening guidance is documented in `docs/OPERATIONS_HARDENING.md`.
+Use it for backup scheduling, database monitoring, SSH/firewall hardening, and deployment smoke checks. These steps are intentionally opt-in and are not part of normal local development startup.

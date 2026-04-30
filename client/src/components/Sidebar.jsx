@@ -127,7 +127,10 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
                     )}
                     <div className="sidebar-user-info">
                         <div className="sidebar-user-name">{user?.name}</div>
-                        <div className="sidebar-user-role">{roleDisplay}</div>
+                        <div className="sidebar-user-role">{user?.job_title || roleDisplay}</div>
+                        <div className="sidebar-user-position" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                            {formatRoleLabel(user?.role_code)}
+                        </div>
                     </div>
                 </div>
                 

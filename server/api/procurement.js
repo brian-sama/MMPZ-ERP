@@ -6,6 +6,7 @@ import {
     getUserContext,
     ensureAnyPermission,
     ensurePermission,
+    canSeeOrganizationFinance,
 } from './utils/rbac.js';
 
 const PROCUREMENT_READ_PERMISSIONS = [
@@ -90,6 +91,31 @@ const canReviewBidAnalysis = (actor) =>
 const canApproveBidAnalysis = (actor) =>
     actor?.system_role === 'SUPER_ADMIN' || actor?.role_code === 'DIRECTOR';
 
+const procurementScopeFilter = (actor, alias = 'pr') => {
+    if (canSeeOrganizationFinance(actor)) return '';
+    const actorId = Number(actor.id);
+    return `
+        AND (
+            ${alias}.requested_by_user_id = ${actorId}
+            OR EXISTS (
+                SELECT 1
+                FROM projects scoped_p
+                WHERE scoped_p.id = ${alias}.project_id
+                  AND (
+                      scoped_p.owner_user_id = ${actorId}
+                      OR EXISTS (
+                          SELECT 1
+                          FROM project_assignments pa
+                          WHERE pa.project_id = scoped_p.id
+                            AND pa.user_id = ${actorId}
+                            AND pa.is_active = TRUE
+                      )
+                  )
+            )
+        )
+    `;
+};
+
 const normalizeItems = (items) => {
     if (!Array.isArray(items) || items.length === 0) {
         throw new HttpError('At least one procurement line item is required', 400);
@@ -153,6 +179,55 @@ const loadBudgetControl = async (budgetLineId) => {
     }
 
     return rows[0];
+};
+
+const ensureProcurementAccess = async (actor, request) => {
+    if (canSeeOrganizationFinance(actor)) return;
+    if (Number(request.requested_by_user_id) === Number(actor.id)) return;
+    if (!request.project_id) {
+        throw new HttpError('Permission denied', 403);
+    }
+
+    const rows = await sql`
+        SELECT id
+        FROM project_assignments
+        WHERE project_id = ${request.project_id}
+          AND user_id = ${actor.id}
+          AND is_active = TRUE
+        LIMIT 1
+    `;
+
+    if (rows.length > 0) return;
+
+    const owned = await sql`
+        SELECT id
+        FROM projects
+        WHERE id = ${request.project_id}
+          AND owner_user_id = ${actor.id}
+        LIMIT 1
+    `;
+    if (owned.length === 0) {
+        throw new HttpError('Permission denied', 403);
+    }
+};
+
+const ensureProjectAccess = async (actor, projectId) => {
+    if (canSeeOrganizationFinance(actor) || !projectId) return;
+
+    const rows = await sql`
+        SELECT p.id
+        FROM projects p
+        LEFT JOIN project_assignments pa
+          ON pa.project_id = p.id
+         AND pa.user_id = ${actor.id}
+         AND pa.is_active = TRUE
+        WHERE p.id = ${projectId}
+          AND (p.owner_user_id = ${actor.id} OR pa.id IS NOT NULL)
+        LIMIT 1
+    `;
+    if (rows.length === 0) {
+        throw new HttpError('Permission denied for the selected project budget line', 403);
+    }
 };
 
 export const handler = async (event) => {
@@ -240,6 +315,7 @@ export const handler = async (event) => {
                 `;
 
                 if (rows.length === 0) return errorResponse('Request not found', 404);
+                await ensureProcurementAccess(actor, rows[0]);
 
                 const items = await sql`
                     SELECT *
@@ -255,7 +331,7 @@ export const handler = async (event) => {
                 });
             }
 
-            const rows = bidAnalysisEnabled ? await sql`
+            const rows = bidAnalysisEnabled ? await sql.unsafe(`
                 WITH procurement_control AS (
                     SELECT
                         budget_line_id,
@@ -291,8 +367,10 @@ export const handler = async (event) => {
                 LEFT JOIN users reviewer ON reviewer.id = pr.bid_analysis_reviewed_by_user_id
                 LEFT JOIN users approver ON approver.id = pr.bid_analysis_approved_by_user_id
                 LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
+                WHERE 1=1
+                ${procurementScopeFilter(actor, 'pr')}
                 ORDER BY pr.created_at DESC
-            ` : await sql`
+            `) : await sql.unsafe(`
                 WITH procurement_control AS (
                     SELECT
                         budget_line_id,
@@ -329,8 +407,10 @@ export const handler = async (event) => {
                 LEFT JOIN projects p ON pr.project_id = p.id
                 LEFT JOIN budget_lines bl ON pr.budget_line_id = bl.id
                 LEFT JOIN procurement_control pc ON pc.budget_line_id = bl.id
+                WHERE 1=1
+                ${procurementScopeFilter(actor, 'pr')}
                 ORDER BY pr.created_at DESC
-            `;
+            `);
 
             return successResponse(rows);
         }
@@ -364,6 +444,7 @@ export const handler = async (event) => {
             if (budget_line_id) {
                 budgetControl = await loadBudgetControl(budget_line_id);
                 derivedProjectId = derivedProjectId || budgetControl.project_id || null;
+                await ensureProjectAccess(actor, derivedProjectId);
 
                 if (Number(totalCost) > Number(budgetControl.available_to_commit || 0)) {
                     return errorResponse(
@@ -372,6 +453,7 @@ export const handler = async (event) => {
                     );
                 }
             }
+            await ensureProjectAccess(actor, derivedProjectId);
 
             const result = await sql.begin(async (tx) => {
                 const insertedRequest = await tx`

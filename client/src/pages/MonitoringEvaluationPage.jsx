@@ -6,7 +6,8 @@ import PageHeader from '../components/PageHeader';
 import {
     BarChart3, Target, TrendingUp, Filter, Search,
     ExternalLink, Clock, Plus, Download, AlertCircle,
-    ChevronRight, Calendar, RefreshCw, Info, Database
+    ChevronRight, Calendar, RefreshCw, Info, Database,
+    Link as LinkIcon, Unlink, Eye
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -18,6 +19,7 @@ export default function MonitoringEvaluationPage() {
     const [indicators, setIndicators] = useState([]);
     const [loading, setLoading] = useState(true);
     const [performance, setPerformance] = useState([]);
+    const [riskSummary, setRiskSummary] = useState(null);
     const [selectedInd, setSelectedInd] = useState(null);
     const [showReportForm, setShowReportForm] = useState(false);
     const [showIndicatorForm, setShowIndicatorForm] = useState(false);
@@ -33,7 +35,13 @@ export default function MonitoringEvaluationPage() {
     });
 
     // KoBo State
+    const [koboConfig, setKoboConfig] = useState(null);
+    const [koboForms, setKoboForms] = useState([]);
     const [koboLinks, setKoboLinks] = useState([]);
+    const [koboLoading, setKoboLoading] = useState(false);
+    const [koboLinkSelections, setKoboLinkSelections] = useState({});
+    const [koboFields, setKoboFields] = useState({});
+    const [inspectingForm, setInspectingForm] = useState('');
     const [syncing, setSyncing] = useState(false);
 
     // Form State
@@ -43,15 +51,29 @@ export default function MonitoringEvaluationPage() {
 
     useEffect(() => {
         fetchMEData();
-        fetchKoboLinks();
+        fetchKoboWorkspace();
     }, []);
 
-    const fetchKoboLinks = async () => {
+    const fetchKoboWorkspace = async () => {
+        setKoboLoading(true);
         try {
-            const res = await axios.get(`${API_BASE}/kobo/links`, { params: { userId: user.id } });
-            setKoboLinks(res.data);
+            const [configRes, linkRes] = await Promise.all([
+                axios.get(`${API_BASE}/kobo/config`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/kobo/links`, { params: { userId: user.id } }),
+            ]);
+            setKoboConfig(configRes.data || null);
+            setKoboLinks(linkRes.data || []);
+
+            if (configRes.data?.is_connected) {
+                const formsRes = await axios.get(`${API_BASE}/kobo/forms`, { params: { userId: user.id } });
+                setKoboForms(formsRes.data || []);
+            } else {
+                setKoboForms([]);
+            }
         } catch (err) {
-            console.error('Failed to fetch KoBo links');
+            console.error('Failed to fetch KoBo workspace', err);
+        } finally {
+            setKoboLoading(false);
         }
     };
 
@@ -62,7 +84,7 @@ export default function MonitoringEvaluationPage() {
             const res = await axios.post(endpoint, { userId: user.id });
             alert(res.data.message || 'Sync successful');
             fetchMEData();
-            fetchKoboLinks();
+            fetchKoboWorkspace();
         } catch (err) {
             alert('Sync failed: ' + (err.response?.data?.message || err.message));
         } finally {
@@ -70,17 +92,64 @@ export default function MonitoringEvaluationPage() {
         }
     };
 
+    const handleLinkForm = async (form) => {
+        const indicatorId = koboLinkSelections[form.uid];
+        if (!indicatorId) {
+            alert('Select an indicator before linking this form.');
+            return;
+        }
+
+        try {
+            await axios.post(`${API_BASE}/kobo/link`, {
+                userId: user.id,
+                kobo_form_uid: form.uid,
+                kobo_form_name: form.name,
+                indicator_id: indicatorId,
+            });
+            setKoboLinkSelections((current) => ({ ...current, [form.uid]: '' }));
+            await fetchKoboWorkspace();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to link Kobo form.');
+        }
+    };
+
+    const handleUnlinkForm = async (link) => {
+        if (!window.confirm(`Unlink "${link.kobo_form_name}" from this indicator?`)) return;
+
+        try {
+            await axios.delete(`${API_BASE}/kobo/link/${link.id}`, { params: { userId: user.id } });
+            await fetchKoboWorkspace();
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to unlink Kobo form.');
+        }
+    };
+
+    const handleInspectFields = async (formUid) => {
+        setInspectingForm(formUid);
+        try {
+            const res = await axios.get(`${API_BASE}/kobo/fields/${formUid}`, { params: { userId: user.id } });
+            setKoboFields((current) => ({ ...current, [formUid]: res.data || [] }));
+        } catch (err) {
+            alert(err.response?.data?.error || 'No fields available for this form yet.');
+        } finally {
+            setInspectingForm('');
+        }
+    };
+
     const fetchMEData = async () => {
         setLoading(true);
         try {
-            const [indRes, perfRes, projectRes] = await Promise.all([
+            const [indRes, perfRes, projectRes, riskRes] = await Promise.all([
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
             ]);
-            setIndicators(indRes.data);
+            const riskById = new Map((riskRes.data?.indicators || []).map((item) => [item.id, item]));
+            setIndicators((indRes.data || []).map((item) => ({ ...item, ...(riskById.get(item.id) || {}) })));
             setPerformance(perfRes.data.reverse());
             setProjects(projectRes.data || []);
+            setRiskSummary(riskRes.data || null);
         } catch (err) {
             console.error('Failed to fetch M&E data', err);
         } finally {
@@ -134,6 +203,7 @@ export default function MonitoringEvaluationPage() {
     const filteredIndicators = indicators.filter((ind) =>
         ind.title.toLowerCase().includes(indicatorSearch.toLowerCase())
     );
+    const linkedFormUids = new Set(koboLinks.map((link) => link.kobo_form_uid));
 
     const handleReportProgress = async (e) => {
         e.preventDefault();
@@ -185,6 +255,13 @@ export default function MonitoringEvaluationPage() {
                         <div className="kpi-sub">{indicators.filter(i => i.status === 'active').length} active targets</div>
                     </div>
 
+                    <div className="kpi-card danger">
+                        <div className="kpi-icon-wrap"><AlertCircle size={22} /></div>
+                        <div className="kpi-label">High Risk Indicators</div>
+                        <div className="kpi-value">{riskSummary?.high_risk_count || 0}</div>
+                        <div className="kpi-sub">Budget, progress, and stale update risk</div>
+                    </div>
+
                     <div className="panel" style={{ minWidth: 0 }}>
                         <div className="panel-header">
                             <h2 className="panel-title">Cumulative Performance</h2>
@@ -216,43 +293,114 @@ export default function MonitoringEvaluationPage() {
 
                     <div className="panel" style={{ borderTop: '4px solid var(--brand-primary)' }}>
                         <div className="panel-header" style={{ border: 'none', paddingBottom: '0' }}>
-                            <h2 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <RefreshCw size={16} className={syncing ? 'spin' : ''} /> External Data Sync
-                            </h2>
-                        </div>
-                        <div style={{ padding: '20px' }}>
-                            <div className="me-sync-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <div>
-                                    <div style={{ fontSize: '13px', fontWeight: 600 }}>KoBoToolbox Connection</div>
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{koboLinks.length} active form bridges</div>
+                            <div>
+                                <h2 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <RefreshCw size={16} className={syncing ? 'spin' : ''} /> KoBoToolbox
+                                </h2>
+                                <div className="panel-subtitle">
+                                    {koboConfig?.is_connected
+                                        ? `${koboLinks.length} active form bridge${koboLinks.length === 1 ? '' : 's'}`
+                                        : 'Not connected. Configure the API token in Settings first.'}
                                 </div>
-                                <button 
-                                    className="btn btn-secondary btn-sm" 
-                                    onClick={() => handleSync()} 
-                                    disabled={syncing || koboLinks.length === 0}
-                                >
-                                    {syncing ? 'Syncing...' : 'Sync All'}
-                                </button>
                             </div>
+                            <button
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => handleSync()}
+                                disabled={syncing || !koboConfig?.is_connected || koboLinks.length === 0}
+                            >
+                                {syncing ? 'Syncing...' : 'Sync All'}
+                            </button>
+                        </div>
+                        <div style={{ padding: '20px', display: 'grid', gap: '16px' }}>
+                            {koboLoading ? (
+                                <div className="page-loading" style={{ minHeight: '120px' }}><div className="spinner" /></div>
+                            ) : (
+                                <>
+                                    <div className="control-stack compact">
+                                        {koboLinks.slice(0, 5).map(link => (
+                                            <div key={link.id} className="control-row static" style={{ alignItems: 'center' }}>
+                                                <div>
+                                                    <div className="control-title">{link.kobo_form_name}</div>
+                                                    <div className="control-copy">
+                                                        {link.indicator_title} · {link.submissions_count || 0} submissions
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleSync(link.id)} disabled={syncing}>
+                                                        <RefreshCw size={12} /> Sync
+                                                    </button>
+                                                    <button className="btn btn-ghost btn-sm" onClick={() => handleUnlinkForm(link)}>
+                                                        <Unlink size={12} /> Unlink
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {koboLinks.length === 0 && (
+                                            <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '8px' }}>
+                                                No KoBo forms linked.
+                                            </div>
+                                        )}
+                                    </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {koboLinks.slice(0, 3).map(link => (
-                                    <div key={link.id} style={{ fontSize: '12px', padding: '10px', background: 'var(--bg-app)', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '180px' }}>
-                                            <div style={{ fontWeight: 600 }}>{link.kobo_form_name}</div>
-                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Linked to: {link.indicator_title}</div>
+                                    {koboConfig?.is_connected && (
+                                        <div className="surface-muted">
+                                            <div className="domain-kicker">Available Forms</div>
+                                            <div className="control-stack compact">
+                                                {koboForms.slice(0, 6).map((form) => {
+                                                    const isLinked = linkedFormUids.has(form.uid);
+                                                    return (
+                                                        <div key={form.uid} className="control-row static" style={{ alignItems: 'center' }}>
+                                                            <div style={{ minWidth: 0 }}>
+                                                                <div className="control-title">{form.name}</div>
+                                                                <div className="control-copy">{form.uid}</div>
+                                                                {koboFields[form.uid]?.length > 0 && (
+                                                                    <div className="form-hint" style={{ marginTop: '6px' }}>
+                                                                        Fields: {koboFields[form.uid].slice(0, 6).join(', ')}
+                                                                        {koboFields[form.uid].length > 6 ? '...' : ''}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ display: 'grid', gap: '8px', minWidth: '220px' }}>
+                                                                {isLinked ? (
+                                                                    <span className="badge badge-success">Linked</span>
+                                                                ) : (
+                                                                    <>
+                                                                        <select
+                                                                            className="form-input"
+                                                                            style={{ height: '34px', fontSize: '12px', margin: 0 }}
+                                                                            value={koboLinkSelections[form.uid] || ''}
+                                                                            onChange={(event) =>
+                                                                                setKoboLinkSelections((current) => ({
+                                                                                    ...current,
+                                                                                    [form.uid]: event.target.value,
+                                                                                }))
+                                                                            }
+                                                                        >
+                                                                            <option value="">Select indicator</option>
+                                                                            {indicators.map((indicator) => (
+                                                                                <option key={indicator.id} value={indicator.id}>{indicator.title}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                        <button className="btn btn-primary btn-sm" onClick={() => handleLinkForm(form)}>
+                                                                            <LinkIcon size={12} /> Link Form
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                                <button className="btn btn-ghost btn-sm" onClick={() => handleInspectFields(form.uid)} disabled={inspectingForm === form.uid}>
+                                                                    <Eye size={12} /> {inspectingForm === form.uid ? 'Inspecting...' : 'Inspect Fields'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                                {koboForms.length === 0 && (
+                                                    <div className="form-hint">No deployed survey forms were returned by KoboToolbox.</div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <button className="btn btn-ghost btn-sm" onClick={() => handleSync(link.id)} disabled={syncing}>
-                                            <RefreshCw size={12} />
-                                        </button>
-                                    </div>
-                                ))}
-                                {koboLinks.length === 0 && (
-                                    <div style={{ textAlign: 'center', padding: '20px', fontSize: '11px', color: 'var(--text-muted)', border: '2px dashed var(--border)', borderRadius: '8px' }}>
-                                        No KoBo forms linked.
-                                    </div>
-                                )}
-                            </div>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -293,6 +441,11 @@ export default function MonitoringEvaluationPage() {
                                             <span className={`badge badge-${ind.priority === 'critical' ? 'danger' : ind.priority === 'high' ? 'warning' : 'primary'}`} style={{ fontSize: '9px', padding: '2px 6px' }}>
                                                 {ind.priority.toUpperCase()}
                                             </span>
+                                            {ind.risk_level && (
+                                                <span className={`badge badge-${ind.risk_level === 'high' ? 'danger' : ind.risk_level === 'medium' ? 'warning' : 'success'}`} style={{ fontSize: '9px', padding: '2px 6px', marginLeft: '6px' }}>
+                                                    {ind.risk_level.toUpperCase()} RISK
+                                                </span>
+                                            )}
                                         </td>
                                         <td>
                                             <div style={{ fontSize: '14px', fontWeight: 700 }}>{ind.current_value.toLocaleString()}</div>
@@ -309,6 +462,9 @@ export default function MonitoringEvaluationPage() {
                                                 ></div>
                                             </div>
                                             <div style={{ fontSize: '11px', fontWeight: 600 }}>{ind.progress_percentage}% achieved</div>
+                                            {ind.budget_utilization_percent !== undefined && (
+                                                <div className="form-hint">{ind.budget_utilization_percent}% budget used</div>
+                                            )}
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <div style={{ display: 'flex', gap: '4px', justifyContent: 'flex-end' }}>

@@ -16,7 +16,6 @@ import {
     readUploadedFileAsDataUrl,
     removeUploadedFile,
 } from './utils/uploads.js';
-import postgres from 'postgres';
 
 const VOLUNTEER_UPLOAD_MIME_TYPES = [...DOCUMENT_MIME_TYPES, ...IMAGE_MIME_TYPES];
 const EXCEL_MIME_TYPES = [
@@ -108,7 +107,7 @@ const buildVolunteerSubmissionSelect = (columns, recipientTableExists, actorId) 
         )`
         : 'FALSE';
 
-    return postgres.unsafe(`
+    return sql.unsafe(`
         s.id,
         s.user_id,
         u.name AS volunteer_name,

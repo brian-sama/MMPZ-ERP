@@ -5,7 +5,17 @@ import {
     getRequestUserId,
     getUserContext,
     SYSTEM_ROLES,
+    canSeeOrganizationDashboard,
 } from './utils/rbac.js';
+
+const DASHBOARD_ROLES = new Set([
+    'DIRECTOR',
+    'COMMUNITY_DEVELOPMENT_OFFICER',
+    'PSYCHOSOCIAL_SUPPORT_OFFICER',
+    'SOCIAL_SERVICES_INTERN',
+    'YOUTH_COMMUNICATIONS_INTERN',
+    'ME_INTERN_ACTING_OFFICER',
+]);
 
 const getTableColumns = async (tableName) => {
     const rows = await sql`
@@ -17,10 +27,62 @@ const getTableColumns = async (tableName) => {
     return new Set(rows.map((row) => row.column_name));
 };
 
+const projectScopeFilter = (actor, alias = 'p') => {
+    if (canSeeOrganizationDashboard(actor)) return '';
+    const actorId = Number(actor.id);
+    return `
+        AND (
+            ${alias}.owner_user_id = ${actorId}
+            OR EXISTS (
+                SELECT 1
+                FROM project_assignments pa
+                WHERE pa.project_id = ${alias}.id
+                  AND pa.user_id = ${actorId}
+                  AND pa.is_active = TRUE
+            )
+        )
+    `;
+};
+
+const indicatorScopeFilter = (actor, alias = 'i') => {
+    if (canSeeOrganizationDashboard(actor)) return '';
+    const actorId = Number(actor.id);
+    return `
+        AND (
+            ${alias}.created_by_user_id = ${actorId}
+            OR EXISTS (
+                SELECT 1
+                FROM project_assignments pa
+                WHERE pa.project_id = ${alias}.project_id
+                  AND pa.user_id = ${actorId}
+                  AND pa.is_active = TRUE
+            )
+        )
+    `;
+};
+
+const approvalScopeFilter = (actor, alias = 'a') => {
+    if (canSeeOrganizationDashboard(actor)) return '';
+    const actorId = Number(actor.id);
+    return `
+        AND (
+            ${alias}.requested_by_user_id = ${actorId}
+            OR EXISTS (
+                SELECT 1
+                FROM procurement_requests pr
+                JOIN projects p ON p.id = pr.project_id
+                WHERE ${alias}.entity_type = 'procurement'
+                  AND ${alias}.entity_id = pr.id
+                  ${projectScopeFilter(actor, 'p')}
+            )
+        )
+    `;
+};
+
 export const handler = async (event) => {
     try {
         const actor = await getUserContext(getRequestUserId(event));
-        if (actor.role_code !== 'DIRECTOR' && actor.system_role !== SYSTEM_ROLES.SUPER_ADMIN) {
+        if (!DASHBOARD_ROLES.has(actor.role_code) && actor.system_role !== SYSTEM_ROLES.SUPER_ADMIN) {
             throw new HttpError('Permission denied', 403);
         }
 
@@ -44,20 +106,23 @@ export const handler = async (event) => {
         const priorityExpr = indicatorColumns.has('priority') ? 'priority' : `'medium' AS priority`;
         const statusExpr = indicatorColumns.has('status') ? 'status' : `'active' AS status`;
         const indicatorStatusFilter = indicatorColumns.has('status')
-            ? `WHERE status != 'archived'`
-            : '';
+            ? `WHERE status != 'archived' ${indicatorScopeFilter(actor)}`
+            : `WHERE 1=1 ${indicatorScopeFilter(actor)}`;
 
         // ... rest of logic remains correct as it uses the SQL template tags ...
         // (Just ensure the rest of the file uses the correct responses)
         // 1. Fetch KPI basic counts/sums
         const metrics = await sql.unsafe(`
             SELECT 
-                (SELECT COUNT(*)::int FROM programs WHERE status = 'active') as active_programs,
-                (SELECT COUNT(*)::int FROM projects WHERE status = 'active') as active_projects,
+                (SELECT COUNT(DISTINCT pg.id)::int
+                 FROM programs pg
+                 JOIN projects p ON p.program_id = pg.id
+                 WHERE pg.status = 'active' ${projectScopeFilter(actor, 'p')}) as active_programs,
+                (SELECT COUNT(*)::int FROM projects p WHERE status = 'active' ${projectScopeFilter(actor, 'p')}) as active_projects,
                 (SELECT COUNT(*)::int FROM users WHERE ${facilitatorPredicate}) as active_facilitators,
-                (SELECT ${totalBudgetExpr} FROM indicators ${indicatorColumns.has('status') ? "WHERE status = 'active'" : ''}) as budget_total,
-                (SELECT ${budgetRemainingExpr} FROM indicators ${indicatorColumns.has('status') ? "WHERE status = 'active'" : ''}) as budget_remaining,
-                (SELECT COUNT(*)::int FROM approvals WHERE status = 'pending') as pending_approvals
+                (SELECT ${totalBudgetExpr} FROM indicators i ${indicatorColumns.has('status') ? "WHERE status = 'active'" : 'WHERE 1=1'} ${indicatorScopeFilter(actor, 'i')}) as budget_total,
+                (SELECT ${budgetRemainingExpr} FROM indicators i ${indicatorColumns.has('status') ? "WHERE status = 'active'" : 'WHERE 1=1'} ${indicatorScopeFilter(actor, 'i')}) as budget_remaining,
+                (SELECT COUNT(*)::int FROM approvals a WHERE status = 'pending' ${approvalScopeFilter(actor, 'a')}) as pending_approvals
         `);
 
         const m = metrics[0];
@@ -87,18 +152,19 @@ export const handler = async (event) => {
         `);
 
         // 3. Fetch recent pending approvals preview
-        const pendingApprovalsList = await sql`
+        const pendingApprovalsList = await sql.unsafe(`
             SELECT 
                 id,
                 entity_type AS request_type,
                 entity_id,
                 created_at,
                 (SELECT name FROM users WHERE id = requested_by_user_id) as requester_name
-            FROM approvals
+            FROM approvals a
             WHERE status = 'pending'
+            ${approvalScopeFilter(actor, 'a')}
             ORDER BY created_at DESC
             LIMIT 5
-        `;
+        `);
 
         return successResponse({
             active_programs: m.active_programs,
