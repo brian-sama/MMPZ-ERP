@@ -149,12 +149,12 @@ const loadRecipientsByRoles = async (tx, roleCodes) => {
 };
 
 export const handler = async (event) => {
-    if (event.httpMethod === 'OPTIONS') return corsResponse();
-
-    const path = event.path.replace('/api/volunteer/', '');
-    const method = event.httpMethod;
-
     try {
+        if (event.httpMethod === 'OPTIONS') return corsResponse();
+
+        const path = event.path.replace('/api/volunteer/', '');
+        const method = event.httpMethod;
+
         const body = parseBody(event);
         const actor = await getUserContext(getRequestUserId(event, body));
 
@@ -205,21 +205,21 @@ export const handler = async (event) => {
             }
 
             let uploadedFile = null;
-            if (fileData) {
-                uploadedFile = writeBase64Upload({
-                    base64Data: fileData,
-                    fileName,
-                    mimeType,
-                    subdirectory: 'volunteer-submissions',
-                    prefix: normalizedType,
-                    allowedMimeTypes: VOLUNTEER_UPLOAD_MIME_TYPES,
-                    maxBytes: 8 * 1024 * 1024,
-                });
-            }
-
-            const recipientIds = normalizeRecipientIds(recipients || assigned_user_ids || []);
-
             try {
+                if (fileData) {
+                    uploadedFile = writeBase64Upload({
+                        base64Data: fileData,
+                        fileName,
+                        mimeType,
+                        subdirectory: 'volunteer-submissions',
+                        prefix: normalizedType,
+                        allowedMimeTypes: VOLUNTEER_UPLOAD_MIME_TYPES,
+                        maxBytes: 8 * 1024 * 1024,
+                    });
+                }
+
+                const recipientIds = normalizeRecipientIds(recipients || assigned_user_ids || []);
+
                 const result = await sql.begin(async (tx) => {
                     await setAuditActor(tx, actor.id);
                     const rows = await tx`
@@ -247,7 +247,7 @@ export const handler = async (event) => {
                             ${mimeType || uploadedFile?.mimeType || null},
                             ${description || null}
                         )
-                        RETURNING id, type, title, file_name, file_path, created_at
+                        RETURNING *
                     `;
 
                     const submission = rows[0];
@@ -300,7 +300,7 @@ export const handler = async (event) => {
                             tx,
                             targetedRecipients.map((recipient) => ({
                                 userId: recipient.id,
-                                type: 'governance',
+                                type: 'system',
                                 title:
                                     normalizedType === 'leave_application'
                                         ? 'New leave application submitted'
@@ -351,10 +351,11 @@ export const handler = async (event) => {
 
                 return successResponse({ message: 'Submission successful', submission: result });
             } catch (dbError) {
+                console.error('Submission processing error:', dbError);
                 if (uploadedFile?.publicPath) {
                     removeUploadedFile(uploadedFile.publicPath);
                 }
-                throw dbError;
+                return errorResponse('Failed to process submission', 500, dbError.message + '\n' + dbError.stack);
             }
         }
 
@@ -435,7 +436,7 @@ export const handler = async (event) => {
             if (!id) return errorResponse('File ID is required', 400);
 
             const rows = await sql`
-                SELECT id, user_id, file_data, file_path, file_name, mime_type
+                SELECT id, user_id, file_path, file_name, mime_type
                 FROM volunteer_submissions
                 WHERE id = ${id}
                 LIMIT 1
@@ -455,13 +456,12 @@ export const handler = async (event) => {
                     return errorResponse('Unauthorized', 403);
                 }
             }
-            if (!file.file_data && !file.file_path) {
+            if (!file.file_path) {
                 return errorResponse('File is no longer available', 404);
             }
             return successResponse({
                 ...file,
                 file_data:
-                    file.file_data ||
                     readUploadedFileAsDataUrl(file.file_path, file.mime_type || 'application/octet-stream'),
             });
         }
@@ -580,6 +580,6 @@ export const handler = async (event) => {
             return errorResponse(error.message, error.statusCode);
         }
         console.error('Volunteer API error:', error);
-        return errorResponse('Internal error', 500, error.message);
+        return errorResponse('Internal error', 500, error.message + '\n' + error.stack);
     }
 };
