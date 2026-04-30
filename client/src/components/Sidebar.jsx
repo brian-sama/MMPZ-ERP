@@ -8,6 +8,56 @@ import { useTheme } from '../context/ThemeContext';
 import { formatRoleLabel } from '../accessControl';
 import { getNavigationForUser, isGovernanceRoute } from '../navigationConfig';
 
+const MAX_AVATAR_UPLOAD_BYTES = 10 * 1024 * 1024;
+const AVATAR_MAX_DIMENSION = 1200;
+
+const compressAvatarImage = (file) =>
+    new Promise((resolve, reject) => {
+        if (!file.type?.startsWith('image/')) {
+            reject(new Error('Please choose an image file.'));
+            return;
+        }
+
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+
+        image.onload = () => {
+            URL.revokeObjectURL(objectUrl);
+            const scale = Math.min(1, AVATAR_MAX_DIMENSION / Math.max(image.width, image.height));
+            const width = Math.max(1, Math.round(image.width * scale));
+            const height = Math.max(1, Math.round(image.height * scale));
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const context = canvas.getContext('2d');
+            context.drawImage(image, 0, 0, width, height);
+
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) {
+                        reject(new Error('Unable to prepare this image for upload.'));
+                        return;
+                    }
+                    const compressed = new File(
+                        [blob],
+                        file.name.replace(/\.[^.]+$/, '.jpg') || 'avatar.jpg',
+                        { type: 'image/jpeg', lastModified: Date.now() }
+                    );
+                    resolve(compressed.size < file.size ? compressed : file);
+                },
+                'image/jpeg',
+                0.82
+            );
+        };
+
+        image.onerror = () => {
+            URL.revokeObjectURL(objectUrl);
+            reject(new Error('Unable to read this image file.'));
+        };
+
+        image.src = objectUrl;
+    });
+
 export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }) {
     const { user, updateUserProfile, logout } = useAuth();
     const { theme } = useTheme();
@@ -34,22 +84,24 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
         const file = e.target.files[0];
         if (!file) return;
 
-        const formData = new FormData();
-        formData.append('avatar', file);
-
         setUpdating(true);
         try {
-            const res = await axios.post(`${API_BASE}/me/upload-avatar`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
+            const uploadFile = await compressAvatarImage(file);
+            if (uploadFile.size > MAX_AVATAR_UPLOAD_BYTES) {
+                throw new Error('Profile picture is too large. Please choose an image under 10MB.');
+            }
+
+            const formData = new FormData();
+            formData.append('avatar', uploadFile);
+
+            const res = await axios.post(`${API_BASE}/me/upload-avatar`, formData);
             updateUserProfile({ profile_picture_url: res.data.url });
         } catch (err) {
             console.error('Upload error:', err);
-            alert(err.response?.data?.error || "Failed to upload profile picture");
+            alert(err.response?.data?.error || err.message || "Failed to upload profile picture");
         } finally {
             setUpdating(false);
+            e.target.value = '';
         }
     };
 

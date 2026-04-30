@@ -8,6 +8,7 @@ import { getUserContext } from './utils/rbac.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
 
 // Configure multer storage
 const storage = multer.diskStorage({
@@ -27,7 +28,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ 
     storage: storage,
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    limits: { fileSize: MAX_AVATAR_BYTES },
     fileFilter: (req, file, cb) => {
         const allowedTypes = /jpeg|jpg|png|webp/;
         const isAllowed = allowedTypes.test(file.mimetype) || allowedTypes.test(path.extname(file.originalname).toLowerCase());
@@ -39,6 +40,11 @@ const upload = multer({
 export const handler = (req, res) => {
     upload(req, res, async (err) => {
         if (err) {
+            if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(413).json({
+                    error: `Profile picture is too large. Please upload an image under ${Math.floor(MAX_AVATAR_BYTES / (1024 * 1024))}MB.`,
+                });
+            }
             return res.status(400).json({ error: err.message });
         }
 
