@@ -186,6 +186,7 @@ export const handler = async (event) => {
             } = body;
 
             const normalizedType = normalizeUploadType(type);
+            console.log(`[VolunteerSubmit] Incoming type: "${type}", Normalized: "${normalizedType}"`);
 
             if (!normalizedType) return errorResponse('Submission type is required', 400);
             if (!fileData && !content && !description) {
@@ -203,6 +204,11 @@ export const handler = async (event) => {
             if (normalizedType === 'request_for_funds_plan' && !isExcelUpload(mimeType, fileName)) {
                 return errorResponse('Request-for-funds plans must be uploaded as an Excel file (.xls or .xlsx).', 400);
             }
+
+            const nullify = (val) => {
+                if (val === undefined || val === null || (typeof val === 'string' && val.trim() === '')) return null;
+                return val;
+            };
 
             let uploadedFile = null;
             try {
@@ -238,8 +244,8 @@ export const handler = async (event) => {
                         VALUES (
                             ${actor.id},
                             ${normalizedType},
-                            ${assignment_id || assignmentId || null},
-                            ${project_id || projectId || null},
+                            ${nullify(assignment_id || assignmentId)},
+                            ${nullify(project_id || projectId)},
                             ${title || null},
                             ${content || null},
                             ${uploadedFile?.publicPath || null},
