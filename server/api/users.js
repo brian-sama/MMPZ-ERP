@@ -19,7 +19,6 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 import { syncFacilitatorProfileForUser } from './utils/facilitators.js';
-import postgres from 'postgres';
 
 const getUserColumns = async () => {
     const rows = await sql`
@@ -38,7 +37,7 @@ const buildUserSelect = (columns) => {
             ? `u.${column}`
             : fallback;
 
-    return postgres.unsafe(`
+    return sql.unsafe(`
         u.id,
         u.name,
         u.email,
@@ -117,8 +116,11 @@ export const handler = async (event) => {
         const actorUserId = getRequestUserId(event, body);
         const actor = await getUserContext(actorUserId);
 
+        console.log('[USERS API] Request - method:', method, 'actor:', actor?.id, actor?.role_code, actor?.system_role);
+
         // GET - List users
         if (method === 'GET') {
+            console.log('[USERS API] GET /users - actor:', actor?.id, actor?.role_code, actor?.system_role);
             const userColumns = await getUserColumns();
             const selectList = buildUserSelect(userColumns);
             const data = await sql`
@@ -127,17 +129,23 @@ export const handler = async (event) => {
                 FROM users u
                 ORDER BY u.created_at DESC NULLS LAST, u.id DESC
             `;
+            console.log('[USERS API] Raw data count:', data.length);
 
             if (hasPermission(actor, 'user.view')) {
-                return successResponse(data.map(sanitizeUser));
+                const sanitized = data.map(sanitizeUser);
+                console.log('[USERS API] Returning with user.view permission, count:', sanitized.length);
+                return successResponse(sanitized);
             }
 
-            return successResponse(data.map(sanitizeDirectoryUser));
+            const sanitized = data.map(sanitizeDirectoryUser);
+            console.log('[USERS API] Returning directory view, count:', sanitized.length);
+            return successResponse(sanitized);
         }
 
         // POST - Create user
         if (method === 'POST') {
             ensurePermission(actor, 'user.create');
+            console.log('[USERS API] POST /users - actor:', actor?.id, actor?.role_code, actor?.system_role);
 
             const { name, email, password } = body;
             if (!name || !email || !password) {

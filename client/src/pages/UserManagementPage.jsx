@@ -48,10 +48,14 @@ export default function UserManagementPage() {
     const fetchUsers = async () => {
         setLoading(true);
         try {
+            if (!currentUser?.id) {
+                console.error('Cannot fetch users: currentUser is not available');
+                return;
+            }
             const res = await axios.get(`${API_BASE}/users`, { params: { userId: currentUser.id } });
             setUsers(res.data);
         } catch (err) {
-            console.error('Failed to fetch users');
+            console.error('Failed to fetch users:', err.message, err.response?.data);
         } finally {
             setLoading(false);
         }
