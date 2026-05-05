@@ -36,6 +36,8 @@ export default function StaffSubmissionsPage() {
     const [managerQueue, setManagerQueue] = useState([]);
     const [activeTab, setActiveTab] = useState('my_submissions'); // 'my_submissions' or 'pending_actions'
     const [selectedSub, setSelectedSub] = useState(null);
+    const [showModal, setShowModal] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [comment, setComment] = useState('');
     
     const [formData, setFormData] = useState({
@@ -123,6 +125,11 @@ export default function StaffSubmissionsPage() {
             await fetchLeaveBalance();
         } catch (error) {
             alert('Failed to submit: ' + (error.response?.data?.error || error.message));
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     const handleAction = async (subId, action) => {
         if (!comment && action !== 'approve') {
             alert('Comment is required for this action.');
