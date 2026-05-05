@@ -279,11 +279,10 @@ export default function GovernanceApprovalsPage() {
                                 </div>
                             </div>
                         )}
-                    </div>
 
-                    {canAction && selectedItem.status === 'pending' && (
-                        <div>
-                            <div className="form-label">Action & Comments</div>
+                        {canAction && selectedItem.status === 'pending' && (
+                            <div>
+                                <div className="form-label">Action & Comments</div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 <textarea
                                     className="form-textarea"
