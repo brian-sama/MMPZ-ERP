@@ -45,6 +45,7 @@ import { handler as calendarEventsHandler } from './server/api/calendar-events.j
 import { handler as documentLibraryHandler } from './server/api/document-library.js';
 import { handler as pushSubscriptionsHandler } from './server/api/push-subscriptions.js';
 import { handler as submissionsHandler } from './server/api/submissions.js';
+import { handler as leaveHandler } from './server/api/leave.js';
 import { subscribeRealtime } from './server/api/utils/notification-center.js';
 import {
     getBearerTokenFromHeaders,
@@ -183,19 +184,6 @@ app.use('/api/budget/programs', functionToExpress(budgetHandler));
 app.use('/api/budget/indicators', functionToExpress(budgetHandler));
 app.use('/api/budget/activities', functionToExpress(budgetHandler));
 app.use('/api/procurement/:id', functionToExpress(procurementHandler));
-app.use('/api/procurement', functionToExpress(procurementHandler));
-
-app.use('/api/me/summary', functionToExpress(meHandler));
-app.use('/api/me/progress', functionToExpress(meHandler));
-app.use('/api/me/change-password', functionToExpress(changePasswordHandler));
-app.use('/api/me/profile', functionToExpress(userProfileHandler));
-app.use('/api/me/upload-avatar', uploadAvatarHandler); // Note: Multer handler doesn't need functionToExpress adapter if it's already an Express handler
-app.use('/api/me', functionToExpress(meHandler));
-
-app.use('/api/governance/queue', functionToExpress(governanceHandler));
-app.use('/api/governance/action', functionToExpress(governanceHandler));
-app.use('/api/governance/:id', functionToExpress(governanceHandler));
-
 // Programs/projects/expenses/governance
 app.use('/api/settings/finance-threshold', functionToExpress(financeThresholdHandler));
 app.use('/api/programs', functionToExpress(programsHandler));

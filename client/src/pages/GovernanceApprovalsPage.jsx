@@ -20,7 +20,9 @@ export default function GovernanceApprovalsPage() {
     const [comments, setComments] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const canAction = user?.role_code === 'DIRECTOR';
+    const isDirector = user?.role_code === 'DIRECTOR' || user?.role_code === 'SYSTEM_ADMIN';
+    const isFinance = user?.role_code === 'FINANCE_ADMIN_OFFICER';
+    const canAction = isDirector || isFinance;
 
     useEffect(() => {
         fetchQueue();
@@ -197,7 +199,7 @@ export default function GovernanceApprovalsPage() {
                                 </div>
                                 <div>
                                     <div className="form-label">Status</div>
-                                    <div className={`badge ${selectedItem.status === 'approved' ? 'badge-success' : selectedItem.status === 'rejected' ? 'badge-danger' : 'badge-muted'}`}>
+                                    <div className={`badge ${['approved', 'verified'].includes(selectedItem.status) ? 'badge-success' : selectedItem.status === 'rejected' ? 'badge-danger' : 'badge-muted'}`}>
                                         {selectedItem.status?.toUpperCase() || 'PENDING'}
                                     </div>
                                 </div>
@@ -280,7 +282,26 @@ export default function GovernanceApprovalsPage() {
                             </div>
                         )}
 
-                        {canAction && selectedItem.status === 'pending' && (
+                        {selectedItem.entity_type === 'unified_submission' && selectedItem.signatures && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <div className="form-label">Audit Trail & Signatures</div>
+                                <div className="control-stack">
+                                    {selectedItem.signatures.map((sig, idx) => (
+                                        <div key={idx} className="control-row static" style={{ padding: '12px' }}>
+                                            <div style={{ flex: 1 }}>
+                                                <div style={{ fontWeight: 600, fontSize: '13px' }}>{sig.name} ({sig.role.replace(/_/g, ' ')})</div>
+                                                <div style={{ fontSize: '11px', color: sig.action === 'reject' ? 'var(--brand-danger)' : 'var(--brand-success)' }}>
+                                                    {sig.action.toUpperCase()}D on {new Date(sig.timestamp).toLocaleString()}
+                                                </div>
+                                                {sig.comment && <div style={{ fontSize: '12px', fontStyle: 'italic', marginTop: '4px' }}>"{sig.comment}"</div>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {canAction && (selectedItem.status === 'pending' || ['submitted', 'verified'].includes(selectedItem.status)) && (
                             <div>
                                 <div className="form-label">Action & Comments</div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -292,28 +313,40 @@ export default function GovernanceApprovalsPage() {
                                     rows={3}
                                 />
                             </div>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <button
-                                    className="btn btn-success"
-                                    onClick={() => handleAction('approve')}
-                                    disabled={actionLoading || !comments.trim()}
-                                >
-                                    <CheckCircle2 size={16} />
-                                    Approve
-                                </button>
-                                <button
-                                    className="btn btn-danger"
-                                    onClick={() => handleAction('reject')}
-                                    disabled={actionLoading || !comments.trim()}
-                                >
-                                    <XCircle size={16} />
-                                    Reject
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        {isFinance && selectedItem.status === 'submitted' && selectedItem.entity_type === 'unified_submission' && (
+                                            <button
+                                                className="btn btn-success"
+                                                onClick={() => handleAction('verify')}
+                                                disabled={actionLoading}
+                                            >
+                                                <CheckCircle2 size={16} />
+                                                Verify & Forward
+                                            </button>
+                                        )}
+                                        {isDirector && (selectedItem.status === 'pending' || selectedItem.status === 'verified' || (selectedItem.entity_type === 'unified_submission' && selectedItem.status === 'submitted')) && (
+                                            <button
+                                                className="btn btn-success"
+                                                onClick={() => handleAction('approve')}
+                                                disabled={actionLoading}
+                                            >
+                                                <CheckCircle2 size={16} />
+                                                Approve
+                                            </button>
+                                        )}
+                                        <button
+                                            className="btn btn-danger"
+                                            onClick={() => handleAction('reject')}
+                                            disabled={actionLoading || !comments.trim()}
+                                        >
+                                            <XCircle size={16} />
+                                            Reject
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
-                    {!canAction && selectedItem.status === 'pending' && (
+                        {!canAction && (selectedItem.status === 'pending' || ['submitted', 'verified'].includes(selectedItem.status)) && (
                         <div className="page-message error">
                             <AlertTriangle size={16} style={{ marginRight: '8px' }} />
                             You don't have permission to approve or reject requests. Only users with DIRECTOR role can take action.

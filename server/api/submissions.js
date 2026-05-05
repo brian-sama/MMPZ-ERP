@@ -38,7 +38,9 @@ export const handler = async (event) => {
 
             // Determine initial handler based on type
             let current_handler_role = 'DIRECTOR';
-            if (submission_type === 'leave_application' || submission_type === 'request_for_funds') {
+            if (submission_type === 'leave_application') {
+                current_handler_role = 'FINANCE_ADMIN_OFFICER';
+            } else if (submission_type === 'request_for_funds') {
                 current_handler_role = 'FINANCE_ADMIN_OFFICER';
             }
 
@@ -55,7 +57,8 @@ export const handler = async (event) => {
                     current_handler_role,
                     status,
                     related_entity_type,
-                    related_entity_id
+                    related_entity_id,
+                    metadata
                 ) VALUES (
                     ${userId},
                     ${submission_type},
@@ -68,9 +71,19 @@ export const handler = async (event) => {
                     ${current_handler_role},
                     'submitted',
                     ${related_entity_type},
-                    ${related_entity_id}
+                    ${related_entity_id},
+                    ${body.metadata || {}}
                 ) RETURNING *
             `;
+
+            // Initialize leave balance if it's a leave application and balance doesn't exist
+            if (submission_type === 'leave_application') {
+                await sql`
+                    INSERT INTO leave_balances (user_id)
+                    VALUES (${userId})
+                    ON CONFLICT (user_id) DO NOTHING
+                `;
+            }
 
             // Log the initial workflow step
             await sql`
@@ -100,7 +113,7 @@ export const handler = async (event) => {
             const status = query.status;
 
             let results;
-            if (hasPermission(userContext, 'approval.read')) {
+            if (query.view === 'admin' || hasPermission(userContext, 'approval.read')) {
                 // Administrative view: see all relevant to role or all if Director
                 if (userContext.role_code === 'DIRECTOR' || userContext.role_code === 'SYSTEM_ADMIN') {
                     results = await sql`
@@ -109,6 +122,7 @@ export const handler = async (event) => {
                         JOIN users u ON s.submitter_user_id = u.id
                         WHERE (${type}::text IS NULL OR s.submission_type = ${type})
                           AND (${status}::text IS NULL OR s.status = ${status})
+                          AND (${query.view}::text != 'admin' OR s.current_handler_role = 'DIRECTOR' OR s.status = 'verified')
                         ORDER BY s.created_at DESC
                         LIMIT ${limit} OFFSET ${offset}
                     `;
@@ -118,7 +132,8 @@ export const handler = async (event) => {
                         FROM unified_submissions s
                         JOIN users u ON s.submitter_user_id = u.id
                         WHERE s.current_handler_role = ${userContext.role_code}
-                          OR s.submitter_user_id = ${userId}
+                          AND (${type}::text IS NULL OR s.submission_type = ${type})
+                          AND (${status}::text IS NULL OR s.status = ${status})
                         ORDER BY s.created_at DESC
                         LIMIT ${limit} OFFSET ${offset}
                     `;
@@ -167,25 +182,53 @@ export const handler = async (event) => {
                 if (next_handler_role) {
                     toStatus = 'reviewed';
                     currentHandlerRole = next_handler_role;
+                } else if (submission.submission_type === 'leave_application' && userContext.role_code === 'FINANCE_ADMIN_OFFICER') {
+                    // Specific workflow for leave: Finance verifies, then Director authorizes
+                    toStatus = 'verified';
+                    currentHandlerRole = 'DIRECTOR';
                 } else {
                     toStatus = 'approved';
                     currentHandlerRole = null;
                 }
+            } else if (action === 'verify') {
+                toStatus = 'verified';
+                currentHandlerRole = 'DIRECTOR';
             } else if (action === 'reject') {
                 toStatus = 'rejected';
                 currentHandlerRole = null;
             } else if (action === 'request_changes') {
                 toStatus = 'pending_changes';
-                currentHandlerRole = null; // Back to submitter implicitly
-            } else if (action === 'verify') {
-                toStatus = 'verified';
-                currentHandlerRole = 'DIRECTOR'; // Usually moves to Director after M&E verify
+                currentHandlerRole = null;
             }
+
+            // Update leave balances if finally approved
+            if (toStatus === 'approved' && submission.submission_type === 'leave_application') {
+                const daysRequested = Number(submission.metadata?.days_requested || 0);
+                if (daysRequested > 0) {
+                    await sql`
+                        UPDATE leave_balances
+                        SET used_days = used_days + ${daysRequested},
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = ${submission.submitter_user_id}
+                    `;
+                }
+            }
+
+            // Record signature
+            const newSignature = {
+                user_id: userId,
+                name: userContext.name,
+                role: userContext.role_code,
+                action: action,
+                timestamp: new Date().toISOString(),
+                comment: comment
+            };
 
             const [updated] = await sql`
                 UPDATE unified_submissions
                 SET status = ${toStatus},
                     current_handler_role = ${currentHandlerRole},
+                    signatures = signatures || ${JSON.stringify(newSignature)}::jsonb,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = ${submissionId}
                 RETURNING *

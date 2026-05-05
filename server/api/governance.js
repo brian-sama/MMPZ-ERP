@@ -135,10 +135,43 @@ export const handler = async (event) => {
                     LEFT JOIN volunteer_submissions vs
                         ON a.entity_type = 'volunteer_submission'
                        AND vs.id::text = a.entity_id
+                    LEFT JOIN unified_submissions us
+                        ON a.entity_type = 'unified_submission'
+                       AND us.id::text = a.entity_id
                     LEFT JOIN projects p ON vs.project_id = p.id
                     WHERE a.id = ${id}
                 `;
-                if (approval.length === 0) return errorResponse('Approval not found', 404);
+                let currentApproval = approval[0];
+                
+                if (!currentApproval) {
+                    // Try to fetch from unified_submissions directly if not in approvals table
+                    const unified = await sql`
+                        SELECT 
+                            s.id::text as id, 'unified_submission' as entity_type, s.id::text as entity_id, s.status, 
+                            u.name as requester_name, u.role_code as requester_role, s.created_at,
+                            s.title as submission_title, s.description as submission_description,
+                            s.file_name as submission_file_name, s.file_path as submission_file_path,
+                            s.submission_type, s.metadata, s.signatures
+                        FROM unified_submissions s
+                        JOIN users u ON s.submitter_user_id = u.id
+                        WHERE s.id::text = ${id}
+                        LIMIT 1
+                    `;
+                    if (unified.length > 0) {
+                        currentApproval = {
+                            ...unified[0],
+                            display_type: unified[0].submission_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                            entity_data: {
+                                title: unified[0].submission_title,
+                                description: unified[0].submission_description,
+                                type: unified[0].submission_type,
+                                ...unified[0].metadata
+                            }
+                        };
+                        return successResponse(currentApproval);
+                    }
+                    return errorResponse('Approval not found', 404);
+                }
 
                 const logs = await sql`
                     SELECT al.*, u.name AS actor_name
@@ -235,23 +268,40 @@ export const handler = async (event) => {
 
             try {
                 const results = await sql`
-                    SELECT
-                        a.*,
-                        u.name AS requester_name,
-                        pr.title AS procurement_title,
-                        pr.total_estimated_cost,
-                        pr.status AS procurement_status,
-                        ${bidAnalysisEnabled ? sql`pr.bid_analysis_status` : sql`'pending'::text AS bid_analysis_status`},
-                        vs.type AS submission_type
-                    FROM approvals a
-                    INNER JOIN users u ON a.requested_by_user_id = u.id
-                    LEFT JOIN procurement_requests pr
-                        ON a.entity_type = 'procurement'
-                       AND pr.id::text = a.entity_id
-                    LEFT JOIN volunteer_submissions vs
-                        ON a.entity_type = 'volunteer_submission'
-                       AND vs.id::text = a.entity_id
-                    ORDER BY a.created_at DESC
+                    (
+                        SELECT
+                            a.id, a.entity_type, a.entity_id, a.status, a.current_step, a.created_at,
+                            u.name AS requester_name,
+                            'DIRECTOR' as requester_role, -- Simplified for union
+                            pr.title AS procurement_title,
+                            vs.type AS submission_type
+                        FROM approvals a
+                        INNER JOIN users u ON a.requested_by_user_id = u.id
+                        LEFT JOIN procurement_requests pr
+                            ON a.entity_type = 'procurement'
+                           AND pr.id::text = a.entity_id
+                        LEFT JOIN volunteer_submissions vs
+                            ON a.entity_type = 'volunteer_submission'
+                           AND vs.id::text = a.entity_id
+                        WHERE a.status = 'pending'
+                    )
+                    UNION ALL
+                    (
+                        SELECT
+                            s.id::text as id, 'unified_submission' as entity_type, s.id::text as entity_id, s.status, 1 as current_step, s.created_at,
+                            u.name AS requester_name,
+                            u.role_code as requester_role,
+                            s.title as procurement_title,
+                            s.submission_type as submission_type
+                        FROM unified_submissions s
+                        JOIN users u ON s.submitter_user_id = u.id
+                        WHERE s.status IN ('submitted', 'verified')
+                          AND (
+                            (${actor.role_code} = 'DIRECTOR' AND (s.current_handler_role = 'DIRECTOR' OR s.status = 'verified'))
+                            OR (${actor.role_code} = 'FINANCE_ADMIN_OFFICER' AND s.current_handler_role = 'FINANCE_ADMIN_OFFICER')
+                          )
+                    )
+                    ORDER BY created_at DESC
                 `;
 
                 const queue = results.map(item => {
@@ -276,58 +326,133 @@ export const handler = async (event) => {
             if (!approval_id || !action) {
                 return errorResponse('Approval ID and action are required', 400);
             }
-            if (!['approve', 'reject'].includes(action)) {
-                return errorResponse('Action must be approve or reject', 400);
+            if (!['approve', 'reject', 'verify'].includes(action)) {
+                return errorResponse('Action must be approve, reject or verify', 400);
             }
+
 
             ensurePermission(actor, 'approval.action');
 
             const approvals = await sql`
                 SELECT *
                 FROM approvals
-                WHERE id = ${approval_id}
+                WHERE id::text = ${approval_id}
                 LIMIT 1
             `;
-            if (approvals.length === 0) return errorResponse('Approval not found', 404);
+            
+            let approval;
+            let isUnified = false;
 
-            const approval = approvals[0];
+            if (approvals.length === 0) {
+                // Check unified submissions
+                const unified = await sql`
+                    SELECT s.*, u.name as requester_name
+                    FROM unified_submissions s
+                    JOIN users u ON s.submitter_user_id = u.id
+                    WHERE s.id::text = ${approval_id}
+                    LIMIT 1
+                `;
+                if (unified.length === 0) return errorResponse('Approval not found', 404);
+                
+                isUnified = true;
+                approval = {
+                    ...unified[0],
+                    entity_type: 'unified_submission',
+                    entity_id: unified[0].id.toString(),
+                    requested_by_user_id: unified[0].submitter_user_id
+                };
+            } else {
+                approval = approvals[0];
+            }
 
             if (approval.requested_by_user_id === actor.id) {
                 return errorResponse('Requester cannot approve or reject their own transaction', 403);
             }
-            if (approval.status !== 'pending') {
+            if (approval.status !== 'pending' && !isUnified) {
                 return errorResponse('Only pending approvals can be actioned', 400);
             }
+            if (isUnified && !['submitted', 'verified'].includes(approval.status)) {
+                return errorResponse('Only pending submissions can be actioned', 400);
+            }
+
 
             const finalStatus = action === 'approve' ? 'approved' : 'rejected';
             const procurementColumns = await getProcurementRequestColumns();
             const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
             await sql.begin(async (tx) => {
-                await tx`
-                    UPDATE approvals
-                    SET
-                        status = ${finalStatus},
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ${approval_id}
-                `;
+                if (isUnified) {
+                    let toStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'verified';
+                    let currentHandlerRole = null;
+                    
+                    if (action === 'approve' && approval.submission_type === 'leave_application' && actor.role_code === 'FINANCE_ADMIN_OFFICER') {
+                        toStatus = 'verified';
+                        currentHandlerRole = 'DIRECTOR';
+                    } else if (action === 'verify') {
+                        toStatus = 'verified';
+                        currentHandlerRole = 'DIRECTOR';
+                    } else if (action === 'approve') {
+                        toStatus = 'approved';
+                        currentHandlerRole = null;
+                    }
 
-                await tx`
-                    INSERT INTO approval_logs (
-                        approval_id,
-                        step_number,
-                        action,
-                        actor_user_id,
-                        comments
-                    )
-                    VALUES (
-                        ${approval_id},
-                        ${approval.current_step},
-                        ${action},
-                        ${actor.id},
-                        ${comments || null}
-                    )
-                `;
+                    const newSignature = {
+                        user_id: actor.id,
+                        name: actor.name,
+                        role: actor.role_code,
+                        action: action,
+                        timestamp: new Date().toISOString(),
+                        comment: comments
+                    };
+
+                    await tx`
+                        UPDATE unified_submissions
+                        SET status = ${toStatus},
+                            current_handler_role = ${currentHandlerRole},
+                            signatures = signatures || ${JSON.stringify(newSignature)}::jsonb,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${approval.id}
+                    `;
+
+                    // Handle leave balance update
+                    if (toStatus === 'approved' && approval.submission_type === 'leave_application') {
+                        const daysRequested = Number(approval.metadata?.days_requested || 0);
+                        if (daysRequested > 0) {
+                            await tx`
+                                UPDATE leave_balances
+                                SET used_days = used_days + ${daysRequested},
+                                    updated_at = CURRENT_TIMESTAMP
+                                WHERE user_id = ${approval.submitter_user_id}
+                            `;
+                        }
+                    }
+                } else {
+                    await tx`
+                        UPDATE approvals
+                        SET
+                            status = ${finalStatus},
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ${approval_id}
+                    `;
+
+                    await tx`
+                        INSERT INTO approval_logs (
+                            approval_id,
+                            step_number,
+                            action,
+                            actor_user_id,
+                            comments
+                        )
+                        VALUES (
+                            ${approval_id},
+                            ${approval.current_step},
+                            ${action},
+                            ${actor.id},
+                            ${comments || null}
+                        )
+                    `;
+                }
+
 
                 if (approval.entity_type === 'procurement') {
                     const thresholdValue = await loadThresholdValue();
