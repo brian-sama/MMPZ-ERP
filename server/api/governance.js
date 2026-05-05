@@ -142,10 +142,6 @@ export const handler = async (event) => {
 
                 const logs = await sql`
                     SELECT al.*, u.name AS actor_name
-                if (approval.length === 0) return errorResponse('Approval not found', 404);
-
-                const logs = await sql`
-                    SELECT al.*, u.name AS actor_name
                     FROM approval_logs al
                     JOIN users u ON al.actor_user_id = u.id
                     WHERE al.approval_id = ${id}
