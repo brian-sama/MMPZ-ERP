@@ -20,6 +20,7 @@ import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyPortalPage from './pages/MyPortalPage';
+import StaffSubmissionsPage from './pages/StaffSubmissionsPage';
 
 // Intranet
 import IntranetDashboardPage from './pages/intranet/IntranetDashboardPage.jsx';
@@ -71,6 +72,7 @@ export default function AppRouter() {
                 <Route path="/settings" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/settings')}><SettingsPage /></ProtectedRoute>} />
                 <Route path="/users" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/users')}><UserManagementPage /></ProtectedRoute>} />
                 <Route path="/my-portal" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/my-portal')}><MyPortalPage /></ProtectedRoute>} />
+                <Route path="/submissions" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/submissions')}><StaffSubmissionsPage /></ProtectedRoute>} />
 
                 {/* Intranet Routes (All roles can access) */}
                 <Route path="/intranet/dashboard" element={<ProtectedRoute><IntranetDashboardPage /></ProtectedRoute>} />

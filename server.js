@@ -44,6 +44,7 @@ import { handler as uploadAvatarHandler } from './server/api/upload-avatar.js';
 import { handler as calendarEventsHandler } from './server/api/calendar-events.js';
 import { handler as documentLibraryHandler } from './server/api/document-library.js';
 import { handler as pushSubscriptionsHandler } from './server/api/push-subscriptions.js';
+import { handler as submissionsHandler } from './server/api/submissions.js';
 import { subscribeRealtime } from './server/api/utils/notification-center.js';
 import {
     getBearerTokenFromHeaders,
@@ -233,6 +234,9 @@ app.use('/api/calendar', functionToExpress(calendarEventsHandler));
 app.use('/api/documents/:id/download', functionToExpress(documentLibraryHandler));
 app.use('/api/documents/:id', functionToExpress(documentLibraryHandler));
 app.use('/api/documents', functionToExpress(documentLibraryHandler));
+
+app.use('/api/submissions/:id/action', functionToExpress(submissionsHandler));
+app.use('/api/submissions', functionToExpress(submissionsHandler));
 
 app.use('/api', (req, res) => {
     res.status(404).json({ error: 'API route not found' });

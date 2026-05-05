@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
     AlertCircle,
@@ -9,610 +9,332 @@ import {
     History,
     Send,
     Target,
+    Plus,
+    Clock,
+    User,
+    Upload,
 } from 'lucide-react';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 
-const createBlankReport = () => ({
-    title: '',
-    content: '',
-    indicator_id: '',
-    male_count: 0,
-    female_count: 0,
-    notes: '',
-    recipients: [],
-    attachment: null,
-});
-
-const fileToBase64 = (file) =>
-    new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-
 export default function MyPortalPage() {
     const { user } = useAuth();
-    const [assignments, setAssignments] = useState([]);
+    const [activities, setActivities] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [indicators, setIndicators] = useState([]);
-    const [recipients, setRecipients] = useState([]);
-    const [submissions, setSubmissions] = useState([]);
+    const [reviewers, setReviewers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [selectedAsgn, setSelectedAsgn] = useState(null);
-    const [showReportModal, setShowReportModal] = useState(false);
-    const [reportType, setReportType] = useState('weekly');
-    const [newReport, setNewReport] = useState(createBlankReport());
-    const [submittingReport, setSubmittingReport] = useState(false);
-    const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
-    const [attendanceStatus, setAttendanceStatus] = useState('present');
-    const [attendanceSaved, setAttendanceSaved] = useState(false);
     const [portalMessage, setPortalMessage] = useState('');
-    const isDocumentReport = reportType === 'activity_plan' || reportType === 'activity_report';
+    
+    // Create Activity Modal State
+    const [showCreateModal, setShowCreateModal] = useState(false);
+    const [createLoading, setCreateLoading] = useState(false);
+    const [newActivity, setNewActivity] = useState({
+        project_id: '',
+        indicator_id: '',
+        activity_date: new Date().toISOString().split('T')[0],
+        location: '',
+        description: '',
+        assigned_reviewer_id: '',
+        plan_file: null
+    });
+
+    // Activity Detail / Edit State
+    const [selectedActivity, setSelectedActivity] = useState(null);
+    const [updateLoading, setUpdateLoading] = useState(false);
 
     useEffect(() => {
         fetchPortalData();
     }, []);
 
-    useEffect(() => {
-        if (!selectedAsgn?.project_id) return;
-        const matchingIndicator = indicators.find((item) => item.project_id === selectedAsgn.project_id);
-        if (matchingIndicator && !newReport.indicator_id) {
-            setNewReport((current) => ({ ...current, indicator_id: String(matchingIndicator.id) }));
-        }
-    }, [selectedAsgn?.project_id, indicators, newReport.indicator_id]);
-
-    const projectIndicators = useMemo(() => {
-        if (!selectedAsgn?.project_id) return indicators;
-        const scoped = indicators.filter((item) => item.project_id === selectedAsgn.project_id);
-        return scoped.length > 0 ? scoped : indicators;
-    }, [indicators, selectedAsgn?.project_id]);
-
     const fetchPortalData = async () => {
         setLoading(true);
-        setPortalMessage('');
         try {
-            const [assignmentRes, indicatorRes, userRes, submissionRes] = await Promise.allSettled([
-                axios.get(`${API_BASE}/facilitator-assignments`, {
-                    params: { facilitator_id: user.id, userId: user.id },
-                }),
+            const [activityRes, projectRes, indicatorRes, userRes] = await Promise.all([
+                axios.get(`${API_BASE}/activities`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/users`),
-                axios.get(`${API_BASE}/volunteer/submissions`, { params: { userId: user.id } }),
             ]);
 
-            const nextAssignments =
-                assignmentRes.status === 'fulfilled' ? (assignmentRes.value.data || []) : [];
-            const nextIndicators =
-                indicatorRes.status === 'fulfilled' ? (indicatorRes.value.data || []) : [];
-            const nextRecipients = userRes.status === 'fulfilled'
-                ? (userRes.value.data || []).filter((item) => item.role_code !== 'DEVELOPMENT_FACILITATOR')
-                : [];
-            const nextSubmissions =
-                submissionRes.status === 'fulfilled' ? (submissionRes.value.data || []) : [];
-
-            setAssignments(nextAssignments);
-            setIndicators(nextIndicators);
-            setRecipients(nextRecipients);
-            setSubmissions(nextSubmissions);
-
-            if (nextAssignments.length > 0) {
-                setSelectedAsgn((current) =>
-                    nextAssignments.find((assignment) => assignment.id === current?.id) || nextAssignments[0]
-                );
-            } else {
-                setSelectedAsgn(null);
-            }
-
-            const failedSections = [];
-            if (assignmentRes.status === 'rejected') failedSections.push('assignments');
-            if (indicatorRes.status === 'rejected') failedSections.push('indicator data');
-            if (userRes.status === 'rejected') failedSections.push('recipient directory');
-            if (submissionRes.status === 'rejected') failedSections.push('submission history');
-
-            if (failedSections.length > 0) {
-                setPortalMessage(`Some portal sections could not be loaded: ${failedSections.join(', ')}.`);
-            }
+            setActivities(activityRes.data || []);
+            setProjects(projectRes.data || []);
+            setIndicators(indicatorRes.data || []);
+            setReviewers((userRes.data || []).filter(u => 
+                ['PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN', 'DIRECTOR'].includes(u.role_code)
+            ));
         } catch (error) {
-            console.error('Failed to fetch facilitator portal data', error);
-            setPortalMessage('Some portal information could not be loaded right now.');
+            console.error('Portal data fetch error', error);
+            setPortalMessage('Failed to load portal data.');
         } finally {
             setLoading(false);
         }
     };
 
-    const logAttendance = async () => {
-        if (!selectedAsgn) return;
-        try {
-            await axios.post(`${API_BASE}/facilitator-attendance`, {
-                userId: user.id,
-                attendance_records: [
-                    {
-                        assignment_id: selectedAsgn.id,
-                        date: attendanceDate,
-                        status: attendanceStatus,
-                        notes: 'Logged via facilitator portal',
-                    },
-                ],
-            });
-            setAttendanceSaved(true);
-            setTimeout(() => setAttendanceSaved(false), 3000);
-        } catch (error) {
-            alert('Failed to log attendance');
-        }
-    };
+    const fileToBase64 = (file) =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
 
-    const openReportModal = (type) => {
-        setReportType(type);
-        setShowReportModal(true);
-        setNewReport(createBlankReport());
-    };
-
-    const toggleRecipient = (recipientId) => {
-        setNewReport((current) => ({
-            ...current,
-            recipients: current.recipients.includes(recipientId)
-                ? current.recipients.filter((id) => id !== recipientId)
-                : [...current.recipients, recipientId],
-        }));
-    };
-
-    const submitReport = async (event) => {
-        event.preventDefault();
-        if (reportType === 'activity' && !selectedAsgn) return;
-        if (isDocumentReport && newReport.recipients.length === 0) {
-            alert('Select at least one non-facilitator recipient for this report.');
+    const handleCreateActivity = async (e) => {
+        e.preventDefault();
+        if (!newActivity.plan_file) {
+            alert('An Activity Plan document is REQUIRED to create a new field activity.');
             return;
         }
 
-        setSubmittingReport(true);
+        setCreateLoading(true);
         try {
-            if (isDocumentReport) {
-                const fileData = newReport.attachment ? await fileToBase64(newReport.attachment) : null;
-                await axios.post(`${API_BASE}/volunteer/submit`, {
-                    userId: user.id,
-                    type: reportType,
-                    title: newReport.title,
-                    content: newReport.content,
-                    description: `${newReport.title}: ${newReport.content}`.trim(),
-                    fileData,
-                    fileName: newReport.attachment?.name || null,
-                    mimeType: newReport.attachment?.type || null,
-                    assignmentId: selectedAsgn?.id || null,
-                    projectId: selectedAsgn?.project_id || null,
-                    recipients: newReport.recipients,
-                });
-            } else {
-                await axios.post(`${API_BASE}/volunteer/activity-report`, {
-                    userId: user.id,
-                    indicator_id: newReport.indicator_id,
-                    male_count: Number(newReport.male_count || 0),
-                    female_count: Number(newReport.female_count || 0),
-                    notes: newReport.notes,
-                });
-            }
+            // 1. Upload the plan first as a submission
+            const fileData = await fileToBase64(newActivity.plan_file);
+            const subRes = await axios.post(`${API_BASE}/submissions`, {
+                submission_type: 'activity_plan',
+                department_category: 'PROGRAM',
+                title: `Activity Plan: ${newActivity.description.substring(0, 30)}...`,
+                description: newActivity.description,
+                file_path: fileData, // Simple base64 for now, backend should handle
+                file_name: newActivity.plan_file.name,
+                mime_type: newActivity.plan_file.type,
+            });
 
-            setShowReportModal(false);
-            setNewReport(createBlankReport());
+            const planSubmissionId = subRes.data.id;
+
+            // 2. Create the activity
+            await axios.post(`${API_BASE}/activities`, {
+                ...newActivity,
+                plan_submission_id: planSubmissionId
+            });
+
+            setShowCreateModal(false);
+            setNewActivity({
+                project_id: '',
+                indicator_id: '',
+                activity_date: new Date().toISOString().split('T')[0],
+                location: '',
+                description: '',
+                assigned_reviewer_id: '',
+                plan_file: null
+            });
             await fetchPortalData();
         } catch (error) {
-            alert(error.response?.data?.error || 'Failed to save report');
+            alert('Failed to create activity: ' + (error.response?.data?.error || error.message));
         } finally {
-            setSubmittingReport(false);
+            setCreateLoading(false);
         }
     };
 
-    if (loading) {
-        return (
-            <div className="page-loading">
-                <div className="spinner" />
-            </div>
-        );
-    }
+    const handleSubmitForReview = async (activityId) => {
+        if (!confirm('Are you sure you want to submit this activity for review? This will finalize the record for M&E verification.')) return;
+        
+        try {
+            await axios.post(`${API_BASE}/activities/${activityId}/submit`);
+            await fetchPortalData();
+            alert('Activity submitted successfully.');
+        } catch (error) {
+            alert('Submission failed.');
+        }
+    };
+
+    if (loading) return <div className="page-loading"><div className="spinner" /></div>;
 
     return (
         <div className="fade-in">
             <PageHeader
-                title="Facilitator Portal"
-                subtitle="Log attendance, upload activity plans and reports, and route field updates to the right staff."
+                title="Facilitator Workspace"
+                subtitle="Manage your field activities, track participant data, and submit reports for verification."
+                actions={
+                    <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+                        <Plus size={18} />
+                        New Field Activity
+                    </button>
+                }
             />
 
-            {portalMessage && (
-                <div className="page-message error" style={{ marginBottom: '20px' }}>
-                    {portalMessage}
-                </div>
-            )}
-
-            <div className="panels-row facilitator-portal-layout">
-                <div className="facilitator-portal-sidebar" style={{ flex: '0 0 350px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="panels-row">
+                <div style={{ flex: 1 }}>
                     <div className="panel">
                         <div className="panel-header">
-                            <h2 className="panel-title">My Assignments</h2>
+                            <h2 className="panel-title">Active Field Work</h2>
                         </div>
-                        <div style={{ padding: '8px' }}>
-                            {assignments.map((assignment) => (
-                                <div
-                                    key={assignment.id}
-                                    className={`report-item ${selectedAsgn?.id === assignment.id ? 'active' : ''}`}
-                                    onClick={() => setSelectedAsgn(assignment)}
-                                    style={{
-                                        padding: '12px',
-                                        borderRadius: '8px',
-                                        border:
-                                            selectedAsgn?.id === assignment.id
-                                                ? '1.5px solid var(--brand-primary)'
-                                                : '1px solid transparent',
-                                        cursor: 'pointer',
-                                        marginBottom: '8px',
-                                        background:
-                                            selectedAsgn?.id === assignment.id
-                                                ? 'var(--brand-primary-light)'
-                                                : 'transparent',
-                                    }}
-                                >
-                                    <div style={{ fontWeight: 600, fontSize: '13px' }}>
-                                        {assignment.project_name}
+                        <div className="control-stack">
+                            {activities.map(activity => (
+                                <div key={activity.id} className="control-row static" style={{ padding: '20px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                            <span className={`badge badge-${activity.status === 'draft' ? 'secondary' : 'info'}`}>
+                                                {activity.status.toUpperCase()}
+                                            </span>
+                                            <span className="text-muted" style={{ fontSize: '12px' }}>
+                                                <Calendar size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
+                                                {new Date(activity.activity_date).toLocaleDateString()}
+                                            </span>
+                                        </div>
+                                        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
+                                            {activity.description || 'No description provided'}
+                                        </div>
+                                        <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                            {activity.project_name} · {activity.location}
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+                                            <div className="form-hint" style={{ fontSize: '11px' }}>
+                                                <User size={10} style={{ marginRight: '4px' }} />
+                                                Reviewer: {activity.reviewer_name || 'Unassigned'}
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="form-hint">
-                                        Assigned: {new Date(assignment.assigned_at).toLocaleDateString()}
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        {activity.status === 'draft' && (
+                                            <button 
+                                                className="btn btn-outline btn-sm"
+                                                onClick={() => handleSubmitForReview(activity.id)}
+                                            >
+                                                Submit Review
+                                            </button>
+                                        )}
+                                        <button className="btn btn-secondary btn-sm">Details</button>
                                     </div>
                                 </div>
                             ))}
-                            {assignments.length === 0 && (
-                                <div className="empty-state" style={{ padding: '20px' }}>
-                                    <div className="empty-state-icon">
-                                        <Briefcase size={24} />
-                                    </div>
-                                    <p className="empty-state-text" style={{ fontSize: '11px' }}>
-                                        No projects currently assigned to you.
-                                    </p>
+                            {activities.length === 0 && (
+                                <div className="empty-state" style={{ padding: '60px 20px' }}>
+                                    <div className="empty-state-icon"><Target size={40} /></div>
+                                    <div className="empty-state-title">No Field Activities</div>
+                                    <p className="empty-state-text">Start by creating a new field activity and uploading your activity plan.</p>
                                 </div>
                             )}
                         </div>
                     </div>
-
-                    <div className="kpi-card info">
-                        <div className="kpi-icon-wrap">
-                            <History size={20} />
-                        </div>
-                        <div className="kpi-label">Reports Submitted</div>
-                        <div className="kpi-value" style={{ fontSize: '24px' }}>
-                            {submissions.filter((item) => item.user_id === user.id).length}
-                        </div>
-                        <div className="kpi-sub">Narratives and evidence files on record</div>
-                    </div>
                 </div>
 
-                <div className="facilitator-portal-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                    <div className="panel">
-                        <div className="panel-header">
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <div className="kpi-icon-wrap" style={{ width: '32px', height: '32px' }}>
-                                    <CheckSquare size={16} />
-                                </div>
-                                <h2 className="panel-title">Daily Attendance</h2>
-                            </div>
-                        </div>
-                        <div style={{ padding: '24px' }}>
-                            <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-                                <div className="form-group" style={{ flex: 1, minWidth: '150px' }}>
-                                    <label className="form-label">Work Date</label>
-                                    <input
-                                        type="date"
-                                        className="form-input"
-                                        value={attendanceDate}
-                                        onChange={(event) => setAttendanceDate(event.target.value)}
-                                    />
-                                </div>
-                                <div className="form-group" style={{ flex: 1, minWidth: '150px' }}>
-                                    <label className="form-label">Attendance Status</label>
-                                    <select
-                                        className="form-input"
-                                        value={attendanceStatus}
-                                        onChange={(event) => setAttendanceStatus(event.target.value)}
-                                    >
-                                        <option value="present">Present (Field)</option>
-                                        <option value="office">Office / Admin</option>
-                                        <option value="absent">Excused Absence</option>
-                                    </select>
-                                </div>
-                                <button
-                                    className="btn btn-primary"
-                                    style={{ minHeight: '42px', padding: '0 24px' }}
-                                    onClick={logAttendance}
-                                    disabled={!selectedAsgn}
-                                >
-                                    {attendanceSaved ? 'Saved' : 'Log Attendance'}
-                                </button>
-                            </div>
-                        </div>
+                <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                    <div className="kpi-card primary">
+                        <div className="kpi-icon-wrap"><CheckSquare size={20} /></div>
+                        <div className="kpi-label">Pending Verification</div>
+                        <div className="kpi-value">{activities.filter(a => a.status === 'submitted').length}</div>
+                        <div className="kpi-sub">Waiting for Officer/Intern review</div>
                     </div>
-
-                    <div className="panel">
-                        <div className="panel-header">
-                            <h2 className="panel-title">Shortcuts & Reporting</h2>
-                        </div>
-                        <div
-                            style={{
-                                padding: '24px',
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                                gap: '16px',
-                            }}
-                        >
-                            <button className="control-row" onClick={() => openReportModal('activity')} style={{ minHeight: '110px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="kpi-icon-wrap" style={{ width: '36px', height: '36px', background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
-                                        <Target size={18} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Log Activity Data</div>
-                                        <div className="form-hint" style={{ fontSize: '11px' }}>Submit indicator counts and field notes</div>
-                                    </div>
-                                </div>
-                            </button>
-
-                            <button className="control-row" onClick={() => openReportModal('activity_plan')} style={{ minHeight: '110px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="kpi-icon-wrap" style={{ width: '36px', height: '36px', background: '#3b82f61a', color: '#3b82f6' }}>
-                                        <Calendar size={18} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Upload Activity Plan</div>
-                                        <div className="form-hint" style={{ fontSize: '11px' }}>Share the planned work with HQ staff</div>
-                                    </div>
-                                </div>
-                            </button>
-
-                            <button className="control-row" onClick={() => openReportModal('activity_report')} style={{ minHeight: '110px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="kpi-icon-wrap" style={{ width: '36px', height: '36px', background: 'rgba(59, 130, 246, 0.08)', color: '#2563eb' }}>
-                                        <Send size={18} />
-                                    </div>
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: '14px' }}>Upload Activity Report</div>
-                                        <div className="form-hint" style={{ fontSize: '11px' }}>Save a completed report and assign it to HQ staff</div>
-                                    </div>
-                                </div>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="panel">
-                        <div className="panel-header">
-                            <h2 className="panel-title">Recent Submissions</h2>
-                        </div>
-                        {submissions.length > 0 ? (
-                            <div className="control-stack">
-                                {submissions.slice(0, 5).map((submission) => (
-                                    <div key={submission.id} className="control-row static">
-                                        <div>
-                                            <div className="control-title">
-                                                {submission.title || submission.file_name || 'Untitled submission'}
-                                            </div>
-                                            <div className="control-copy">
-                                                {submission.project_name || 'General field submission'} · {new Date(submission.created_at).toLocaleString()}
-                                            </div>
-                                        </div>
-                                        <span className="badge badge-info">{submission.type}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="empty-state" style={{ padding: '32px 20px' }}>
-                                <div className="empty-state-icon">
-                                    <FileText size={28} />
-                                </div>
-                                <div className="empty-state-title">No submissions yet</div>
-                                <p className="empty-state-text">
-                                    Save your first activity plan, report, or field update from the shortcuts above.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="panel" style={{ background: 'var(--bg-app)', border: '1px solid var(--border)', padding: '20px' }}>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <AlertCircle size={20} className="text-muted" />
-                            <div>
-                                <div style={{ fontWeight: 600, fontSize: '13px' }}>Reporting note</div>
-                                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                    Activity plans and reports can include PDF or Word files and can be assigned to one or multiple non-facilitator staff members.
-                                </p>
-                            </div>
-                        </div>
+                    
+                    <div className="panel" style={{ padding: '20px' }}>
+                        <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Workflow Reminder</h3>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                            Every field activity requires an <strong>Activity Plan</strong> before it can be created. 
+                            Once field work is complete, update the activity with participant numbers and evidence to submit for verification.
+                        </p>
                     </div>
                 </div>
             </div>
 
-            {showReportModal && (
-                <div className="modal-overlay" onClick={() => setShowReportModal(false)}>
-                    <div className="modal-box lg" onClick={(event) => event.stopPropagation()}>
+            {showCreateModal && (
+                <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+                    <div className="modal-box lg" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
-                            <div className="modal-title">
-                                {reportType === 'activity'
-                                    ? 'Log Field Activity Data'
-                                    : reportType === 'activity_plan'
-                                        ? 'Upload Activity Plan'
-                                        : 'Upload Activity Report'}
-                            </div>
-                            <button className="modal-close" onClick={() => setShowReportModal(false)}>
-                                ×
-                            </button>
+                            <div className="modal-title">New Field Activity</div>
+                            <button className="modal-close" onClick={() => setShowCreateModal(false)}>×</button>
                         </div>
-                        <form onSubmit={submitReport}>
+                        <form onSubmit={handleCreateActivity}>
                             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                <div className="form-group">
-                                    <label className="form-label">Active Project Context</label>
-                                    <div className="form-input" style={{ background: 'var(--bg-app)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <Briefcase size={14} className="text-primary" />
-                                        {selectedAsgn?.project_name || 'No project selected'}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Project</label>
+                                        <select 
+                                            className="form-input" 
+                                            required 
+                                            value={newActivity.project_id}
+                                            onChange={e => setNewActivity({...newActivity, project_id: e.target.value})}
+                                        >
+                                            <option value="">Select Project...</option>
+                                            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Indicator</label>
+                                        <select 
+                                            className="form-input" 
+                                            required 
+                                            value={newActivity.indicator_id}
+                                            onChange={e => setNewActivity({...newActivity, indicator_id: e.target.value})}
+                                        >
+                                            <option value="">Select Indicator...</option>
+                                            {indicators.filter(i => i.project_id === newActivity.project_id || !newActivity.project_id).map(i => (
+                                                <option key={i.id} value={i.id}>{i.title}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
 
-                                {isDocumentReport ? (
-                                    <>
-                                        <div className="form-group">
-                                            <label className="form-label">
-                                                {reportType === 'activity_plan' ? 'Plan Title' : 'Report Title'}
-                                            </label>
-                                            <input
-                                                type="text"
-                                                className="form-input"
-                                                required
-                                                placeholder={
-                                                    reportType === 'activity_plan'
-                                                        ? 'e.g. May Community Outreach Plan - Harare South'
-                                                        : 'e.g. Week 4 Implementation Report - Harare South'
-                                                }
-                                                value={newReport.title}
-                                                onChange={(event) =>
-                                                    setNewReport((current) => ({ ...current, title: event.target.value }))
-                                                }
-                                            />
-                                        </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Date</label>
+                                        <input 
+                                            type="date" 
+                                            className="form-input" 
+                                            required 
+                                            value={newActivity.activity_date}
+                                            onChange={e => setNewActivity({...newActivity, activity_date: e.target.value})}
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Location</label>
+                                        <input 
+                                            type="text" 
+                                            className="form-input" 
+                                            placeholder="e.g. Ward 15 Hall" 
+                                            value={newActivity.location}
+                                            onChange={e => setNewActivity({...newActivity, location: e.target.value})}
+                                        />
+                                    </div>
+                                </div>
 
-                                        <div className="form-group">
-                                            <label className="form-label">
-                                                {reportType === 'activity_plan' ? 'Plan Summary' : 'Executive Summary / Narrative'}
-                                            </label>
-                                            <textarea
-                                                className="form-input"
-                                                required
-                                                style={{ minHeight: '180px' }}
-                                                placeholder={
-                                                    reportType === 'activity_plan'
-                                                        ? 'Describe the planned activities, intended outputs, timeline and support required...'
-                                                        : 'Describe the key activities, achievements and challenges...'
-                                                }
-                                                value={newReport.content}
-                                                onChange={(event) =>
-                                                    setNewReport((current) => ({ ...current, content: event.target.value }))
-                                                }
-                                            />
-                                        </div>
+                                <div className="form-group">
+                                    <label className="form-label">Brief Description</label>
+                                    <textarea 
+                                        className="form-input" 
+                                        style={{ minHeight: '80px' }}
+                                        placeholder="Summarize the planned field work..."
+                                        value={newActivity.description}
+                                        onChange={e => setNewActivity({...newActivity, description: e.target.value})}
+                                    />
+                                </div>
 
-                                        <div className="form-group">
-                                            <label className="form-label">
-                                                {reportType === 'activity_plan' ? 'Attach PDF or Word Plan' : 'Attach PDF or Word Report'}
-                                            </label>
-                                            <input
-                                                type="file"
-                                                className="form-input"
-                                                accept=".pdf,.doc,.docx"
-                                                onChange={(event) =>
-                                                    setNewReport((current) => ({
-                                                        ...current,
-                                                        attachment: event.target.files?.[0] || null,
-                                                    }))
-                                                }
-                                            />
-                                            <p className="form-hint">
-                                                Optional, but recommended when you have a formatted document or supporting evidence.
-                                            </p>
-                                        </div>
+                                <div className="form-group">
+                                    <label className="form-label">Select Supervisor/Reviewer</label>
+                                    <select 
+                                        className="form-input" 
+                                        required 
+                                        value={newActivity.assigned_reviewer_id}
+                                        onChange={e => setNewActivity({...newActivity, assigned_reviewer_id: e.target.value})}
+                                    >
+                                        <option value="">Select Officer or Intern...</option>
+                                        {reviewers.map(r => <option key={r.id} value={r.id}>{r.name} ({r.role_code})</option>)}
+                                    </select>
+                                </div>
 
-                                        <div className="form-group">
-                                            <label className="form-label">Assign To Non-Facilitator Staff</label>
-                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', maxHeight: '220px', overflowY: 'auto', padding: '4px' }}>
-                                                {recipients.map((recipient) => (
-                                                    <label key={recipient.id} className="control-row static" style={{ padding: '12px', cursor: 'pointer', background: newReport.recipients.includes(recipient.id) ? 'var(--brand-primary-light)' : 'var(--bg-app)' }}>
-                                                        <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={newReport.recipients.includes(recipient.id)}
-                                                                onChange={() => toggleRecipient(recipient.id)}
-                                                                style={{ marginTop: '3px' }}
-                                                            />
-                                                            <div>
-                                                                <div className="control-title">{recipient.name}</div>
-                                                                <div className="control-copy">{recipient.job_title || recipient.role_code}</div>
-                                                            </div>
-                                                        </div>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                            <p className="form-hint">
-                                                Select one or more staff members who should receive this submission.
-                                            </p>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <>
-                                        <div className="form-group">
-                                            <label className="form-label">Associated Indicator</label>
-                                            <select
-                                                className="form-input"
-                                                required
-                                                value={newReport.indicator_id}
-                                                onChange={(event) =>
-                                                    setNewReport((current) => ({ ...current, indicator_id: event.target.value }))
-                                                }
-                                            >
-                                                <option value="">Select indicator...</option>
-                                                {projectIndicators.map((indicator) => (
-                                                    <option key={indicator.id} value={indicator.id}>
-                                                        {indicator.title}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-                                            <div className="form-group">
-                                                <label className="form-label">Male Participants</label>
-                                                <input
-                                                    type="number"
-                                                    className="form-input"
-                                                    required
-                                                    min="0"
-                                                    value={newReport.male_count}
-                                                    onChange={(event) =>
-                                                        setNewReport((current) => ({ ...current, male_count: event.target.value }))
-                                                    }
-                                                />
-                                            </div>
-                                            <div className="form-group">
-                                                <label className="form-label">Female Participants</label>
-                                                <input
-                                                    type="number"
-                                                    className="form-input"
-                                                    required
-                                                    min="0"
-                                                    value={newReport.female_count}
-                                                    onChange={(event) =>
-                                                        setNewReport((current) => ({ ...current, female_count: event.target.value }))
-                                                    }
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="form-group">
-                                            <label className="form-label">Field Notes / Evidence Summary</label>
-                                            <textarea
-                                                className="form-input"
-                                                style={{ minHeight: '100px' }}
-                                                value={newReport.notes}
-                                                onChange={(event) =>
-                                                    setNewReport((current) => ({ ...current, notes: event.target.value }))
-                                                }
-                                            />
-                                        </div>
-                                    </>
-                                )}
+                                <div className="form-group">
+                                    <label className="form-label">Activity Plan (PDF/DOCX) <span style={{ color: 'var(--brand-danger)' }}>*Required</span></label>
+                                    <div className="file-upload-box" style={{ border: '2px dashed var(--border)', padding: '30px', textAlign: 'center', borderRadius: '12px' }}>
+                                        <input 
+                                            type="file" 
+                                            id="plan-upload"
+                                            className="hidden"
+                                            onChange={e => setNewActivity({...newActivity, plan_file: e.target.files?.[0]})}
+                                            accept=".pdf,.doc,.docx"
+                                        />
+                                        <label htmlFor="plan-upload" style={{ cursor: 'pointer' }}>
+                                            <Upload size={32} className="text-muted" style={{ marginBottom: '12px' }} />
+                                            <div style={{ fontWeight: 600 }}>{newActivity.plan_file ? newActivity.plan_file.name : 'Click to upload Activity Plan'}</div>
+                                            <div className="form-hint">Only PDF and Word documents are accepted</div>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                             <div className="modal-footer">
-                                <button type="button" className="btn btn-secondary" onClick={() => setShowReportModal(false)}>
-                                    Cancel
-                                </button>
-                                <button type="submit" className="btn btn-primary" disabled={submittingReport || !selectedAsgn}>
-                                    <Send size={16} />
-                                    {submittingReport
-                                        ? 'Saving...'
-                                        : reportType === 'weekly'
-                                            ? 'Save Report'
-                                            : 'Save Activity Log'}
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={createLoading}>
+                                    {createLoading ? 'Creating...' : 'Create Activity'}
                                 </button>
                             </div>
                         </form>
@@ -622,4 +344,3 @@ export default function MyPortalPage() {
         </div>
     );
 }
-

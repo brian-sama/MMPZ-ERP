@@ -45,6 +45,11 @@ export const handler = async (event) => {
                 LEFT JOIN users u ON a.author_id = u.id
                 WHERE a.is_active = TRUE
                   AND (
+                    (a.approval_status = 'approved' OR a.approval_status IS NULL) -- Backwards compatibility
+                    OR a.author_id = ${user.id}
+                    OR ${user.role_code} IN ('DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'ME_INTERN_ACTING_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN')
+                  )
+                  AND (
                     'ALL' = ANY(a.audience) 
                     OR ${user.system_role} = ANY(a.audience)
                     OR a.author_id = ${user.id}
@@ -54,50 +59,92 @@ export const handler = async (event) => {
             return successResponse(announcements);
         }
 
-        // POST /announcements - Create (Restricted: Not Facilitators)
+        // POST /announcements - Create
         if (method === 'POST') {
-            if (user.system_role === SYSTEM_ROLES.FACILITATOR) {
-                return errorResponse('Facilitators cannot post announcements', 403);
-            }
-
             const { title, content, audience } = body;
             if (!title || !content) {
                 return errorResponse('Title and content are required', 400);
             }
 
             const targetedAudience = normalizeAudience(audience);
+            const isFacilitator = user.system_role === SYSTEM_ROLES.FACILITATOR;
+            const initialStatus = isFacilitator ? 'pending' : 'approved';
+            const isPublic = !isFacilitator;
 
             const created = await sql.begin(async (tx) => {
                 const rows = await tx`
-                    INSERT INTO announcements (title, content, author_id, audience)
-                    VALUES (${title}, ${content}, ${user.id}, ${targetedAudience})
+                    INSERT INTO announcements (title, content, author_id, audience, approval_status, is_public)
+                    VALUES (${title}, ${content}, ${user.id}, ${targetedAudience}, ${initialStatus}, ${isPublic})
                     RETURNING *
                 `;
 
-                const recipients = targetedAudience.includes('ALL')
-                    ? await tx`SELECT id FROM users WHERE id <> ${user.id}`
-                    : (await tx`
-                        SELECT id, system_role
-                        FROM users
-                        WHERE id <> ${user.id}
-                    `).filter((recipient) => targetedAudience.includes(String(recipient.system_role || '').toUpperCase()));
+                if (!isFacilitator) {
+                    const recipients = targetedAudience.includes('ALL')
+                        ? await tx`SELECT id FROM users WHERE id <> ${user.id}`
+                        : (await tx`
+                            SELECT id, system_role
+                            FROM users
+                            WHERE id <> ${user.id}
+                        `).filter((recipient) => targetedAudience.includes(String(recipient.system_role || '').toUpperCase()));
 
-                await createNotifications(
-                    tx,
-                    recipients.map((recipient) => ({
-                        userId: recipient.id,
-                        type: 'system',
-                        title: 'New internal announcement',
-                        message: title,
-                        relatedEntityType: 'announcement',
-                        relatedEntityId: String(rows[0].id),
-                        actionUrl: '/intranet/dashboard',
-                    }))
-                );
+                    await createNotifications(
+                        tx,
+                        recipients.map((recipient) => ({
+                            userId: recipient.id,
+                            type: 'system',
+                            title: 'New internal announcement',
+                            message: title,
+                            relatedEntityType: 'announcement',
+                            relatedEntityId: String(rows[0].id),
+                            actionUrl: '/intranet/dashboard',
+                        }))
+                    );
+                } else {
+                    // Notify reviewers (Officers/Interns/Director)
+                    const reviewers = await tx`
+                        SELECT id FROM users 
+                        WHERE role_code IN ('DIRECTOR', 'PSYCHOSOCIAL_SUPPORT_OFFICER', 'COMMUNITY_DEVELOPMENT_OFFICER', 'SOCIAL_SERVICES_INTERN', 'YOUTH_COMMUNICATIONS_INTERN')
+                    `;
+                    await createNotifications(
+                        tx,
+                        reviewers.map((rev) => ({
+                            userId: rev.id,
+                            type: 'governance',
+                            title: 'Announcement approval requested',
+                            message: `Facilitator ${user.name} posted: ${title}`,
+                            relatedEntityType: 'announcement',
+                            relatedEntityId: String(rows[0].id),
+                            actionUrl: '/intranet/dashboard',
+                        }))
+                    );
+                }
 
                 return rows;
             });
             return successResponse(created[0]);
+        }
+
+        // POST /announcements/:id/approve - Approve (Officers/Interns/Director)
+        const approveMatch = path.match(/\/api\/announcements\/([^\/]+)\/approve$/);
+        if (method === 'POST' && approveMatch) {
+            const id = approveMatch[1];
+            if (user.role_code === 'DEVELOPMENT_FACILITATOR') {
+                return errorResponse('Facilitators cannot approve announcements', 403);
+            }
+
+            const [updated] = await sql`
+                UPDATE announcements
+                SET approval_status = 'approved', 
+                    is_public = TRUE,
+                    approved_by_user_id = ${user.id},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ${id}
+                RETURNING *
+            `;
+
+            if (!updated) return errorResponse('Announcement not found', 404);
+
+            return successResponse(updated);
         }
 
         // DELETE /announcements/:id

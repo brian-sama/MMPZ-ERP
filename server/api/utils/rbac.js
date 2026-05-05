@@ -97,7 +97,9 @@ export const canSeeOrganizationFinance = (actor) =>
 
 export const canSeeOrganizationDashboard = (actor) =>
     actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
-    actor?.role_code === 'DIRECTOR';
+    actor?.role_code === 'DIRECTOR' ||
+    actor?.role_code === 'FINANCE_ADMIN_OFFICER' ||
+    actor?.role_code === 'ADMIN_ASSISTANT';
 
 export const canSeeOrganizationIndicators = (actor) =>
     actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
@@ -167,15 +169,40 @@ const rolePermissionFallbacks = {
         'volunteer.submit',
         'volunteer.read_own',
     ],
-    SOCIAL_SERVICES_INTERN: programOfficerPermissions,
-    YOUTH_COMMUNICATIONS_INTERN: programOfficerPermissions,
+    SOCIAL_SERVICES_INTERN: [
+        ...programOfficerPermissions,
+        'announcement.approve',
+    ],
+    YOUTH_COMMUNICATIONS_INTERN: [
+        ...programOfficerPermissions,
+        'announcement.approve',
+    ],
     DEVELOPMENT_FACILITATOR: [
         'project.read',
         'activity.read',
         'volunteer.submit',
         'volunteer.read_own',
+        'announcement.create',
     ],
 };
+
+// Add announcement.create and announcement.approve to other roles
+[
+    'DIRECTOR',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+    'PSYCHOSOCIAL_SUPPORT_OFFICER',
+    'COMMUNITY_DEVELOPMENT_OFFICER',
+    'ME_INTERN_ACTING_OFFICER'
+].forEach(role => {
+    if (rolePermissionFallbacks[role]) {
+        rolePermissionFallbacks[role].push('announcement.create');
+        if (role !== 'LOGISTICS_ASSISTANT') {
+            rolePermissionFallbacks[role].push('announcement.approve');
+        }
+    }
+});
 
 export const toLegacyRole = (roleCode, systemRole) => {
     if (systemRole && systemRoleToLegacy[systemRole]) return systemRoleToLegacy[systemRole];

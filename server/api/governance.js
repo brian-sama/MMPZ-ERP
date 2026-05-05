@@ -112,39 +112,36 @@ export const handler = async (event) => {
             const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
             if (id) {
-                const approval = bidAnalysisEnabled ? await sql`
+                const approval = await sql`
                     SELECT
                         a.*,
                         u.name AS requester_name,
                         pr.title AS procurement_title,
                         pr.total_estimated_cost,
                         pr.status AS procurement_status,
-                        pr.bid_analysis_summary,
-                        pr.bid_analysis_recommendation,
-                        pr.bid_analysis_status
+                        ${bidAnalysisEnabled ? sql`pr.bid_analysis_summary, pr.bid_analysis_recommendation, pr.bid_analysis_status` : sql`NULL::text AS bid_analysis_summary, NULL::text AS bid_analysis_recommendation, 'pending'::text AS bid_analysis_status`},
+                        vs.type AS submission_type,
+                        vs.title AS submission_title,
+                        vs.file_name AS submission_file_name,
+                        vs.file_path AS submission_file_path,
+                        vs.description AS submission_description,
+                        vs.content AS submission_content,
+                        p.name AS project_name
                     FROM approvals a
                     JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
                         ON a.entity_type = 'procurement'
                        AND pr.id::text = a.entity_id
-                    WHERE a.id = ${id}
-                ` : await sql`
-                    SELECT
-                        a.*,
-                        u.name AS requester_name,
-                        pr.title AS procurement_title,
-                        pr.total_estimated_cost,
-                        pr.status AS procurement_status,
-                        NULL::text AS bid_analysis_summary,
-                        NULL::text AS bid_analysis_recommendation,
-                        'pending'::text AS bid_analysis_status
-                    FROM approvals a
-                    JOIN users u ON a.requested_by_user_id = u.id
-                    LEFT JOIN procurement_requests pr
-                        ON a.entity_type = 'procurement'
-                       AND pr.id::text = a.entity_id
+                    LEFT JOIN volunteer_submissions vs
+                        ON a.entity_type = 'volunteer_submission'
+                       AND vs.id::text = a.entity_id
+                    LEFT JOIN projects p ON vs.project_id = p.id
                     WHERE a.id = ${id}
                 `;
+                if (approval.length === 0) return errorResponse('Approval not found', 404);
+
+                const logs = await sql`
+                    SELECT al.*, u.name AS actor_name
                 if (approval.length === 0) return errorResponse('Approval not found', 404);
 
                 const logs = await sql`
@@ -156,6 +153,8 @@ export const handler = async (event) => {
                 `;
 
                 let procurement = null;
+                let submission = null;
+
                 if (approval[0].entity_type === 'procurement') {
                     const thresholdValue = await loadThresholdValue();
                     const requisitions = bidAnalysisEnabled ? await sql`
@@ -207,41 +206,68 @@ export const handler = async (event) => {
                             ),
                         };
                     }
+                } else if (approval[0].entity_type === 'volunteer_submission') {
+                    submission = {
+                        type: approval[0].submission_type,
+                        title: approval[0].submission_title,
+                        fileName: approval[0].submission_file_name,
+                        filePath: approval[0].submission_file_path,
+                        description: approval[0].submission_description,
+                        content: approval[0].submission_content,
+                        projectName: approval[0].project_name
+                    };
                 }
 
-                return successResponse({ ...approval[0], logs, procurement });
+                // Add display_type helper
+                const formatDisplayType = (entityType, subType) => {
+                    if (entityType === 'procurement') return 'Procurement Requisition';
+                    if (entityType === 'volunteer_submission') {
+                        if (!subType) return 'Document Submission';
+                        return subType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    }
+                    return entityType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                };
+
+                return successResponse({ 
+                    ...approval[0], 
+                    logs, 
+                    procurement, 
+                    submission,
+                    display_type: formatDisplayType(approval[0].entity_type, approval[0].submission_type)
+                });
             }
 
             try {
-                const queue = bidAnalysisEnabled ? await sql`
+                const results = await sql`
                     SELECT
                         a.*,
                         u.name AS requester_name,
                         pr.title AS procurement_title,
                         pr.total_estimated_cost,
                         pr.status AS procurement_status,
-                        pr.bid_analysis_status
+                        ${bidAnalysisEnabled ? sql`pr.bid_analysis_status` : sql`'pending'::text AS bid_analysis_status`},
+                        vs.type AS submission_type
                     FROM approvals a
                     INNER JOIN users u ON a.requested_by_user_id = u.id
                     LEFT JOIN procurement_requests pr
                         ON a.entity_type = 'procurement'
                        AND pr.id::text = a.entity_id
-                    ORDER BY a.created_at DESC
-                ` : await sql`
-                    SELECT
-                        a.*,
-                        u.name AS requester_name,
-                        pr.title AS procurement_title,
-                        pr.total_estimated_cost,
-                        pr.status AS procurement_status,
-                        'pending'::text AS bid_analysis_status
-                    FROM approvals a
-                    INNER JOIN users u ON a.requested_by_user_id = u.id
-                    LEFT JOIN procurement_requests pr
-                        ON a.entity_type = 'procurement'
-                       AND pr.id::text = a.entity_id
+                    LEFT JOIN volunteer_submissions vs
+                        ON a.entity_type = 'volunteer_submission'
+                       AND vs.id::text = a.entity_id
                     ORDER BY a.created_at DESC
                 `;
+
+                const queue = results.map(item => {
+                    let display_type = item.entity_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    if (item.entity_type === 'volunteer_submission' && item.submission_type) {
+                        display_type = item.submission_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                    } else if (item.entity_type === 'procurement') {
+                        display_type = 'Procurement Requisition';
+                    }
+                    return { ...item, display_type };
+                });
+
                 return successResponse(queue);
             } catch (err) {
                 console.error('Database error in governance queue:', err);

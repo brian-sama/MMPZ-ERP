@@ -174,6 +174,22 @@ export const NAV_SECTIONS = [
           'DEVELOPMENT_FACILITATOR',
         ],
       },
+      {
+        to: '/submissions',
+        label: 'Staff Submissions',
+        icon: FileText,
+        allowedRoles: [
+          'DIRECTOR',
+          'FINANCE_ADMIN_OFFICER',
+          'ADMIN_ASSISTANT',
+          'LOGISTICS_ASSISTANT',
+          'COMMUNITY_DEVELOPMENT_OFFICER',
+          'PSYCHOSOCIAL_SUPPORT_OFFICER',
+          'ME_INTERN_ACTING_OFFICER',
+          'SOCIAL_SERVICES_INTERN',
+          'YOUTH_COMMUNICATIONS_INTERN',
+        ],
+      },
     ],
   },
   {

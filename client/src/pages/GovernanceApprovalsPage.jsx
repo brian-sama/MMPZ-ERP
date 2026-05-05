@@ -129,6 +129,137 @@ export default function GovernanceApprovalsPage() {
                                     (q.entity_type || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
                                     (q.requester_name || '').toLowerCase().includes(searchTerm.toLowerCase())
                                 ).map(item => (
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
+import API_BASE from '../apiConfig';
+import PageHeader from '../components/PageHeader';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import {
+    ShieldCheck, Clock, CheckCircle2, XCircle,
+    MessageSquare, User, FileText, ChevronRight,
+    Search, Filter, ExternalLink, AlertTriangle
+} from 'lucide-react';
+
+export default function GovernanceApprovalsPage() {
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [queue, setQueue] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [selectedItem, setSelectedItem] = useState(null);
+    const [comments, setComments] = useState('');
+    const [actionLoading, setActionLoading] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+    const canAction = user?.role_code === 'DIRECTOR';
+
+    useEffect(() => {
+        fetchQueue();
+    }, []);
+
+    useEffect(() => {
+        const approvalId = searchParams.get('approvalId');
+        if (approvalId) {
+            fetchDetail(approvalId);
+        }
+    }, [searchParams]);
+
+    const fetchQueue = async () => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_BASE}/governance/queue`, { params: { userId: user.id } });
+            setQueue(res.data);
+        } catch (err) {
+            console.error('Failed to fetch governance queue');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchDetail = async (id) => {
+        setLoading(true);
+        try {
+            const res = await axios.get(`${API_BASE}/governance/${id}`, { params: { userId: user.id } });
+            setSelectedItem(res.data);
+            setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.set('approvalId', id);
+                return next;
+            });
+        } catch (err) {
+            console.error('Failed to fetch approval details');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleAction = async (action) => {
+        if (!selectedItem || actionLoading) return;
+        setActionLoading(true);
+        try {
+            await axios.post(`${API_BASE}/governance/action`, {
+                approval_id: selectedItem.id,
+                action,
+                comments,
+                userId: user.id
+            });
+            setComments('');
+            setSelectedItem(null);
+            setSearchParams((current) => {
+                const next = new URLSearchParams(current);
+                next.delete('approvalId');
+                return next;
+            });
+            fetchQueue();
+        } catch (err) {
+            alert('Failed to process approval action');
+        } finally {
+            setActionLoading(false);
+        }
+    };
+
+    if (loading && !selectedItem) return <div className="page-loading"><div className="spinner"></div></div>;
+
+    return (
+        <div className="fade-in">
+            <PageHeader
+                title="Governance & Approvals"
+                subtitle="Centralized organizational oversight and compliance queue."
+            />
+
+            <div className="panels-row">
+                {/* Queue Panel */}
+                <div className="panel" style={{ flex: selectedItem ? '0 0 400px' : '1' }}>
+                    <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <h2 className="panel-title">Active Queue ({queue.filter(q => q.status === 'pending').length})</h2>
+                        <div className="search-box" style={{ width: '180px' }}>
+                            <Search size={14} className="search-icon" />
+                            <input 
+                                type="text" 
+                                placeholder="Filter queue..." 
+                                className="form-input" 
+                                style={{ height: '30px', fontSize: '12px', paddingLeft: '28px' }} 
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Request</th>
+                                    <th>Requester</th>
+                                    <th>Date</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {queue.filter(q => 
+                                    (q.entity_type || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+                                    (q.requester_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+                                ).map(item => (
                                     <tr
                                         key={item.id}
                                         className={`${item.status === 'pending' ? 'priority-high' : ''} ${selectedItem?.id === item.id ? 'active-row' : ''}`}
@@ -136,7 +267,7 @@ export default function GovernanceApprovalsPage() {
                                         style={{ cursor: 'pointer' }}
                                     >
                                         <td>
-                                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{item.entity_type.replace('_', ' ').toUpperCase()}</div>
+                                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{item.display_type?.toUpperCase() || item.entity_type.replace('_', ' ').toUpperCase()}</div>
                                             <div className="form-hint">ID: {item.entity_id.slice(0, 8)}</div>
                                         </td>
                                         <td>{item.requester_name}</td>
@@ -172,7 +303,7 @@ export default function GovernanceApprovalsPage() {
                                         <ShieldCheck size={20} />
                                     </div>
                                     <div>
-                                        <h2 className="panel-title" style={{ textTransform: 'capitalize' }}>{selectedItem.entity_type.replace('_', ' ')} Review</h2>
+                                        <h2 className="panel-title" style={{ textTransform: 'capitalize' }}>{selectedItem.display_type || selectedItem.entity_type.replace('_', ' ')} Review</h2>
                                         <p className="panel-subtitle">Governance Audit ID: {selectedItem.id.slice(0, 13)}</p>
                                     </div>
                                 </div>
@@ -242,57 +373,6 @@ export default function GovernanceApprovalsPage() {
                                             </div>
                                             <div className="data-table-wrap">
                                                 <table className="data-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Description</th>
-                                                            <th>Qty</th>
-                                                            <th>Unit Cost</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {selectedItem.procurement.items?.map((item) => (
-                                                            <tr key={item.id}>
-                                                                <td>{item.description}</td>
-                                                                <td>{item.quantity}</td>
-                                                                <td>{Number(item.estimated_unit_cost || 0).toLocaleString()}</td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            <button
-                                                className="btn btn-ghost btn-sm"
-                                                style={{ marginTop: '12px', color: 'var(--brand-primary)' }}
-                                                onClick={() => navigate(`/finance?procurement=${selectedItem.entity_id}`)}
-                                            >
-                                                <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                                The system has linked this request to entity <strong>{selectedItem.entity_id}</strong>.
-                                                Please review the primary module's record for detailed breakdown of items and costs.
-                                            </div>
-                                            <button
-                                                className="btn btn-ghost btn-sm"
-                                                style={{ marginTop: '12px', color: 'var(--brand-primary)' }}
-                                                onClick={() => {
-                                                    if (selectedItem.entity_type === 'procurement') {
-                                                        navigate(`/finance?procurement=${selectedItem.entity_id}`);
-                                                    }
-                                                }}
-                                            >
-                                                <ExternalLink size={14} style={{ marginRight: '6px' }} /> Cross-reference Entity Record
-                                            </button>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div style={{ marginBottom: '24px' }}>
-                                <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px' }}>Approval Actions</h3>
-                                <textarea
                                     className="form-input"
                                     placeholder="Enter review comments or justification..."
                                     style={{ height: '100px', marginBottom: '16px', padding: '12px' }}
