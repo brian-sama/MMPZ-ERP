@@ -1396,6 +1396,61 @@ DROP TRIGGER IF EXISTS audit_approval_logs_trigger ON approval_logs;
 CREATE TRIGGER audit_approval_logs_trigger
 AFTER INSERT OR UPDATE OR DELETE ON approval_logs
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_fn('id');
+
+-- =====================================================
+-- M&E approved summary integration
+-- =====================================================
+CREATE TABLE IF NOT EXISTS me_indicator_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    me_indicator_id TEXT NOT NULL UNIQUE,
+    code TEXT,
+    title TEXT,
+    erp_program_id UUID NULL,
+    erp_project_id UUID NULL,
+    erp_budget_line_id UUID NULL,
+    target_value INTEGER DEFAULT 0,
+    reached_value INTEGER DEFAULT 0,
+    approved_activity_count INTEGER DEFAULT 0,
+    participant_total INTEGER DEFAULT 0,
+    status TEXT,
+    payload JSONB NOT NULL,
+    last_synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (erp_program_id) REFERENCES programs(id) ON DELETE SET NULL,
+    FOREIGN KEY (erp_project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (erp_budget_line_id) REFERENCES budget_lines(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS me_activity_summaries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    me_activity_id TEXT NOT NULL UNIQUE,
+    me_indicator_id TEXT NULL,
+    code TEXT,
+    name TEXT,
+    activity_type TEXT,
+    activity_date TIMESTAMP NULL,
+    district_code TEXT,
+    district_name TEXT,
+    erp_program_id UUID NULL,
+    erp_project_id UUID NULL,
+    erp_budget_line_id UUID NULL,
+    male_participants INTEGER DEFAULT 0,
+    female_participants INTEGER DEFAULT 0,
+    total_participants INTEGER DEFAULT 0,
+    evidence_count INTEGER DEFAULT 0,
+    logsheet_count INTEGER DEFAULT 0,
+    participant_summary_count INTEGER DEFAULT 0,
+    status TEXT,
+    qa_status TEXT,
+    payload JSONB NOT NULL,
+    last_synced_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (erp_program_id) REFERENCES programs(id) ON DELETE SET NULL,
+    FOREIGN KEY (erp_project_id) REFERENCES projects(id) ON DELETE SET NULL,
+    FOREIGN KEY (erp_budget_line_id) REFERENCES budget_lines(id) ON DELETE SET NULL
+);
 -- =====================================================
 -- 7. Indexes and governance notifications
 -- =====================================================
@@ -1456,6 +1511,10 @@ CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON approval_requests(sta
 CREATE INDEX IF NOT EXISTS idx_approval_steps_request_order ON approval_steps(approval_request_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_table_entity ON audit_logs(table_name, entity_pk);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_me_indicator_summaries_project ON me_indicator_summaries(erp_project_id);
+CREATE INDEX IF NOT EXISTS idx_me_activity_summaries_project ON me_activity_summaries(erp_project_id);
+CREATE INDEX IF NOT EXISTS idx_me_activity_summaries_indicator ON me_activity_summaries(me_indicator_id);
+CREATE INDEX IF NOT EXISTS idx_me_activity_summaries_date ON me_activity_summaries(activity_date);
 
 INSERT INTO notifications (user_id, type, title, message, related_indicator_id)
 SELECT

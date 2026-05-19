@@ -12,7 +12,8 @@ services:
       - ./database:/docker-init-scripts
       - ./database/setup_db.sh:/docker-entrypoint-initdb.d/init.sh
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d \"$${POSTGRES_DB}\" -U \"$${POSTGRES_USER}\""]
+      test:
+        ["CMD-SHELL", 'pg_isready -d "$${POSTGRES_DB}" -U "$${POSTGRES_USER}"']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -34,6 +35,9 @@ services:
       DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
       MMPZ_API_URL: https://mmpzmne.co.zw/api
       MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:?MMPZ_AUTH_SECRET is required}
+      ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN:?ERP_INTEGRATION_TOKEN is required}
+      ME_INTERNAL_API_URL: ${ME_INTERNAL_API_URL:-http://mmpz-compass-app:4000/api}
+      ME_INTEGRATION_TOKEN: ${ME_INTEGRATION_TOKEN:?ME_INTEGRATION_TOKEN is required}
       PORT: 3000
       RUN_DB_MIGRATIONS_ON_STARTUP: "false"
     healthcheck:
@@ -42,7 +46,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/api/health').then(async (response) => { const body = await response.json(); process.exit(response.ok && body.status === 'ok' ? 0 : 1); }).catch(() => process.exit(1));"
+          "fetch('http://127.0.0.1:3000/api/health').then(async (response) => { const body = await response.json(); process.exit(response.ok && body.status === 'ok' ? 0 : 1); }).catch(() => process.exit(1));",
         ]
       interval: 15s
       timeout: 5s
@@ -72,7 +76,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8501/streamlit/_stcore/health', timeout=5); sys.exit(0 if response.status == 200 else 1)"
+          "import sys, urllib.request; response = urllib.request.urlopen('http://127.0.0.1:8501/streamlit/_stcore/health', timeout=5); sys.exit(0 if response.status == 200 else 1)",
         ]
       interval: 20s
       timeout: 5s
