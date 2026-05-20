@@ -29,11 +29,11 @@ VALUES
         'director'
     ),
     (
-        'Finance and Admin Officer',
+        'Finance Officer',
         'finance@mmpz.org',
-        'FINANCE_ADMIN_OFFICER',
+        'FINANCE_OFFICER',
         'PROGRAM_STAFF',
-        'Finance and Admin Officer',
+        'Finance Officer',
         crypt('Mmpz@123', gen_salt('bf')),
         FALSE,
         'pending_reassignment',
@@ -41,11 +41,11 @@ VALUES
         'officer'
     ),
     (
-        'Admin Assistant',
+        'Admin & Finance Assistant',
         'admin.assistant@mmpz.org',
-        'ADMIN_ASSISTANT',
+        'ADMIN_FINANCE_ASSISTANT',
         'OPERATIONS',
-        'Admin Assistant',
+        'Admin & Finance Assistant',
         crypt('Mmpz@123', gen_salt('bf')),
         FALSE,
         'pending_reassignment',
@@ -53,11 +53,11 @@ VALUES
         'officer'
     ),
     (
-        'Community Development Officer',
+        'Programs & M&E Officer',
         'community.officer@mmpz.org',
-        'COMMUNITY_DEVELOPMENT_OFFICER',
+        'PROGRAMS_ME_OFFICER',
         'PROGRAM_STAFF',
-        'Community Development Officer',
+        'Programs & M&E Officer',
         crypt('Mmpz@123', gen_salt('bf')),
         FALSE,
         'pending_reassignment',
@@ -65,11 +65,11 @@ VALUES
         'officer'
     ),
     (
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         'facilitator@mmpz.org',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('Mmpz@123', gen_salt('bf')),
         FALSE,
         'pending_reassignment',
@@ -79,9 +79,9 @@ VALUES
     (
         'Lorraine',
         'lorraine@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -91,9 +91,9 @@ VALUES
     (
         'Thandiwe',
         'thandiwe@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -103,9 +103,9 @@ VALUES
     (
         'Tanaka',
         'tanaka@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -115,9 +115,9 @@ VALUES
     (
         'Tholubuhle',
         'tholubuhle@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -127,9 +127,9 @@ VALUES
     (
         'Blessings',
         'blessings@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -139,9 +139,9 @@ VALUES
     (
         'Sharlene',
         'sharlene@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -151,9 +151,9 @@ VALUES
     (
         'Rebecca',
         'rebecca@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -163,9 +163,9 @@ VALUES
     (
         'Rumbidzai',
         'rumbidzai@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -175,9 +175,9 @@ VALUES
     (
         'Khulani',
         'khulani@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -187,9 +187,9 @@ VALUES
     (
         'Sinothando',
         'sinothando@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -199,9 +199,9 @@ VALUES
     (
         'Violet',
         'violet@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -211,9 +211,9 @@ VALUES
     (
         'Freddy',
         'freddy@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR',
         'FACILITATOR',
-        'Development Facilitator',
+        'Youth Facilitator / Peer Educator',
         crypt('123456', gen_salt('bf')),
         TRUE,
         'pending_reassignment',
@@ -223,26 +223,16 @@ VALUES
     (
         'Sandra',
         'sandra@mmpzim.org.zw',
-        'DEVELOPMENT_FACILITATOR',
-        'FACILITATOR',
-        'Development Facilitator',
+        'DIRECTOR',
+        'MANAGEMENT',
+        'Director',
         crypt('123456', gen_salt('bf')),
         TRUE,
-        'pending_reassignment',
-        NULL,
-        'volunteer'
+        'confirmed',
+        CURRENT_TIMESTAMP,
+        'director'
     )
-ON CONFLICT (email) DO UPDATE
-SET
-    name = EXCLUDED.name,
-    role_code = EXCLUDED.role_code,
-    system_role = EXCLUDED.system_role,
-    job_title = EXCLUDED.job_title,
-    password_hash = EXCLUDED.password_hash,
-    require_password_reset = EXCLUDED.require_password_reset,
-    role_assignment_status = EXCLUDED.role_assignment_status,
-    role_confirmed_at = EXCLUDED.role_confirmed_at,
-    role_legacy_snapshot = EXCLUDED.role_legacy_snapshot;
+ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO programs (name, description, status, created_by_user_id)
 SELECT
@@ -339,5 +329,4 @@ WHERE NOT EXISTS (SELECT 1 FROM kobo_config);
 
 INSERT INTO system_settings (setting_key, value_text, description)
 VALUES ('major_finance_threshold_usd', '500.00', 'Expense amount threshold requiring Director final approval')
-ON CONFLICT (setting_key) DO UPDATE
-SET value_text = EXCLUDED.value_text;
+ON CONFLICT (setting_key) DO NOTHING;

@@ -44,21 +44,51 @@ export default function MyPortalPage() {
     const [selectedActivity, setSelectedActivity] = useState(null);
     const [updateLoading, setUpdateLoading] = useState(false);
 
+    const mergePortalActivities = (erpActivities = [], compassActivities = []) => {
+        const localActivityIds = new Set(erpActivities.map(activity => String(activity.id)));
+        const localRows = erpActivities.map(activity => ({
+            ...activity,
+            isCompassSynced: false,
+            source_system: activity.source_system || 'ERP My Portal',
+        }));
+        const compassRows = compassActivities
+            .filter(activity => !activity.erp_field_activity_id || !localActivityIds.has(String(activity.erp_field_activity_id)))
+            .map(activity => ({
+                ...activity,
+                isCompassSynced: true,
+                source_system: activity.source_system || 'Compass M&E',
+            }));
+
+        return [...localRows, ...compassRows].sort((a, b) => {
+            const left = new Date(a.activity_date || a.updated_at || a.created_at || 0).getTime();
+            const right = new Date(b.activity_date || b.updated_at || b.created_at || 0).getTime();
+            return right - left;
+        });
+    };
+
     useEffect(() => {
-        fetchPortalData();
-    }, []);
+        if (user?.id) fetchPortalData();
+    }, [user?.id]);
 
     const fetchPortalData = async () => {
         setLoading(true);
         try {
-            const [activityRes, projectRes, indicatorRes, userRes] = await Promise.all([
+            const compassActivityRequest = axios
+                .get(`${API_BASE}/me/compass-activities`, { params: { userId: user.id } })
+                .catch(error => {
+                    console.warn('Compass activity feed unavailable', error);
+                    return { data: [] };
+                });
+
+            const [activityRes, projectRes, indicatorRes, userRes, compassActivityRes] = await Promise.all([
                 axios.get(`${API_BASE}/activities`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/users`),
+                compassActivityRequest,
             ]);
 
-            setActivities(activityRes.data || []);
+            setActivities(mergePortalActivities(activityRes.data || [], compassActivityRes.data || []));
             setProjects(projectRes.data || []);
             setIndicators(indicatorRes.data || []);
             setReviewers((userRes.data || []).filter(u => 
@@ -139,6 +169,11 @@ export default function MyPortalPage() {
         }
     };
 
+    const pendingVerificationCount = useMemo(
+        () => activities.filter(a => !a.isCompassSynced && a.status === 'submitted').length,
+        [activities]
+    );
+
     if (loading) return <div className="page-loading"><div className="spinner" /></div>;
 
     return (
@@ -160,34 +195,42 @@ export default function MyPortalPage() {
                         <div className="panel-header">
                             <h2 className="panel-title">Active Field Work</h2>
                         </div>
+                        {portalMessage && (
+                            <div className="alert alert-warning" style={{ marginBottom: '16px' }}>
+                                {portalMessage}
+                            </div>
+                        )}
                         <div className="control-stack">
                             {activities.map(activity => (
                                 <div key={activity.id} className="control-row static" style={{ padding: '20px' }}>
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                                             <span className={`badge badge-${activity.status === 'draft' ? 'secondary' : 'info'}`}>
-                                                {activity.status.toUpperCase()}
+                                                {String(activity.status || 'submitted').toUpperCase()}
+                                            </span>
+                                            <span className={`badge ${activity.isCompassSynced ? 'badge-success' : 'badge-secondary'}`}>
+                                                {activity.isCompassSynced ? 'COMPASS SYNCED' : 'ERP PORTAL'}
                                             </span>
                                             <span className="text-muted" style={{ fontSize: '12px' }}>
                                                 <Calendar size={12} style={{ verticalAlign: 'middle', marginRight: '4px' }} />
-                                                {new Date(activity.activity_date).toLocaleDateString()}
+                                                {activity.activity_date ? new Date(activity.activity_date).toLocaleDateString() : 'No date'}
                                             </span>
                                         </div>
                                         <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-main)' }}>
                                             {activity.description || 'No description provided'}
                                         </div>
                                         <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                            {activity.project_name} · {activity.location}
+                                            {activity.project_name || 'Unlinked project'} - {activity.location || 'No location'}
                                         </div>
                                         <div style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
                                             <div className="form-hint" style={{ fontSize: '11px' }}>
                                                 <User size={10} style={{ marginRight: '4px' }} />
-                                                Reviewer: {activity.reviewer_name || 'Unassigned'}
+                                                {activity.isCompassSynced ? 'Source: Compass / mobile sync' : `Reviewer: ${activity.reviewer_name || 'Unassigned'}`}
                                             </div>
                                         </div>
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        {activity.status === 'draft' && (
+                                        {!activity.isCompassSynced && activity.status === 'draft' && (
                                             <button 
                                                 className="btn btn-outline btn-sm"
                                                 onClick={() => handleSubmitForReview(activity.id)}
@@ -195,7 +238,9 @@ export default function MyPortalPage() {
                                                 Submit Review
                                             </button>
                                         )}
-                                        <button className="btn btn-secondary btn-sm">Details</button>
+                                        <button className="btn btn-secondary btn-sm" disabled={activity.isCompassSynced}>
+                                            {activity.isCompassSynced ? 'In Compass' : 'Details'}
+                                        </button>
                                     </div>
                                 </div>
                             ))}
@@ -214,7 +259,7 @@ export default function MyPortalPage() {
                     <div className="kpi-card primary">
                         <div className="kpi-icon-wrap"><CheckSquare size={20} /></div>
                         <div className="kpi-label">Pending Verification</div>
-                        <div className="kpi-value">{activities.filter(a => a.status === 'submitted').length}</div>
+                        <div className="kpi-value">{pendingVerificationCount}</div>
                         <div className="kpi-sub">Waiting for Officer/Intern review</div>
                     </div>
                     
@@ -223,6 +268,9 @@ export default function MyPortalPage() {
                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5 }}>
                             Every field activity requires an <strong>Activity Plan</strong> before it can be created. 
                             Once field work is complete, update the activity with participant numbers and evidence to submit for verification.
+                        </p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: 1.5, marginTop: '12px' }}>
+                            Activities captured in the mobile app flow into Compass first. Approved Compass activity summaries appear here, and ERP portal activities are pushed back to Compass for M&E review.
                         </p>
                     </div>
                 </div>
@@ -233,7 +281,7 @@ export default function MyPortalPage() {
                     <div className="modal-box lg" onClick={e => e.stopPropagation()}>
                         <div className="modal-header">
                             <div className="modal-title">New Field Activity</div>
-                            <button className="modal-close" onClick={() => setShowCreateModal(false)}>×</button>
+                            <button className="modal-close" onClick={() => setShowCreateModal(false)}>x</button>
                         </div>
                         <form onSubmit={handleCreateActivity}>
                             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>

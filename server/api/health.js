@@ -1,5 +1,10 @@
 import postgres from 'postgres';
 
+const responseCorsOrigin =
+    process.env.CORS_RESPONSE_ORIGIN ||
+    process.env.PUBLIC_ORIGIN ||
+    'https://mmpzmne.co.zw';
+
 export const handler = async (event) => {
     const hasDatabaseUrl = !!process.env.DATABASE_URL;
     const provider = hasDatabaseUrl
@@ -35,7 +40,8 @@ export const handler = async (event) => {
         statusCode,
         headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': responseCorsOrigin,
+            'Vary': 'Origin',
         },
         body: JSON.stringify({
             status: statusCode === 200 ? 'ok' : 'degraded',

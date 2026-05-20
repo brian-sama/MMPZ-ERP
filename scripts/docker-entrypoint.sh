@@ -30,6 +30,17 @@ if [ "${RUN_DB_MIGRATIONS_ON_STARTUP:-false}" = "true" ]; then
         echo "Migration failed. Check logs for details."
         exit 1
     fi
+
+    # Run database seed to align canonical accounts and settings securely (without overwriting)
+    if [ "${RUN_DB_SEED_ON_STARTUP:-true}" = "true" ]; then
+        echo "Running database seeds..."
+        if ! npm run db:seed; then
+            echo "Seeding failed. Check logs for details."
+            exit 1
+        fi
+    else
+        echo "Skipping database seeding because RUN_DB_SEED_ON_STARTUP=false"
+    fi
 else
     echo "Skipping database migrations because RUN_DB_MIGRATIONS_ON_STARTUP=false"
 fi

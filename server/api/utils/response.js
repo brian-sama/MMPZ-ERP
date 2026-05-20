@@ -1,5 +1,17 @@
 // Response helper utilities for function-style API handlers.
 const isProduction = process.env.NODE_ENV === 'production';
+const responseCorsOrigin =
+    process.env.CORS_RESPONSE_ORIGIN ||
+    process.env.PUBLIC_ORIGIN ||
+    'https://mmpzmne.co.zw';
+
+const corsHeaders = () => ({
+    'Access-Control-Allow-Origin': responseCorsOrigin,
+    'Vary': 'Origin',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Expose-Headers': 'Content-Disposition',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+});
 
 /**
  * Create a successful JSON response
@@ -12,10 +24,7 @@ export const successResponse = (data, statusCode = 200) => {
         statusCode,
         headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*', // Configure this for production
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Expose-Headers': 'Content-Disposition',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            ...corsHeaders(),
         },
         body: JSON.stringify(data),
     };
@@ -41,10 +50,7 @@ export const errorResponse = (message, statusCode = 500, details = null) => {
         statusCode,
         headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Expose-Headers': 'Content-Disposition',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            ...corsHeaders(),
         },
         body: JSON.stringify(errorBody),
     };
@@ -58,10 +64,7 @@ export const corsResponse = () => {
     return {
         statusCode: 200,
         headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-            'Access-Control-Expose-Headers': 'Content-Disposition',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS',
+            ...corsHeaders(),
         },
         body: '',
     };

@@ -4,6 +4,7 @@ import { successResponse, errorResponse, corsResponse, parseBody } from './utils
 import { comparePassword } from './utils/auth.js';
 import { resolveSystemRole, toLegacyRole } from './utils/rbac.js';
 import { issueSessionToken } from './utils/session-token.js';
+import { buildIdentity } from './utils/identity.js';
 
 const ACCOUNT_LOCK_DURATION_MS = 15 * 60 * 1000;
 const IP_WINDOW_MS = 15 * 60 * 1000;
@@ -218,6 +219,7 @@ export const handler = async (event) => {
 
         // Success: Reset failed attempts and update last_login
         const systemRole = resolveSystemRole(user.role_code, user.system_role);
+        const identity = buildIdentity(user, { systemRole });
         try {
             await updateSuccessfulLoginState(availableColumns, user.id);
             clearIpFailures(clientIp);
@@ -233,7 +235,10 @@ export const handler = async (event) => {
                 email: user.email,
                 role_code: user.role_code,
                 system_role: systemRole,
-                job_title: user.job_title || user.role_code || 'Intern',
+                job_title: identity.displayTitle,
+                department: identity.department,
+                employment_type: identity.employmentType,
+                identity,
                 short_bio: user.short_bio || '',
                 profile_picture_url: user.profile_picture_url || null,
                 role_assignment_status: user.role_assignment_status || 'pending_reassignment',

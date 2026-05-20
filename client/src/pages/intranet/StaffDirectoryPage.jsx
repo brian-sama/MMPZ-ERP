@@ -257,7 +257,10 @@ export default function StaffDirectoryPage() {
                                     {person.name}
                                 </div>
                                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                                    {person.job_title || person.role_code}
+                                    {person.identity?.displayTitle || person.job_title || person.role_code}
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                    {person.identity?.department || person.department || 'MMPZ'}
                                 </div>
                                 <p style={{ marginTop: '12px', color: 'var(--text-secondary)', minHeight: '66px' }}>
                                     {person.short_bio || 'Profile bio not added yet. Tap to view contact details and role context.'}
@@ -271,7 +274,7 @@ export default function StaffDirectoryPage() {
                                         gap: '10px',
                                     }}
                                 >
-                                    <span className="badge badge-info">{person.system_role}</span>
+                                    <span className="badge badge-info">System access: {person.system_role}</span>
                                     <span
                                         style={{
                                             fontSize: '11px',
@@ -333,7 +336,7 @@ export default function StaffDirectoryPage() {
                                             {selectedStaff.name}
                                         </div>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                            <span className="badge badge-info">{selectedStaff.system_role}</span>
+                                            <span className="badge badge-info">System access: {selectedStaff.system_role}</span>
                                             {selectedStaff.system_role === 'SUPER_ADMIN' && (
                                                 <span className="badge badge-primary">
                                                     <Shield size={12} style={{ marginRight: '4px' }} /> Super Admin
@@ -357,11 +360,11 @@ export default function StaffDirectoryPage() {
                                                     onChange={(event) => setForm((current) => ({ ...current, job_title: event.target.value }))}
                                                 />
                                             ) : (
-                                                selectedStaff.job_title || selectedStaff.role_code
+                                                selectedStaff.identity?.displayTitle || selectedStaff.job_title || selectedStaff.role_code
                                             )}
                                         </div>
                                         <div className="control-copy">
-                                            Member since {new Date(selectedStaff.created_at).getFullYear()}
+                                            {selectedStaff.identity?.department || selectedStaff.department || 'MMPZ'} - Member since {new Date(selectedStaff.created_at).getFullYear()}
                                         </div>
                                     </div>
 

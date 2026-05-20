@@ -139,14 +139,24 @@ export default function MonitoringEvaluationPage() {
     const fetchMEData = async () => {
         setLoading(true);
         try {
-            const [indRes, perfRes, projectRes, riskRes] = await Promise.all([
+            const [indRes, compassIndRes, perfRes, projectRes, riskRes] = await Promise.all([
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/me/compass-indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
             ]);
             const riskById = new Map((riskRes.data?.indicators || []).map((item) => [item.id, item]));
-            setIndicators((indRes.data || []).map((item) => ({ ...item, ...(riskById.get(item.id) || {}) })));
+            const compassIndicators = (compassIndRes.data || []).map((item) => ({
+                ...item,
+                isCompassSynced: true,
+            }));
+            const localIndicators = (indRes.data || []).map((item) => ({
+                ...item,
+                ...(riskById.get(item.id) || {}),
+                isCompassSynced: false,
+            }));
+            setIndicators([...compassIndicators, ...localIndicators]);
             setPerformance(perfRes.data.reverse());
             setProjects(projectRes.data || []);
             setRiskSummary(riskRes.data || null);
@@ -204,6 +214,7 @@ export default function MonitoringEvaluationPage() {
         ind.title.toLowerCase().includes(indicatorSearch.toLowerCase())
     );
     const linkedFormUids = new Set(koboLinks.map((link) => link.kobo_form_uid));
+    const hasCompassSync = indicators.some((ind) => ind.isCompassSynced);
 
     const handleReportProgress = async (e) => {
         e.preventDefault();
@@ -298,7 +309,9 @@ export default function MonitoringEvaluationPage() {
                                     <RefreshCw size={16} className={syncing ? 'spin' : ''} /> KoBoToolbox
                                 </h2>
                                 <div className="panel-subtitle">
-                                    {koboConfig?.is_connected
+                                    {hasCompassSync
+                                        ? 'KoBo forms and field submissions are managed in Compass; approved summaries sync into ERP.'
+                                        : koboConfig?.is_connected
                                         ? `${koboLinks.length} active form bridge${koboLinks.length === 1 ? '' : 's'}`
                                         : 'Not connected. Configure the API token in Settings first.'}
                                 </div>
@@ -306,9 +319,9 @@ export default function MonitoringEvaluationPage() {
                             <button
                                 className="btn btn-secondary btn-sm"
                                 onClick={() => handleSync()}
-                                disabled={syncing || !koboConfig?.is_connected || koboLinks.length === 0}
+                                disabled={syncing || hasCompassSync || !koboConfig?.is_connected || koboLinks.length === 0}
                             >
-                                {syncing ? 'Syncing...' : 'Sync All'}
+                                {syncing ? 'Syncing...' : hasCompassSync ? 'Compass Managed' : 'Sync All'}
                             </button>
                         </div>
                         <div style={{ padding: '20px', display: 'grid', gap: '16px' }}>
@@ -316,6 +329,15 @@ export default function MonitoringEvaluationPage() {
                                 <div className="page-loading" style={{ minHeight: '120px' }}><div className="spinner" /></div>
                             ) : (
                                 <>
+                                    {hasCompassSync && (
+                                        <div className="surface-muted">
+                                            <div className="domain-kicker">Compass Link Active</div>
+                                            <div className="control-copy">
+                                                This ERP page is reading approved M&E indicator summaries from Compass. Raw KoBo forms,
+                                                field submissions, evidence, client case records, and clinical details stay in Compass.
+                                            </div>
+                                        </div>
+                                    )}
                                     <div className="control-stack compact">
                                         {koboLinks.slice(0, 5).map(link => (
                                             <div key={link.id} className="control-row static" style={{ alignItems: 'center' }}>
@@ -438,6 +460,11 @@ export default function MonitoringEvaluationPage() {
                                     <tr key={ind.id} onClick={() => setSelectedInd(ind)} style={{ cursor: 'pointer' }} className={selectedInd?.id === ind.id ? 'active-row' : ''}>
                                         <td>
                                             <div style={{ fontWeight: 600, fontSize: '13px' }}>{ind.title}</div>
+                                            {ind.isCompassSynced && (
+                                                <span className="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px', marginRight: '6px' }}>
+                                                    COMPASS SYNCED
+                                                </span>
+                                            )}
                                             <span className={`badge badge-${ind.priority === 'critical' ? 'danger' : ind.priority === 'high' ? 'warning' : 'primary'}`} style={{ fontSize: '9px', padding: '2px 6px' }}>
                                                 {ind.priority.toUpperCase()}
                                             </span>
@@ -473,9 +500,15 @@ export default function MonitoringEvaluationPage() {
                                                         <Database size={14} />
                                                     </div>
                                                 )}
-                                                <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedInd(ind); setShowReportForm(true); }}>
-                                                    Report
-                                                </button>
+                                                {ind.isCompassSynced ? (
+                                                    <span className="badge badge-success" title="Progress is reported in Compass and pushed into ERP.">
+                                                        Linked
+                                                    </span>
+                                                ) : (
+                                                    <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setSelectedInd(ind); setShowReportForm(true); }}>
+                                                        Report
+                                                    </button>
+                                                )}
                                             </div>
                                         </td>
                                     </tr>

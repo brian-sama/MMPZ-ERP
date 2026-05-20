@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${MMPZ_DB_USER:-mmpz_admin}
-      POSTGRES_PASSWORD: ${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}
+      POSTGRES_PASSWORD: ${MMPZ_DB_PASSWORD:-mmpz}
       POSTGRES_DB: ${MMPZ_DB_NAME:-mmpz_db}
     volumes:
       - mmpz_db_data:/var/lib/postgresql/data
@@ -32,14 +32,15 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
+      DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
       MMPZ_API_URL: https://mmpzmne.co.zw/api
-      MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:?MMPZ_AUTH_SECRET is required}
-      ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN:?ERP_INTEGRATION_TOKEN is required}
+      MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:-replace-with-long-random-secret}
+      ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN:-replace-with-shared-erp-integration-token}
       ME_INTERNAL_API_URL: ${ME_INTERNAL_API_URL:-http://mmpz-compass-app:4000/api}
-      ME_INTEGRATION_TOKEN: ${ME_INTEGRATION_TOKEN:?ME_INTEGRATION_TOKEN is required}
+      ME_INTEGRATION_TOKEN: ${ME_INTEGRATION_TOKEN:-replace-with-shared-me-integration-token}
       PORT: 3000
-      RUN_DB_MIGRATIONS_ON_STARTUP: "false"
+      RUN_DB_MIGRATIONS_ON_STARTUP: "true"
+      RUN_DB_SEED_ON_STARTUP: "true"
     healthcheck:
       test:
         [
@@ -69,7 +70,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:?MMPZ_DB_PASSWORD is required}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
+      - DATABASE_URL=postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
     healthcheck:
       test:
         [

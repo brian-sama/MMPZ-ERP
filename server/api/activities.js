@@ -7,6 +7,119 @@ import {
 } from './utils/rbac.js';
 import { successResponse, errorResponse } from './utils/response.js';
 
+const compassApiBaseUrl = () => {
+    const configured = (
+        process.env.ME_INTERNAL_API_URL ||
+        process.env.COMPASS_INTERNAL_API_URL ||
+        process.env.ME_API_URL ||
+        'https://monitoring.mmpzmne.co.zw/api'
+    ).replace(/\/+$/, '');
+
+    return configured.endsWith('/api') ? configured : `${configured}/api`;
+};
+
+const compassIntegrationToken = () =>
+    process.env.ME_INTEGRATION_TOKEN ||
+    process.env.ERP_INTEGRATION_TOKEN ||
+    process.env.INTEGRATION_TOKEN ||
+    '';
+
+const loadFieldActivityForCompass = async (activityId) => {
+    const [activity] = await sql`
+        SELECT
+            a.*,
+            f.name AS facilitator_name,
+            f.email AS facilitator_email,
+            r.name AS reviewer_name,
+            r.email AS reviewer_email,
+            p.name AS project_name,
+            i.title AS indicator_title,
+            COALESCE(SUM(var.male_count), 0)::int AS male_count,
+            COALESCE(SUM(var.female_count), 0)::int AS female_count
+        FROM field_activities a
+        JOIN users f ON a.facilitator_id = f.id
+        LEFT JOIN users r ON a.assigned_reviewer_id = r.id
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN indicators i ON a.indicator_id = i.id
+        LEFT JOIN volunteer_activity_reports var ON var.field_activity_id = a.id
+        WHERE a.id = ${activityId}
+        GROUP BY a.id, f.name, f.email, r.name, r.email, p.name, i.title
+        LIMIT 1
+    `;
+
+    return activity;
+};
+
+const pushFieldActivityToCompass = async (activityId) => {
+    const token = compassIntegrationToken();
+    if (!token) {
+        console.warn('Compass field activity sync skipped: ME_INTEGRATION_TOKEN is not configured in ERP.');
+        return { skipped: true, reason: 'missing-token' };
+    }
+
+    const activity = await loadFieldActivityForCompass(activityId);
+    if (!activity) {
+        return { skipped: true, reason: 'activity-not-found' };
+    }
+
+    const response = await fetch(`${compassApiBaseUrl()}/integrations/erp/field-activities`, {
+        method: 'POST',
+        headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'X-Integration-Token': token,
+        },
+        body: JSON.stringify({
+            activities: [
+                {
+                    id: activity.id,
+                    activityDate: activity.activity_date,
+                    description: activity.description,
+                    erpIndicatorId: activity.indicator_id,
+                    erpProjectId: activity.project_id,
+                    facilitatorEmail: activity.facilitator_email,
+                    facilitatorName: activity.facilitator_name,
+                    femaleParticipants: activity.female_count,
+                    indicatorTitle: activity.indicator_title,
+                    location: activity.location,
+                    maleParticipants: activity.male_count,
+                    name: activity.description || `ERP field activity ${activity.id}`,
+                    projectName: activity.project_name,
+                    reviewerEmail: activity.reviewer_email,
+                    reviewerName: activity.reviewer_name,
+                    source: 'ERP My Portal',
+                    status: activity.status,
+                    type: 'ERP_FIELD_ACTIVITY',
+                },
+            ],
+        }),
+    });
+
+    const text = await response.text();
+    if (!response.ok) {
+        throw new Error(`Compass field activity sync failed (${response.status}): ${text}`);
+    }
+
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { ok: true };
+    }
+};
+
+const tryPushFieldActivityToCompass = async (activityId) => {
+    try {
+        return await pushFieldActivityToCompass(activityId);
+    } catch (error) {
+        console.error('Compass field activity sync error:', error);
+        return {
+            error: error instanceof Error ? error.message : 'Compass sync failed',
+            ok: false,
+        };
+    }
+};
+
 export const handler = async (event) => {
     const method = event.httpMethod;
     const path = event.path;
@@ -57,7 +170,8 @@ export const handler = async (event) => {
                 ) RETURNING *
             `;
 
-            return successResponse(activity, 201);
+            const compassSync = await tryPushFieldActivityToCompass(activity.id);
+            return successResponse({ ...activity, compassSync }, 201);
         }
 
         // GET /api/activities - List activities
@@ -160,7 +274,8 @@ export const handler = async (event) => {
                 }
             }
 
-            return successResponse(activity);
+            const compassSync = await tryPushFieldActivityToCompass(activity.id);
+            return successResponse({ ...activity, compassSync });
         }
 
         // POST /api/activities/:id/submit - Submit for review
@@ -223,7 +338,8 @@ export const handler = async (event) => {
                 )
             `;
 
-            return successResponse({ activityId, submissionId: submission.id });
+            const compassSync = await tryPushFieldActivityToCompass(activityId);
+            return successResponse({ activityId, compassSync, submissionId: submission.id });
         }
 
         throw new HttpError('Route not found', 404);

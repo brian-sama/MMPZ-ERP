@@ -16,6 +16,7 @@ import MonitoringEvaluationPage from './pages/MonitoringEvaluationPage';
 import FinanceAdminPage from './pages/FinanceAdminPage';
 import BudgetTrackerPage from './pages/BudgetTrackerPage';
 import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
+import GovernanceCompliancePage from './pages/GovernanceCompliancePage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -68,6 +69,17 @@ export default function AppRouter() {
                 <Route path="/finance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/finance')}><FinanceAdminPage /></ProtectedRoute>} />
                 <Route path="/budget" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/budget')}><BudgetTrackerPage /></ProtectedRoute>} />
                 <Route path="/governance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance')}><GovernanceApprovalsPage /></ProtectedRoute>} />
+                
+                {/* Governance & Compliance Tabbed Routes */}
+                <Route path="/governance/safeguarding" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/safeguarding')}><GovernanceCompliancePage activeTab="safeguarding" /></ProtectedRoute>} />
+                <Route path="/governance/volunteers" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/volunteers')}><GovernanceCompliancePage activeTab="volunteers" /></ProtectedRoute>} />
+                <Route path="/governance/donors" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/donors')}><GovernanceCompliancePage activeTab="donors" /></ProtectedRoute>} />
+                <Route path="/governance/grants" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/grants')}><GovernanceCompliancePage activeTab="grants" /></ProtectedRoute>} />
+                <Route path="/governance/supervision" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/supervision')}><GovernanceCompliancePage activeTab="supervision" /></ProtectedRoute>} />
+                <Route path="/governance/knowledge-hub" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/knowledge-hub')}><GovernanceCompliancePage activeTab="knowledge-hub" /></ProtectedRoute>} />
+                <Route path="/governance/referrals" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/referrals')}><GovernanceCompliancePage activeTab="referrals" /></ProtectedRoute>} />
+                <Route path="/governance/performance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/performance')}><GovernanceCompliancePage activeTab="performance" /></ProtectedRoute>} />
+
                 <Route path="/reports" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/reports')}><ReportsPage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/settings')}><SettingsPage /></ProtectedRoute>} />
                 <Route path="/users" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/users')}><UserManagementPage /></ProtectedRoute>} />

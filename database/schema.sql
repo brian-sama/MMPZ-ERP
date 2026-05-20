@@ -33,15 +33,15 @@ INSERT INTO roles (code, name, description, is_executive)
 VALUES
     ('DIRECTOR', 'Director', 'Executive authority for strategic and final approvals', TRUE),
     ('SYSTEM_ADMIN', 'System Administrator', 'Highest level of administrative access and control.', TRUE),
-    ('FINANCE_ADMIN_OFFICER', 'Finance and Admin Officer', 'Financial accountability and administrative leadership', FALSE),
-    ('ADMIN_ASSISTANT', 'Admin Assistant', 'Operational support and user coordination', FALSE),
-    ('LOGISTICS_ASSISTANT', 'Logistics Assistant', 'Procurement and logistics tracking support', FALSE),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'Psychosocial Support Officer', 'Technical lead for psychosocial interventions', FALSE),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'Community Development Officer', 'Technical lead for community programs', FALSE),
-    ('ME_INTERN_ACTING_OFFICER', 'M&E Intern (Acting Officer)', 'Interim monitoring and evaluation oversight', FALSE),
-    ('SOCIAL_SERVICES_INTERN', 'Social Services Intern', 'Program support and field documentation', FALSE),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'Youth & Communications Intern', 'Outreach and communications support', FALSE),
-    ('DEVELOPMENT_FACILITATOR', 'Development Facilitator', 'Volunteer field implementation role', FALSE)
+    ('FINANCE_OFFICER', 'Finance Officer', 'Financial accountability and administrative leadership', FALSE),
+    ('ADMIN_FINANCE_ASSISTANT', 'Admin & Finance Assistant', 'Procurement, finance and logistics support', FALSE),
+    ('SRHR_OFFICER', 'SRHR Officer', 'Technical lead for SRHR and psychosocial support', FALSE),
+    ('PROGRAMS_ME_OFFICER', 'Programs & M&E Officer', 'Technical lead for programs and M&E alignment', FALSE),
+    ('MEL_OFFICER', 'MEL Officer', 'Monitoring, evaluation and learning oversight', FALSE),
+    ('FIELD_OFFICER_1', 'Field Officer 1', 'Field execution and program coordination', FALSE),
+    ('FIELD_OFFICER_2', 'Field Officer 2', 'Secondary field operations and program support', FALSE),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'Youth & Knowledge Hub Officer', 'Youth engagement and knowledge center management', FALSE),
+    ('YOUTH_FACILITATOR_PEER_EDUCATOR', 'Youth Facilitator / Peer Educator', 'Field peer education and offline coordination', FALSE)
 ON CONFLICT (code) DO UPDATE
 SET
     name = EXCLUDED.name,
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100),
     email VARCHAR(100) UNIQUE,
-    role_code VARCHAR(80) NOT NULL DEFAULT 'DEVELOPMENT_FACILITATOR',
+    role_code VARCHAR(80) NOT NULL DEFAULT 'YOUTH_FACILITATOR_PEER_EDUCATOR',
     system_role VARCHAR(40),
     job_title TEXT,
     short_bio TEXT,
@@ -132,6 +132,29 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_at TIMESTAMP NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS role_legacy_snapshot VARCHAR(80) NULL;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
 ALTER TABLE users ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
+
+-- Keep HR identity separate from permission inheritance.
+UPDATE users
+SET job_title = 'Director',
+    system_role = COALESCE(system_role, 'MANAGEMENT')
+WHERE role_code = 'DIRECTOR'
+  AND (
+    job_title IS NULL
+    OR job_title ILIKE '%development facilitator%'
+    OR job_title ILIKE '%field implementer%'
+  );
+
+UPDATE users
+SET job_title = 'Youth Facilitator / Peer Educator',
+    system_role = COALESCE(system_role, 'FACILITATOR')
+WHERE role_code = 'YOUTH_FACILITATOR_PEER_EDUCATOR'
+  AND (job_title IS NULL OR job_title = 'Development Facilitator' OR job_title = 'Youth Facilitator / Peer Educator');
+
+UPDATE users
+SET job_title = 'Finance Officer',
+    system_role = COALESCE(system_role, 'PROGRAM_STAFF')
+WHERE role_code = 'FINANCE_OFFICER'
+  AND job_title IS NULL;
 
 DO $$
 BEGIN
@@ -177,26 +200,35 @@ WHERE updated_at IS NULL;
 
 UPDATE users
 SET role_code = CASE
-    WHEN role_code IS NULL THEN 'DEVELOPMENT_FACILITATOR'
+    WHEN role_code IS NULL THEN 'YOUTH_FACILITATOR_PEER_EDUCATOR'
     WHEN UPPER(role_code) IN (
         'DIRECTOR',
         'SYSTEM_ADMIN',
-        'FINANCE_ADMIN_OFFICER',
-        'ADMIN_ASSISTANT',
-        'LOGISTICS_ASSISTANT',
-        'PSYCHOSOCIAL_SUPPORT_OFFICER',
-        'COMMUNITY_DEVELOPMENT_OFFICER',
-        'ME_INTERN_ACTING_OFFICER',
-        'SOCIAL_SERVICES_INTERN',
-        'YOUTH_COMMUNICATIONS_INTERN',
-        'DEVELOPMENT_FACILITATOR'
+        'FINANCE_OFFICER',
+        'ADMIN_FINANCE_ASSISTANT',
+        'SRHR_OFFICER',
+        'PROGRAMS_ME_OFFICER',
+        'MEL_OFFICER',
+        'FIELD_OFFICER_1',
+        'FIELD_OFFICER_2',
+        'YOUTH_KNOWLEDGE_HUB_OFFICER',
+        'YOUTH_FACILITATOR_PEER_EDUCATOR'
     ) THEN UPPER(role_code)
+    WHEN UPPER(role_code) = 'FINANCE_ADMIN_OFFICER' THEN 'FINANCE_OFFICER'
+    WHEN UPPER(role_code) = 'ADMIN_ASSISTANT' THEN 'ADMIN_FINANCE_ASSISTANT'
+    WHEN UPPER(role_code) = 'LOGISTICS_ASSISTANT' THEN 'ADMIN_FINANCE_ASSISTANT'
+    WHEN UPPER(role_code) = 'PSYCHOSOCIAL_SUPPORT_OFFICER' THEN 'SRHR_OFFICER'
+    WHEN UPPER(role_code) = 'COMMUNITY_DEVELOPMENT_OFFICER' THEN 'PROGRAMS_ME_OFFICER'
+    WHEN UPPER(role_code) = 'ME_INTERN_ACTING_OFFICER' THEN 'MEL_OFFICER'
+    WHEN UPPER(role_code) = 'SOCIAL_SERVICES_INTERN' THEN 'FIELD_OFFICER_1'
+    WHEN UPPER(role_code) = 'YOUTH_COMMUNICATIONS_INTERN' THEN 'YOUTH_KNOWLEDGE_HUB_OFFICER'
+    WHEN UPPER(role_code) = 'DEVELOPMENT_FACILITATOR' THEN 'YOUTH_FACILITATOR_PEER_EDUCATOR'
     WHEN LOWER(role_code) = 'director' THEN 'DIRECTOR'
     WHEN LOWER(role_code) = 'admin' THEN 'DIRECTOR'
-    WHEN LOWER(role_code) = 'officer' THEN 'ADMIN_ASSISTANT'
-    WHEN LOWER(role_code) = 'intern' THEN 'SOCIAL_SERVICES_INTERN'
-    WHEN LOWER(role_code) = 'volunteer' THEN 'DEVELOPMENT_FACILITATOR'
-    ELSE 'DEVELOPMENT_FACILITATOR'
+    WHEN LOWER(role_code) = 'officer' THEN 'ADMIN_FINANCE_ASSISTANT'
+    WHEN LOWER(role_code) = 'intern' THEN 'FIELD_OFFICER_1'
+    WHEN LOWER(role_code) = 'volunteer' THEN 'YOUTH_FACILITATOR_PEER_EDUCATOR'
+    ELSE 'YOUTH_FACILITATOR_PEER_EDUCATOR'
 END;
 
 UPDATE users
@@ -209,15 +241,15 @@ WHERE role_assignment_status IS NULL
        AND role_code IN (
            'DIRECTOR',
            'SYSTEM_ADMIN',
-           'FINANCE_ADMIN_OFFICER',
-           'ADMIN_ASSISTANT',
-           'LOGISTICS_ASSISTANT',
-           'PSYCHOSOCIAL_SUPPORT_OFFICER',
-           'COMMUNITY_DEVELOPMENT_OFFICER',
-           'ME_INTERN_ACTING_OFFICER',
-           'SOCIAL_SERVICES_INTERN',
-           'YOUTH_COMMUNICATIONS_INTERN',
-           'DEVELOPMENT_FACILITATOR'
+           'FINANCE_OFFICER',
+           'ADMIN_FINANCE_ASSISTANT',
+           'SRHR_OFFICER',
+           'PROGRAMS_ME_OFFICER',
+           'MEL_OFFICER',
+           'FIELD_OFFICER_1',
+           'FIELD_OFFICER_2',
+           'YOUTH_KNOWLEDGE_HUB_OFFICER',
+           'YOUTH_FACILITATOR_PEER_EDUCATOR'
        )
    );
 
@@ -225,15 +257,15 @@ UPDATE users
 SET system_role = CASE
     WHEN role_code = 'DIRECTOR' THEN 'MANAGEMENT'
     WHEN role_code = 'SYSTEM_ADMIN' THEN 'SUPER_ADMIN'
-    WHEN role_code = 'FINANCE_ADMIN_OFFICER' THEN 'PROGRAM_STAFF'
-    WHEN role_code = 'ADMIN_ASSISTANT' THEN 'OPERATIONS'
-    WHEN role_code = 'LOGISTICS_ASSISTANT' THEN 'OPERATIONS'
-    WHEN role_code = 'PSYCHOSOCIAL_SUPPORT_OFFICER' THEN 'PROGRAM_STAFF'
-    WHEN role_code = 'COMMUNITY_DEVELOPMENT_OFFICER' THEN 'PROGRAM_STAFF'
-    WHEN role_code = 'ME_INTERN_ACTING_OFFICER' THEN 'INTERN'
-    WHEN role_code = 'SOCIAL_SERVICES_INTERN' THEN 'INTERN'
-    WHEN role_code = 'YOUTH_COMMUNICATIONS_INTERN' THEN 'INTERN'
-    WHEN role_code = 'DEVELOPMENT_FACILITATOR' THEN 'FACILITATOR'
+    WHEN role_code = 'FINANCE_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'ADMIN_FINANCE_ASSISTANT' THEN 'OPERATIONS'
+    WHEN role_code = 'SRHR_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'PROGRAMS_ME_OFFICER' THEN 'PROGRAM_STAFF'
+    WHEN role_code = 'MEL_OFFICER' THEN 'INTERN'
+    WHEN role_code = 'FIELD_OFFICER_1' THEN 'INTERN'
+    WHEN role_code = 'FIELD_OFFICER_2' THEN 'INTERN'
+    WHEN role_code = 'YOUTH_KNOWLEDGE_HUB_OFFICER' THEN 'INTERN'
+    WHEN role_code = 'YOUTH_FACILITATOR_PEER_EDUCATOR' THEN 'FACILITATOR'
     ELSE COALESCE(system_role, 'INTERN')
 END
 WHERE system_role IS NULL OR system_role = '';
@@ -838,121 +870,131 @@ FROM permissions
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('FINANCE_ADMIN_OFFICER', 'user.view'),
-    ('FINANCE_ADMIN_OFFICER', 'indicator.read_all'),
-    ('FINANCE_ADMIN_OFFICER', 'activity.read'),
-    ('FINANCE_ADMIN_OFFICER', 'expense.read'),
-    ('FINANCE_ADMIN_OFFICER', 'expense.review_finance'),
-    ('FINANCE_ADMIN_OFFICER', 'settings.finance_threshold.read'),
-    ('FINANCE_ADMIN_OFFICER', 'approval.read'),
-    ('FINANCE_ADMIN_OFFICER', 'volunteer.submit'),
-    ('FINANCE_ADMIN_OFFICER', 'volunteer.read_own')
+    ('FINANCE_OFFICER', 'user.view'),
+    ('FINANCE_OFFICER', 'indicator.read_all'),
+    ('FINANCE_OFFICER', 'activity.read'),
+    ('FINANCE_OFFICER', 'expense.read'),
+    ('FINANCE_OFFICER', 'expense.review_finance'),
+    ('FINANCE_OFFICER', 'settings.finance_threshold.read'),
+    ('FINANCE_OFFICER', 'approval.read'),
+    ('FINANCE_OFFICER', 'volunteer.submit'),
+    ('FINANCE_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('ADMIN_ASSISTANT', 'user.view'),
-    ('ADMIN_ASSISTANT', 'user.create'),
-    ('ADMIN_ASSISTANT', 'user.update'),
-    ('ADMIN_ASSISTANT', 'user.assign_role'),
-    ('ADMIN_ASSISTANT', 'indicator.read_all'),
-    ('ADMIN_ASSISTANT', 'activity.read'),
-    ('ADMIN_ASSISTANT', 'approval.read'),
-    ('ADMIN_ASSISTANT', 'governance.pending_roles.read'),
-    ('ADMIN_ASSISTANT', 'volunteer.submit'),
-    ('ADMIN_ASSISTANT', 'volunteer.read_own')
+    ('ADMIN_FINANCE_ASSISTANT', 'user.view'),
+    ('ADMIN_FINANCE_ASSISTANT', 'user.create'),
+    ('ADMIN_FINANCE_ASSISTANT', 'user.update'),
+    ('ADMIN_FINANCE_ASSISTANT', 'user.assign_role'),
+    ('ADMIN_FINANCE_ASSISTANT', 'indicator.read_all'),
+    ('ADMIN_FINANCE_ASSISTANT', 'activity.read'),
+    ('ADMIN_FINANCE_ASSISTANT', 'approval.read'),
+    ('ADMIN_FINANCE_ASSISTANT', 'governance.pending_roles.read'),
+    ('ADMIN_FINANCE_ASSISTANT', 'volunteer.submit'),
+    ('ADMIN_FINANCE_ASSISTANT', 'volunteer.read_own'),
+    ('ADMIN_FINANCE_ASSISTANT', 'indicator.read_assigned'),
+    ('ADMIN_FINANCE_ASSISTANT', 'activity.create'),
+    ('ADMIN_FINANCE_ASSISTANT', 'project.read')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('LOGISTICS_ASSISTANT', 'indicator.read_assigned'),
-    ('LOGISTICS_ASSISTANT', 'activity.read'),
-    ('LOGISTICS_ASSISTANT', 'activity.create'),
-    ('LOGISTICS_ASSISTANT', 'project.read'),
-    ('LOGISTICS_ASSISTANT', 'volunteer.submit'),
-    ('LOGISTICS_ASSISTANT', 'volunteer.read_own')
+    ('SRHR_OFFICER', 'program.read'),
+    ('SRHR_OFFICER', 'project.read'),
+    ('SRHR_OFFICER', 'indicator.read_assigned'),
+    ('SRHR_OFFICER', 'indicator.create'),
+    ('SRHR_OFFICER', 'indicator.update'),
+    ('SRHR_OFFICER', 'progress.create'),
+    ('SRHR_OFFICER', 'activity.read'),
+    ('SRHR_OFFICER', 'activity.create'),
+    ('SRHR_OFFICER', 'expense.create'),
+    ('SRHR_OFFICER', 'kobo.manage'),
+    ('SRHR_OFFICER', 'kobo.sync'),
+    ('SRHR_OFFICER', 'volunteer.submit'),
+    ('SRHR_OFFICER', 'volunteer.read_own'),
+
+    ('PROGRAMS_ME_OFFICER', 'program.read'),
+    ('PROGRAMS_ME_OFFICER', 'project.read'),
+    ('PROGRAMS_ME_OFFICER', 'project.create'),
+    ('PROGRAMS_ME_OFFICER', 'project.update'),
+    ('PROGRAMS_ME_OFFICER', 'indicator.read_assigned'),
+    ('PROGRAMS_ME_OFFICER', 'indicator.create'),
+    ('PROGRAMS_ME_OFFICER', 'indicator.update'),
+    ('PROGRAMS_ME_OFFICER', 'progress.create'),
+    ('PROGRAMS_ME_OFFICER', 'activity.read'),
+    ('PROGRAMS_ME_OFFICER', 'activity.create'),
+    ('PROGRAMS_ME_OFFICER', 'expense.create'),
+    ('PROGRAMS_ME_OFFICER', 'kobo.manage'),
+    ('PROGRAMS_ME_OFFICER', 'kobo.sync'),
+    ('PROGRAMS_ME_OFFICER', 'volunteer.submit'),
+    ('PROGRAMS_ME_OFFICER', 'volunteer.read_own'),
+
+    ('MEL_OFFICER', 'program.read'),
+    ('MEL_OFFICER', 'project.read'),
+    ('MEL_OFFICER', 'indicator.read_all'),
+    ('MEL_OFFICER', 'indicator.update'),
+    ('MEL_OFFICER', 'activity.read'),
+    ('MEL_OFFICER', 'approval.read'),
+    ('MEL_OFFICER', 'kobo.manage'),
+    ('MEL_OFFICER', 'kobo.sync'),
+    ('MEL_OFFICER', 'volunteer.submit'),
+    ('MEL_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'program.read'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'project.read'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'indicator.read_assigned'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'indicator.create'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'indicator.update'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'progress.create'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.read'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'activity.create'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'expense.create'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'kobo.manage'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'kobo.sync'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.submit'),
-    ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'volunteer.read_own'),
+    ('FIELD_OFFICER_1', 'indicator.read_assigned'),
+    ('FIELD_OFFICER_1', 'program.read'),
+    ('FIELD_OFFICER_1', 'project.read'),
+    ('FIELD_OFFICER_1', 'project.create'),
+    ('FIELD_OFFICER_1', 'project.update'),
+    ('FIELD_OFFICER_1', 'indicator.create'),
+    ('FIELD_OFFICER_1', 'indicator.update'),
+    ('FIELD_OFFICER_1', 'progress.create'),
+    ('FIELD_OFFICER_1', 'activity.read'),
+    ('FIELD_OFFICER_1', 'activity.create'),
+    ('FIELD_OFFICER_1', 'expense.create'),
+    ('FIELD_OFFICER_1', 'kobo.manage'),
+    ('FIELD_OFFICER_1', 'kobo.sync'),
+    ('FIELD_OFFICER_1', 'volunteer.submit'),
+    ('FIELD_OFFICER_1', 'volunteer.read_own'),
 
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'program.read'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'project.read'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'project.create'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'project.update'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'indicator.read_assigned'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'indicator.create'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'indicator.update'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'progress.create'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.read'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'activity.create'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'expense.create'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'kobo.manage'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'kobo.sync'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.submit'),
-    ('COMMUNITY_DEVELOPMENT_OFFICER', 'volunteer.read_own'),
+    ('FIELD_OFFICER_2', 'indicator.read_assigned'),
+    ('FIELD_OFFICER_2', 'program.read'),
+    ('FIELD_OFFICER_2', 'project.read'),
+    ('FIELD_OFFICER_2', 'project.create'),
+    ('FIELD_OFFICER_2', 'project.update'),
+    ('FIELD_OFFICER_2', 'indicator.create'),
+    ('FIELD_OFFICER_2', 'indicator.update'),
+    ('FIELD_OFFICER_2', 'progress.create'),
+    ('FIELD_OFFICER_2', 'activity.read'),
+    ('FIELD_OFFICER_2', 'activity.create'),
+    ('FIELD_OFFICER_2', 'expense.create'),
+    ('FIELD_OFFICER_2', 'kobo.manage'),
+    ('FIELD_OFFICER_2', 'kobo.sync'),
+    ('FIELD_OFFICER_2', 'volunteer.submit'),
+    ('FIELD_OFFICER_2', 'volunteer.read_own'),
 
-    ('ME_INTERN_ACTING_OFFICER', 'program.read'),
-    ('ME_INTERN_ACTING_OFFICER', 'project.read'),
-    ('ME_INTERN_ACTING_OFFICER', 'indicator.read_all'),
-    ('ME_INTERN_ACTING_OFFICER', 'indicator.update'),
-    ('ME_INTERN_ACTING_OFFICER', 'activity.read'),
-    ('ME_INTERN_ACTING_OFFICER', 'approval.read'),
-    ('ME_INTERN_ACTING_OFFICER', 'kobo.manage'),
-    ('ME_INTERN_ACTING_OFFICER', 'kobo.sync'),
-    ('ME_INTERN_ACTING_OFFICER', 'volunteer.submit'),
-    ('ME_INTERN_ACTING_OFFICER', 'volunteer.read_own')
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'program.read'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'project.read'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'project.create'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'project.update'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'indicator.read_assigned'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'indicator.create'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'indicator.update'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'progress.create'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'activity.read'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'activity.create'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'expense.create'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'kobo.manage'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'kobo.sync'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'volunteer.submit'),
+    ('YOUTH_KNOWLEDGE_HUB_OFFICER', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('SOCIAL_SERVICES_INTERN', 'indicator.read_assigned'),
-    ('SOCIAL_SERVICES_INTERN', 'program.read'),
-    ('SOCIAL_SERVICES_INTERN', 'project.read'),
-    ('SOCIAL_SERVICES_INTERN', 'project.create'),
-    ('SOCIAL_SERVICES_INTERN', 'project.update'),
-    ('SOCIAL_SERVICES_INTERN', 'indicator.create'),
-    ('SOCIAL_SERVICES_INTERN', 'indicator.update'),
-    ('SOCIAL_SERVICES_INTERN', 'progress.create'),
-    ('SOCIAL_SERVICES_INTERN', 'activity.read'),
-    ('SOCIAL_SERVICES_INTERN', 'activity.create'),
-    ('SOCIAL_SERVICES_INTERN', 'expense.create'),
-    ('SOCIAL_SERVICES_INTERN', 'kobo.manage'),
-    ('SOCIAL_SERVICES_INTERN', 'kobo.sync'),
-    ('SOCIAL_SERVICES_INTERN', 'volunteer.submit'),
-    ('SOCIAL_SERVICES_INTERN', 'volunteer.read_own'),
-
-    ('YOUTH_COMMUNICATIONS_INTERN', 'program.read'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'project.read'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'project.create'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'project.update'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.read_assigned'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.create'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'indicator.update'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'progress.create'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'activity.read'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'activity.create'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'expense.create'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.manage'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.sync'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.submit'),
-    ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.read_own')
-ON CONFLICT DO NOTHING;
-
-INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('DEVELOPMENT_FACILITATOR', 'project.read'),
-    ('DEVELOPMENT_FACILITATOR', 'activity.read'),
-    ('DEVELOPMENT_FACILITATOR', 'volunteer.submit'),
-    ('DEVELOPMENT_FACILITATOR', 'volunteer.read_own')
+    ('YOUTH_FACILITATOR_PEER_EDUCATOR', 'project.read'),
+    ('YOUTH_FACILITATOR_PEER_EDUCATOR', 'activity.read'),
+    ('YOUTH_FACILITATOR_PEER_EDUCATOR', 'volunteer.submit'),
+    ('YOUTH_FACILITATOR_PEER_EDUCATOR', 'volunteer.read_own')
 ON CONFLICT DO NOTHING;
 
 -- =====================================================

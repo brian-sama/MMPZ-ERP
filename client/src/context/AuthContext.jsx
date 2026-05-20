@@ -8,14 +8,6 @@ const USER_STORAGE_KEY = 'mmpz_user';
 const TOKEN_STORAGE_KEY = 'mmpz_auth_token';
 const SESSION_KEY_STORAGE_KEY = 'mmpz_session_key';
 
-const loadStoredUser = () => {
-  try {
-    return normalizeUserProfile(JSON.parse(sessionStorage.getItem(USER_STORAGE_KEY)) || null);
-  } catch {
-    return null;
-  }
-};
-
 const loadStoredToken = () => {
   try {
     return sessionStorage.getItem(TOKEN_STORAGE_KEY) || '';
@@ -56,15 +48,83 @@ const applyAuthToken = (token) => {
 applyAuthToken(loadStoredToken());
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(loadStoredUser);
+  const initialToken = loadStoredToken();
+  const [user, setUser] = useState(null);
   const [token, setToken] = useState(loadStoredToken);
   const [sessionKey, setSessionKey] = useState(loadStoredSessionKey);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(Boolean(initialToken));
   const [authError, setAuthError] = useState('');
 
   useEffect(() => {
     applyAuthToken(token);
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const verifyStoredSession = async () => {
+      const storedToken = loadStoredToken();
+      if (!storedToken) {
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        applyAuthToken(storedToken);
+        const res = await axios.get(`${API_BASE}/me/session`);
+        if (cancelled) return;
+
+        const verifiedToken = res.data?.token || storedToken;
+        const verifiedUser = normalizeUserProfile(res.data?.user);
+        if (!verifiedToken || !verifiedUser) {
+          throw new Error('Invalid session response');
+        }
+
+        const nextSessionKey = loadStoredSessionKey() || createSessionKey();
+        setToken(verifiedToken);
+        setSessionKey(nextSessionKey);
+        setUser(verifiedUser);
+        sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(verifiedUser));
+        sessionStorage.setItem(TOKEN_STORAGE_KEY, verifiedToken);
+        sessionStorage.setItem(SESSION_KEY_STORAGE_KEY, nextSessionKey);
+      } catch {
+        clearStoredSession();
+        applyAuthToken('');
+        if (!cancelled) {
+          setToken('');
+          setSessionKey('');
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    verifyStoredSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const interceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error?.response?.status === 401) {
+          clearStoredSession();
+          applyAuthToken('');
+          setToken('');
+          setSessionKey('');
+          setUser(null);
+        }
+        return Promise.reject(error);
+      },
+    );
+
+    return () => axios.interceptors.response.eject(interceptor);
+  }, []);
 
   // Session inactivity timeout (30 min)
   useEffect(() => {

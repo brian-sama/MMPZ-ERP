@@ -18,6 +18,7 @@ import {
     toLegacyRole,
     setAuditActor,
 } from './utils/rbac.js';
+import { buildIdentity } from './utils/identity.js';
 import { syncFacilitatorProfileForUser } from './utils/facilitators.js';
 
 const getUserColumns = async () => {
@@ -57,39 +58,55 @@ const buildUserSelect = (columns) => {
     `);
 };
 
-const sanitizeUser = (user) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role_code: user.role_code,
-    system_role: resolveSystemRole(user.role_code, user.system_role),
-    job_title: user.job_title || user.role_code || 'Intern',
-    short_bio: user.short_bio || '',
-    profile_picture_url: user.profile_picture_url || null,
-    phone: user.phone || '',
-    role_assignment_status: user.role_assignment_status,
-    role_confirmed_at: user.role_confirmed_at,
-    role: toLegacyRole(user.role_code, resolveSystemRole(user.role_code, user.system_role)),
-    require_password_reset: user.require_password_reset,
-    last_login: user.last_login,
-    failed_login_attempts: user.failed_login_attempts || 0,
-    locked_at: user.locked_at || null,
-    created_at: user.created_at,
-});
+const sanitizeUser = (user) => {
+    const systemRole = resolveSystemRole(user.role_code, user.system_role);
+    const identity = buildIdentity(user, { systemRole });
 
-const sanitizeDirectoryUser = (user) => ({
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    role_code: user.role_code,
-    system_role: resolveSystemRole(user.role_code, user.system_role),
-    job_title: user.job_title || user.role_code || 'Team Member',
-    short_bio: user.short_bio || '',
-    profile_picture_url: user.profile_picture_url || null,
-    phone: user.phone || '',
-    role_assignment_status: user.role_assignment_status,
-    created_at: user.created_at,
-});
+    return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role_code: user.role_code,
+        system_role: systemRole,
+        job_title: identity.displayTitle,
+        department: identity.department,
+        employment_type: identity.employmentType,
+        identity,
+        short_bio: user.short_bio || '',
+        profile_picture_url: user.profile_picture_url || null,
+        phone: user.phone || '',
+        role_assignment_status: user.role_assignment_status,
+        role_confirmed_at: user.role_confirmed_at,
+        role: toLegacyRole(user.role_code, systemRole),
+        require_password_reset: user.require_password_reset,
+        last_login: user.last_login,
+        failed_login_attempts: user.failed_login_attempts || 0,
+        locked_at: user.locked_at || null,
+        created_at: user.created_at,
+    };
+};
+
+const sanitizeDirectoryUser = (user) => {
+    const systemRole = resolveSystemRole(user.role_code, user.system_role);
+    const identity = buildIdentity(user, { systemRole });
+
+    return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role_code: user.role_code,
+        system_role: systemRole,
+        job_title: identity.displayTitle,
+        department: identity.department,
+        employment_type: identity.employmentType,
+        identity,
+        short_bio: user.short_bio || '',
+        profile_picture_url: user.profile_picture_url || null,
+        phone: user.phone || '',
+        role_assignment_status: user.role_assignment_status,
+        created_at: user.created_at,
+    };
+};
 
 const assertCanAssignRole = (actor, targetRoleCode) => {
     if (actor.system_role === 'SUPER_ADMIN') return;
@@ -157,7 +174,10 @@ export const handler = async (event) => {
 
             const roleCode = resolveIncomingRole(body);
             const systemRole = body.system_role || body.systemRole || resolveSystemRole(roleCode);
-            const jobTitle = body.job_title || body.jobTitle || roleCode;
+            const jobTitle =
+                body.job_title ||
+                body.jobTitle ||
+                buildIdentity({ role_code: roleCode, name }, { systemRole }).displayTitle;
 
             assertCanAssignRole(actor, roleCode);
 

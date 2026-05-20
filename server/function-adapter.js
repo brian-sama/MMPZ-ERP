@@ -2,6 +2,25 @@
  * Adapter to run function-style handlers in Express.
  * It converts Express req/res into an event/context shape.
  */
+const defaultCorsOrigins = [
+    'https://mmpzmne.co.zw',
+    'https://monitoring.mmpzmne.co.zw',
+];
+const configuredCorsOrigins = (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const allowedCorsOrigins = new Set(
+    configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins
+);
+const localOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+
+const resolveResponseOrigin = (origin) => {
+    if (!origin) return process.env.PUBLIC_ORIGIN || defaultCorsOrigins[0];
+    if (localOriginPattern.test(origin) || allowedCorsOrigins.has(origin)) return origin;
+    return null;
+};
+
 export const functionToExpress = (handler) => async (req, res) => {
     try {
         const event = {
@@ -27,6 +46,11 @@ export const functionToExpress = (handler) => async (req, res) => {
 
         if (response.headers) {
             Object.entries(response.headers).forEach(([key, value]) => {
+                if (key.toLowerCase() === 'access-control-allow-origin') {
+                    const origin = resolveResponseOrigin(req.headers.origin);
+                    if (origin) res.setHeader(key, origin);
+                    return;
+                }
                 res.setHeader(key, value);
             });
         }

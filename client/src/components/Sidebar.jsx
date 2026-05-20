@@ -66,7 +66,8 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
     
     const initial = (user?.name || 'U')[0].toUpperCase();
     const navGroups = getNavigationForUser(user);
-    const roleDisplay = user?.job_title || formatRoleLabel(user?.role_code);
+    const displayTitle = user?.identity?.displayTitle || user?.job_title || formatRoleLabel(user?.role_code);
+    const department = user?.identity?.department || user?.department || 'MMPZ';
 
     const doLogout = () => {
         logout();
@@ -179,9 +180,9 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
                     )}
                     <div className="sidebar-user-info">
                         <div className="sidebar-user-name">{user?.name}</div>
-                        <div className="sidebar-user-role">{user?.job_title || roleDisplay}</div>
+                        <div className="sidebar-user-role">{displayTitle}</div>
                         <div className="sidebar-user-position" style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                            {formatRoleLabel(user?.role_code)}
+                            {department}
                         </div>
                     </div>
                 </div>

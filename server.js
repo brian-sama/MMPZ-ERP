@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
@@ -53,6 +54,9 @@ import {
   getBearerTokenFromHeaders,
   verifySessionToken,
 } from "./server/api/utils/session-token.js";
+import { sql } from "./server/api/utils/db.js";
+import { buildIdentity } from "./server/api/utils/identity.js";
+import { resolveSystemRole, toLegacyRole } from "./server/api/utils/rbac.js";
 import { startCalendarReminderScheduler } from "./server/jobs/calendar-reminders.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,7 +65,90 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+const defaultCorsOrigins = [
+  "https://mmpzmne.co.zw",
+  "https://monitoring.mmpzmne.co.zw",
+];
+const configuredCorsOrigins = (process.env.CORS_ORIGIN || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedCorsOrigins = new Set(
+  configuredCorsOrigins.length > 0 ? configuredCorsOrigins : defaultCorsOrigins,
+);
+const localOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  if (localOriginPattern.test(origin)) return true;
+  return allowedCorsOrigins.has(origin);
+};
+
+const getClientIp = (req) =>
+  String(req.headers["x-forwarded-for"] || req.headers["x-real-ip"] || req.ip || "unknown")
+    .split(",")[0]
+    .trim();
+
+const createRateLimiter = ({ windowMs, max, label }) => {
+  const buckets = new Map();
+
+  return (req, res, next) => {
+    if (req.method === "OPTIONS") return next();
+
+    const now = Date.now();
+    const key = `${label}:${getClientIp(req)}`;
+    const current = buckets.get(key);
+    const bucket =
+      current && current.resetAt > now ? current : { count: 0, resetAt: now + windowMs };
+
+    bucket.count += 1;
+    buckets.set(key, bucket);
+
+    if (bucket.count > max) {
+      const retryAfter = Math.max(1, Math.ceil((bucket.resetAt - now) / 1000));
+      res.setHeader("Retry-After", String(retryAfter));
+      res.status(429).json({
+        error: "Too many requests. Please wait before trying again.",
+      });
+      return;
+    }
+
+    next();
+  };
+};
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+app.use(
+  cors({
+    allowedHeaders: ["Content-Type", "Authorization"],
+    exposedHeaders: ["Content-Disposition"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Not allowed by CORS"));
+    },
+  }),
+);
+app.use(
+  "/api/login",
+  createRateLimiter({ label: "erp-login", max: 8, windowMs: 15 * 60 * 1000 }),
+);
+app.use(
+  ["/api/integration/master-data", "/api/integration/me/approved-summaries"],
+  createRateLimiter({ label: "erp-integration", max: 60, windowMs: 60 * 1000 }),
+);
+app.use(
+  "/api",
+  createRateLimiter({ label: "erp-api", max: 900, windowMs: 15 * 60 * 1000 }),
+);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -189,6 +276,7 @@ app.use(
   "/api/governance/pending-role-assignments",
   functionToExpress(pendingRoleAssignmentsHandler),
 );
+app.use("/api/governance/queue", functionToExpress(governanceHandler));
 
 // Dashboard
 app.use(
@@ -233,6 +321,64 @@ app.use(
 app.use("/api/reports/pdf", functionToExpress(reportsHandler));
 app.use("/api/reports/excel", functionToExpress(reportsHandler));
 app.use("/api/export/indicators", functionToExpress(reportsHandler));
+app.get("/api/me/session", async (req, res) => {
+  const token = getBearerTokenFromHeaders(req.headers);
+  const session = verifySessionToken(token);
+
+  if (!session?.userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  const users = await sql`
+    SELECT
+      id,
+      name,
+      email,
+      role_code,
+      system_role,
+      job_title,
+      short_bio,
+      profile_picture_url,
+      require_password_reset,
+      role_assignment_status,
+      role_confirmed_at
+    FROM users
+    WHERE id = ${session.userId}
+    LIMIT 1
+  `;
+
+  if (users.length === 0) {
+    res.status(401).json({ error: "Session is no longer valid" });
+    return;
+  }
+
+  const user = users[0];
+  const systemRole = resolveSystemRole(user.role_code, user.system_role);
+  const identity = buildIdentity(user, { systemRole });
+
+  res.json({
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role_code: user.role_code,
+      system_role: systemRole,
+      job_title: identity.displayTitle,
+      department: identity.department,
+      employment_type: identity.employmentType,
+      identity,
+      short_bio: user.short_bio || "",
+      profile_picture_url: user.profile_picture_url || null,
+      role_assignment_status: user.role_assignment_status || "pending_reassignment",
+      role_confirmed_at: user.role_confirmed_at,
+      role: toLegacyRole(user.role_code, systemRole),
+      require_password_reset: user.require_password_reset,
+    },
+  });
+});
+app.use("/api/me", functionToExpress(meHandler));
 
 // Kobo
 app.use("/api/kobo/config", functionToExpress(koboConfigHandler));

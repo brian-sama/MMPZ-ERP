@@ -3,6 +3,9 @@ import {
     getBearerTokenFromHeaders,
     verifySessionToken,
 } from './session-token.js';
+import { buildIdentity } from './identity.js';
+
+export class HttpError extends Error {
 
 export class HttpError extends Error {
     constructor(message, statusCode = 400) {
@@ -13,37 +16,37 @@ export class HttpError extends Error {
 
 export const ROLE_CODES = [
     'DIRECTOR',
-    'FINANCE_ADMIN_OFFICER',
-    'ADMIN_ASSISTANT',
-    'LOGISTICS_ASSISTANT',
-    'PSYCHOSOCIAL_SUPPORT_OFFICER',
-    'COMMUNITY_DEVELOPMENT_OFFICER',
-    'ME_INTERN_ACTING_OFFICER',
-    'SOCIAL_SERVICES_INTERN',
-    'YOUTH_COMMUNICATIONS_INTERN',
-    'DEVELOPMENT_FACILITATOR',
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'SRHR_OFFICER',
+    'PROGRAMS_ME_OFFICER',
+    'MEL_OFFICER',
+    'FIELD_OFFICER_1',
+    'FIELD_OFFICER_2',
+    'YOUTH_KNOWLEDGE_HUB_OFFICER',
+    'YOUTH_FACILITATOR_PEER_EDUCATOR',
     'SYSTEM_ADMIN',
 ];
 
 const legacyRoleMap = {
     DIRECTOR: 'admin',
-    FINANCE_ADMIN_OFFICER: 'officer',
-    ADMIN_ASSISTANT: 'admin',
-    LOGISTICS_ASSISTANT: 'officer',
-    PSYCHOSOCIAL_SUPPORT_OFFICER: 'officer',
-    COMMUNITY_DEVELOPMENT_OFFICER: 'officer',
-    ME_INTERN_ACTING_OFFICER: 'officer',
-    SOCIAL_SERVICES_INTERN: 'intern',
-    YOUTH_COMMUNICATIONS_INTERN: 'intern',
-    DEVELOPMENT_FACILITATOR: 'volunteer',
+    FINANCE_OFFICER: 'officer',
+    ADMIN_FINANCE_ASSISTANT: 'admin',
+    SRHR_OFFICER: 'officer',
+    PROGRAMS_ME_OFFICER: 'officer',
+    MEL_OFFICER: 'officer',
+    FIELD_OFFICER_1: 'intern',
+    FIELD_OFFICER_2: 'intern',
+    YOUTH_KNOWLEDGE_HUB_OFFICER: 'intern',
+    YOUTH_FACILITATOR_PEER_EDUCATOR: 'volunteer',
 };
 
 const legacyToCanonicalMap = {
-    admin: 'ADMIN_ASSISTANT',
+    admin: 'ADMIN_FINANCE_ASSISTANT',
     director: 'DIRECTOR',
-    officer: 'COMMUNITY_DEVELOPMENT_OFFICER',
-    intern: 'SOCIAL_SERVICES_INTERN',
-    volunteer: 'DEVELOPMENT_FACILITATOR',
+    officer: 'PROGRAMS_ME_OFFICER',
+    intern: 'FIELD_OFFICER_1',
+    volunteer: 'YOUTH_FACILITATOR_PEER_EDUCATOR',
 };
 
 export const SYSTEM_ROLES = {
@@ -57,15 +60,15 @@ export const SYSTEM_ROLES = {
 
 export const ROLE_TO_SYSTEM_ROLE = {
     DIRECTOR: SYSTEM_ROLES.MANAGEMENT,
-    FINANCE_ADMIN_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
-    ADMIN_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
-    LOGISTICS_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
-    PSYCHOSOCIAL_SUPPORT_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
-    COMMUNITY_DEVELOPMENT_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
-    ME_INTERN_ACTING_OFFICER: SYSTEM_ROLES.INTERN,
-    SOCIAL_SERVICES_INTERN: SYSTEM_ROLES.INTERN,
-    YOUTH_COMMUNICATIONS_INTERN: SYSTEM_ROLES.INTERN,
-    DEVELOPMENT_FACILITATOR: SYSTEM_ROLES.FACILITATOR,
+    FINANCE_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    ADMIN_FINANCE_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
+    SRHR_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    PROGRAMS_ME_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
+    MEL_OFFICER: SYSTEM_ROLES.INTERN,
+    FIELD_OFFICER_1: SYSTEM_ROLES.INTERN,
+    FIELD_OFFICER_2: SYSTEM_ROLES.INTERN,
+    YOUTH_KNOWLEDGE_HUB_OFFICER: SYSTEM_ROLES.INTERN,
+    YOUTH_FACILITATOR_PEER_EDUCATOR: SYSTEM_ROLES.FACILITATOR,
     SYSTEM_ADMIN: SYSTEM_ROLES.SUPER_ADMIN,
 };
 
@@ -79,15 +82,14 @@ const systemRoleToLegacy = {
 };
 
 const runtimePermissionOverrides = {
-    ADMIN_ASSISTANT: ['settings.finance_threshold.read'],
-    LOGISTICS_ASSISTANT: ['expense.read'],
+    ADMIN_FINANCE_ASSISTANT: ['settings.finance_threshold.read'],
+    FIELD_OFFICER_1: ['expense.read'],
 };
 
 export const FINANCE_LOGISTICS_ROLE_CODES = new Set([
     'DIRECTOR',
-    'FINANCE_ADMIN_OFFICER',
-    'ADMIN_ASSISTANT',
-    'LOGISTICS_ASSISTANT',
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
     'SYSTEM_ADMIN',
 ]);
 
@@ -98,8 +100,8 @@ export const canSeeOrganizationFinance = (actor) =>
 export const canSeeOrganizationDashboard = (actor) =>
     actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
     actor?.role_code === 'DIRECTOR' ||
-    actor?.role_code === 'FINANCE_ADMIN_OFFICER' ||
-    actor?.role_code === 'ADMIN_ASSISTANT';
+    actor?.role_code === 'FINANCE_OFFICER' ||
+    actor?.role_code === 'ADMIN_FINANCE_ASSISTANT';
 
 export const canSeeOrganizationIndicators = (actor) =>
     actor?.system_role === SYSTEM_ROLES.SUPER_ADMIN ||
@@ -124,7 +126,7 @@ const programOfficerPermissions = [
 ];
 
 const rolePermissionFallbacks = {
-    FINANCE_ADMIN_OFFICER: [
+    FINANCE_OFFICER: [
         'user.view',
         'indicator.read_all',
         'activity.read',
@@ -135,7 +137,7 @@ const rolePermissionFallbacks = {
         'volunteer.submit',
         'volunteer.read_own',
     ],
-    ADMIN_ASSISTANT: [
+    ADMIN_FINANCE_ASSISTANT: [
         'user.view',
         'user.create',
         'user.update',
@@ -146,18 +148,13 @@ const rolePermissionFallbacks = {
         'governance.pending_roles.read',
         'volunteer.submit',
         'volunteer.read_own',
-    ],
-    LOGISTICS_ASSISTANT: [
         'indicator.read_assigned',
-        'activity.read',
-        'expense.read',
-        'expense.create',
-        'volunteer.submit',
-        'volunteer.read_own',
+        'activity.create',
+        'project.read',
     ],
-    PSYCHOSOCIAL_SUPPORT_OFFICER: programOfficerPermissions,
-    COMMUNITY_DEVELOPMENT_OFFICER: programOfficerPermissions,
-    ME_INTERN_ACTING_OFFICER: [
+    SRHR_OFFICER: programOfficerPermissions,
+    PROGRAMS_ME_OFFICER: programOfficerPermissions,
+    MEL_OFFICER: [
         'program.read',
         'project.read',
         'indicator.read_all',
@@ -169,15 +166,19 @@ const rolePermissionFallbacks = {
         'volunteer.submit',
         'volunteer.read_own',
     ],
-    SOCIAL_SERVICES_INTERN: [
+    FIELD_OFFICER_1: [
         ...programOfficerPermissions,
         'announcement.approve',
     ],
-    YOUTH_COMMUNICATIONS_INTERN: [
+    FIELD_OFFICER_2: [
         ...programOfficerPermissions,
         'announcement.approve',
     ],
-    DEVELOPMENT_FACILITATOR: [
+    YOUTH_KNOWLEDGE_HUB_OFFICER: [
+        ...programOfficerPermissions,
+        'announcement.approve',
+    ],
+    YOUTH_FACILITATOR_PEER_EDUCATOR: [
         'project.read',
         'activity.read',
         'volunteer.submit',
@@ -189,21 +190,19 @@ const rolePermissionFallbacks = {
 // Add announcement.create and announcement.approve to other roles
 [
     'DIRECTOR',
-    'FINANCE_ADMIN_OFFICER',
-    'ADMIN_ASSISTANT',
-    'LOGISTICS_ASSISTANT',
-    'PSYCHOSOCIAL_SUPPORT_OFFICER',
-    'COMMUNITY_DEVELOPMENT_OFFICER',
-    'ME_INTERN_ACTING_OFFICER'
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'SRHR_OFFICER',
+    'PROGRAMS_ME_OFFICER',
+    'MEL_OFFICER'
 ].forEach(role => {
     if (rolePermissionFallbacks[role]) {
         rolePermissionFallbacks[role].push('announcement.create');
-        if (role !== 'LOGISTICS_ASSISTANT') {
+        if (role !== 'ADMIN_FINANCE_ASSISTANT') {
             rolePermissionFallbacks[role].push('announcement.approve');
         }
     }
 });
-
 export const toLegacyRole = (roleCode, systemRole) => {
     if (systemRole && systemRoleToLegacy[systemRole]) return systemRoleToLegacy[systemRole];
     return legacyRoleMap[roleCode] || 'intern';
@@ -293,7 +292,8 @@ export const getUserContext = async (userId) => {
 
     const user = users[0];
     const systemRole = resolveSystemRole(user.role_code, user.system_role);
-    const jobTitle = user.job_title || user.role_code || 'Intern';
+    const identity = buildIdentity(user, { systemRole });
+    const jobTitle = identity.displayTitle;
 
     // Permissions can still be fetched by role_code for now, or we can map them by system_role
     // User requested: "Access is enforced by system_role"
@@ -372,6 +372,9 @@ export const getUserContext = async (userId) => {
         ...user,
         system_role: systemRole,
         job_title: jobTitle,
+        department: identity.department,
+        employment_type: identity.employmentType,
+        identity,
         role_code: user.role_code,
         role_assignment_status: roleAssignmentStatus,
         role: toLegacyRole(user.role_code, systemRole),
