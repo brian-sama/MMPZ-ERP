@@ -45,6 +45,11 @@ else
     echo "Skipping database migrations because RUN_DB_MIGRATIONS_ON_STARTUP=false"
 fi
 
-# Start the application
-echo "Starting MMPZ ERP Server..."
-exec npm start
+# Start the application or custom command
+if [ $# -gt 0 ]; then
+    echo "Executing custom command: $@"
+    exec "$@"
+else
+    echo "Starting MMPZ ERP Server..."
+    exec npm start
+fi
