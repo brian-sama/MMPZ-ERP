@@ -119,11 +119,12 @@ export const handler = async (event) => {
         if (method === 'GET' && path === '/api/submissions') {
             const limit = parseInt(query.limit) || 50;
             const offset = parseInt(query.offset) || 0;
-            const type = query.type;
-            const status = query.status;
+            const type = query.type || null;
+            const status = query.status || null;
+            const view = query.view || null;
 
             let results;
-            if (query.view === 'admin' || hasPermission(userContext, 'approval.read')) {
+            if (view === 'admin' || hasPermission(userContext, 'approval.read')) {
                 // Administrative view: see all relevant to role or all if Director
                 if (userContext.role_code === 'DIRECTOR' || userContext.role_code === 'SYSTEM_ADMIN') {
                     results = await sql`
@@ -132,7 +133,7 @@ export const handler = async (event) => {
                         JOIN users u ON s.submitter_user_id = u.id
                         WHERE (${type}::text IS NULL OR s.submission_type = ${type})
                           AND (${status}::text IS NULL OR s.status = ${status})
-                          AND (${query.view}::text != 'admin' OR s.current_handler_role = 'DIRECTOR' OR s.status = 'verified')
+                          AND (${view}::text != 'admin' OR s.current_handler_role = 'DIRECTOR' OR s.status = 'verified')
                         ORDER BY s.created_at DESC
                         LIMIT ${limit} OFFSET ${offset}
                     `;
@@ -387,6 +388,10 @@ export const handler = async (event) => {
 
         throw new HttpError('Route not found', 404);
     } catch (err) {
-        return errorResponse(err);
+        console.error('Submissions function error:', err);
+        if (err instanceof HttpError) {
+            return errorResponse(err.message, err.statusCode);
+        }
+        return errorResponse(err.message || 'Internal server error', 500);
     }
 };

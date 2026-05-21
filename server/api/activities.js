@@ -178,7 +178,7 @@ export const handler = async (event) => {
         if (method === 'GET' && path === '/api/activities') {
             const limit = parseInt(query.limit) || 50;
             const offset = parseInt(query.offset) || 0;
-            const status = query.status;
+            const status = query.status || null;
 
             let results;
             if (userContext.role_code === 'DEVELOPMENT_FACILITATOR') {

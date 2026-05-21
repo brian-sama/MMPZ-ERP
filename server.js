@@ -383,6 +383,7 @@ app.get("/api/me/session", async (req, res) => {
     },
   });
 });
+app.use("/api/me/leave", functionToExpress(leaveHandler));
 app.use("/api/me", functionToExpress(meHandler));
 
 // Kobo
