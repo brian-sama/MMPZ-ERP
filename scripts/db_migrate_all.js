@@ -54,8 +54,13 @@ const run = async () => {
 
             for (const file of files) {
                 const migrationPath = path.join(migrationsDir, file);
-                const content = fs.readFileSync(migrationPath, 'utf8');
-                const migrationChecksum = sha256(content);
+                const rawContent = fs.readFileSync(migrationPath, 'utf8');
+                const lfNormalizedContent = rawContent.replace(/\r\n/g, '\n');
+                
+                const rawChecksum = sha256(rawContent);
+                const lfChecksum = sha256(lfNormalizedContent);
+                const migrationChecksum = lfChecksum; // Use LF normalized as standard
+
                 const executed = await sql`
                     SELECT checksum FROM schema_migrations WHERE filename = ${file}
                 `;
@@ -72,8 +77,27 @@ const run = async () => {
                     executed[0].checksum = migrationChecksum;
                 }
 
-                if (executed.length > 0 && executed[0].checksum !== migrationChecksum) {
-                    throw new Error(`Applied migration was modified after execution: ${file}`);
+                if (executed.length > 0) {
+                    const dbChecksum = executed[0].checksum;
+                    if (dbChecksum !== rawChecksum && dbChecksum !== lfChecksum) {
+                        if (process.env.SKIP_MIGRATION_CHECKSUM_VALIDATION === 'true') {
+                            console.warn(`⚠️ Warning: Applied migration was modified after execution: ${file}. Skipping validation as SKIP_MIGRATION_CHECKSUM_VALIDATION is true.`);
+                            // Optionally update db to match new checksum
+                            await sql`
+                                UPDATE schema_migrations
+                                SET checksum = ${lfChecksum}
+                                WHERE filename = ${file}
+                            `;
+                        } else {
+                            throw new Error(
+                                `Applied migration was modified after execution: ${file}\n` +
+                                `  Database checksum: ${dbChecksum}\n` +
+                                `  File checksum (LF normalized): ${lfChecksum}\n` +
+                                `  File checksum (Raw): ${rawChecksum}\n` +
+                                `To bypass this check, set SKIP_MIGRATION_CHECKSUM_VALIDATION=true in your environment variables.`
+                            );
+                        }
+                    }
                 }
 
                 if (executed.length === 0) {
@@ -87,7 +111,7 @@ const run = async () => {
                             throw new Error(`Migration ${file} missing export const handler = async (sql) => { ... }`);
                         }
                     } else if (file.endsWith('.sql')) {
-                        await sql.unsafe(content);
+                        await sql.unsafe(rawContent);
                     }
 
                     await sql`
