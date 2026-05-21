@@ -39,6 +39,7 @@ services:
       PORT: 3000
       RUN_DB_MIGRATIONS_ON_STARTUP: "true"
       RUN_DB_SEED_ON_STARTUP: "true"
+      SKIP_MIGRATION_CHECKSUM_VALIDATION: ${SKIP_MIGRATION_CHECKSUM_VALIDATION:-false}
     healthcheck:
       test:
         [
