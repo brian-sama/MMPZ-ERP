@@ -86,8 +86,8 @@ services:
 
 networks:
   apps_network:
+    external: true
     name: ${MMPZ_DOCKER_NETWORK:-apps_network}
-    driver: bridge
 
 volumes:
   mmpz_db_data:

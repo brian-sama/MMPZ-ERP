@@ -30,6 +30,10 @@ From your VPS, authenticated as `brian`:
 From the ERP project root:
 
 ```bash
+# Create the shared network first (since it is marked external)
+docker network create apps_network
+
+# Start the services
 docker compose up -d --build
 ```
 
