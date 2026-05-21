@@ -51,7 +51,7 @@ export const handler = async (event) => {
             if (submission_type === 'leave_application') {
                 current_handler_role = 'FINANCE_OFFICER';
             } else if (submission_type === 'request_for_funds') {
-                current_handler_role = 'FINANCE_OFFICER';
+                current_handler_role = 'PROGRAMS_ME_OFFICER';
             }
 
             const [submission] = await sql`
@@ -199,31 +199,72 @@ export const handler = async (event) => {
                 throw new HttpError('You are not authorized to act on this submission', 403);
             }
 
+            // Enforce Maker-Checker Security
+            if (submission.submitter_user_id === userId && (action === 'approve' || action === 'verify')) {
+                throw new HttpError('Maker-Checker Security: You cannot approve or verify your own submission', 403);
+            }
+
             const fromStatus = submission.status;
             let toStatus = fromStatus;
             let currentHandlerRole = submission.current_handler_role;
 
-            if (action === 'approve') {
-                if (next_handler_role) {
-                    toStatus = 'reviewed';
-                    currentHandlerRole = next_handler_role;
-                } else if (submission.submission_type === 'leave_application' && isFinanceReviewer(userContext.role_code)) {
-                    // Specific workflow for leave: Finance verifies, then Director authorizes
-                    toStatus = 'verified';
-                    currentHandlerRole = 'DIRECTOR';
-                } else {
-                    toStatus = 'approved';
+            if (submission.submission_type === 'request_for_funds') {
+                if (action === 'approve' || action === 'verify') {
+                    if (submission.current_handler_role === 'PROGRAMS_ME_OFFICER') {
+                        toStatus = 'reviewed';
+                        currentHandlerRole = 'FINANCE_OFFICER';
+                    } else if (submission.current_handler_role === 'FINANCE_OFFICER' || isFinanceReviewer(userContext.role_code)) {
+                        // Finance verification with remaining balance check
+                        const [rff] = await sql`
+                            SELECT * FROM funding_requests WHERE id = ${submission.related_entity_id} LIMIT 1
+                        `;
+                        if (rff) {
+                            const [{ remaining }] = await sql`
+                                SELECT COALESCE(SUM(allocated_amount - used_amount), 0) AS remaining
+                                FROM budget_lines bl
+                                JOIN budgets b ON bl.budget_id = b.id
+                                WHERE b.project_id = ${rff.project_id}
+                            `;
+                            if (Number(rff.total_requested_amount) > Number(remaining)) {
+                                throw new HttpError(`Budget Validation Failed: Requested amount ($${Number(rff.total_requested_amount).toFixed(2)}) exceeds remaining project grant balance ($${Number(remaining).toFixed(2)})`, 400);
+                            }
+                        }
+                        toStatus = 'verified';
+                        currentHandlerRole = 'DIRECTOR';
+                    } else if (submission.current_handler_role === 'DIRECTOR') {
+                        toStatus = 'approved';
+                        currentHandlerRole = null;
+                    }
+                } else if (action === 'reject') {
+                    toStatus = 'rejected';
+                    currentHandlerRole = null;
+                } else if (action === 'request_changes') {
+                    toStatus = 'pending_changes';
                     currentHandlerRole = null;
                 }
-            } else if (action === 'verify') {
-                toStatus = 'verified';
-                currentHandlerRole = 'DIRECTOR';
-            } else if (action === 'reject') {
-                toStatus = 'rejected';
-                currentHandlerRole = null;
-            } else if (action === 'request_changes') {
-                toStatus = 'pending_changes';
-                currentHandlerRole = null;
+            } else {
+                if (action === 'approve') {
+                    if (next_handler_role) {
+                        toStatus = 'reviewed';
+                        currentHandlerRole = next_handler_role;
+                    } else if (submission.submission_type === 'leave_application' && isFinanceReviewer(userContext.role_code)) {
+                        // Specific workflow for leave: Finance verifies, then Director authorizes
+                        toStatus = 'verified';
+                        currentHandlerRole = 'DIRECTOR';
+                    } else {
+                        toStatus = 'approved';
+                        currentHandlerRole = null;
+                    }
+                } else if (action === 'verify') {
+                    toStatus = 'verified';
+                    currentHandlerRole = 'DIRECTOR';
+                } else if (action === 'reject') {
+                    toStatus = 'rejected';
+                    currentHandlerRole = null;
+                } else if (action === 'request_changes') {
+                    toStatus = 'pending_changes';
+                    currentHandlerRole = null;
+                }
             }
 
             // Update leave balances if finally approved
@@ -236,6 +277,69 @@ export const handler = async (event) => {
                             updated_at = CURRENT_TIMESTAMP
                         WHERE user_id = ${submission.submitter_user_id}
                     `;
+                }
+            }
+
+            // Create procurement requests and links if RFF approved
+            if (toStatus === 'approved' && submission.submission_type === 'request_for_funds') {
+                const [rff] = await sql`
+                    SELECT * FROM funding_requests WHERE id = ${submission.related_entity_id} LIMIT 1
+                `;
+                if (rff) {
+                    const procItems = await sql`
+                        SELECT * FROM funding_request_items
+                        WHERE funding_request_id = ${rff.id}
+                          AND category = 'procurement'
+                          AND procurement_linked = FALSE
+                    `;
+                    if (procItems.length > 0) {
+                        const totalProcCost = procItems.reduce((sum, item) => sum + Number(item.total_cost), 0);
+
+                        const [procRequest] = await sql`
+                            INSERT INTO procurement_requests (
+                                requested_by_user_id,
+                                project_id,
+                                title,
+                                justification,
+                                total_estimated_cost,
+                                status,
+                                bid_analysis_status
+                            ) VALUES (
+                                ${submission.submitter_user_id},
+                                ${rff.project_id},
+                                ${`Procurement for RFF: ${rff.activity_name}`},
+                                ${`Generated from approved Request for Funds: ${rff.narrative_justification}`},
+                                ${totalProcCost},
+                                'draft',
+                                'pending'
+                            ) RETURNING id
+                        `;
+
+                        for (const item of procItems) {
+                            await sql`
+                                INSERT INTO procurement_items (
+                                    request_id,
+                                    description,
+                                    quantity,
+                                    unit,
+                                    estimated_unit_cost
+                                ) VALUES (
+                                    ${procRequest.id},
+                                    ${item.description},
+                                    ${item.quantity},
+                                    'Unit',
+                                    ${item.unit_cost}
+                                )
+                            `;
+                        }
+
+                        await sql`
+                            UPDATE funding_request_items
+                            SET procurement_linked = TRUE
+                            WHERE funding_request_id = ${rff.id}
+                              AND category = 'procurement'
+                        `;
+                    }
                 }
             }
 

@@ -845,39 +845,7 @@ export default function GovernanceCompliancePage({ activeTab = 'safeguarding' })
                 </div>
             </div>
 
-            <div className="governance-module-grid">
-                <aside className="panel governance-module-nav">
-                    <div className="panel-header">
-                        <div>
-                            <h2 className="panel-title">Compliance Modules</h2>
-                            <p className="panel-subtitle">Connected ERP workstreams</p>
-                        </div>
-                    </div>
-                    <div className="control-stack compact">
-                        {MODULES.map((module) => {
-                            const Icon = module.icon;
-                            const isActive = module.id === activeTab;
-                            return (
-                                <button
-                                    key={module.id}
-                                    className={`control-row ${isActive ? 'active' : ''}`}
-                                    onClick={() => navigate(module.path)}
-                                    style={{
-                                        background: isActive ? 'var(--brand-primary-light)' : undefined,
-                                        borderColor: isActive ? 'var(--brand-primary)' : undefined,
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-                                        <Icon size={16} style={{ color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
-                                        <span className="control-title">{module.label}</span>
-                                    </div>
-                                    <ChevronRight size={14} style={{ color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
-                                </button>
-                            );
-                        })}
-                    </div>
-                </aside>
-
+            <div className="governance-module-grid" style={{ gridTemplateColumns: '1fr' }}>
                 <section className="content-stack" style={{ minWidth: 0 }}>
                     {renderModule()}
                 </section>

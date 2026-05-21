@@ -47,6 +47,7 @@ import { handler as calendarEventsHandler } from "./server/api/calendar-events.j
 import { handler as documentLibraryHandler } from "./server/api/document-library.js";
 import { handler as pushSubscriptionsHandler } from "./server/api/push-subscriptions.js";
 import { handler as submissionsHandler } from "./server/api/submissions.js";
+import { handler as fundingRequestsHandler } from "./server/api/funding-requests.js";
 import { handler as leaveHandler } from "./server/api/leave.js";
 import { handler as integrationMasterDataHandler } from "./server/api/integration-master-data.js";
 import { handler as integrationMeSummariesHandler } from "./server/api/integration-me-summaries.js";
@@ -421,6 +422,13 @@ app.use("/api/documents", functionToExpress(documentLibraryHandler));
 
 app.use("/api/submissions/:id/action", functionToExpress(submissionsHandler));
 app.use("/api/submissions", functionToExpress(submissionsHandler));
+
+app.use("/api/funding-requests/:id/excel", functionToExpress(fundingRequestsHandler));
+app.use("/api/funding-requests/:id/print", functionToExpress(fundingRequestsHandler));
+app.use("/api/funding-requests/:id/liquidate/verify", functionToExpress(fundingRequestsHandler));
+app.use("/api/funding-requests/:id/liquidate", functionToExpress(fundingRequestsHandler));
+app.use("/api/funding-requests/:id", functionToExpress(fundingRequestsHandler));
+app.use("/api/funding-requests", functionToExpress(fundingRequestsHandler));
 
 app.use("/api", (req, res) => {
   res.status(404).json({ error: "API route not found" });
