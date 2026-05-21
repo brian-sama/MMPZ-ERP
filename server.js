@@ -383,6 +383,8 @@ app.get("/api/me/session", async (req, res) => {
     },
   });
 });
+app.post("/api/upload-avatar", uploadAvatarHandler);
+app.post("/api/me/upload-avatar", uploadAvatarHandler);
 app.use("/api/me/leave", functionToExpress(leaveHandler));
 app.use("/api/me", functionToExpress(meHandler));
 
