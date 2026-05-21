@@ -2,7 +2,7 @@
 -- the Monitoring & Evaluation workspace.
 
 INSERT INTO role_permissions (role_code, permission_code)
-SELECT role_code, permission_code
+SELECT requested.role_code, requested.permission_code
 FROM (
     VALUES
         ('PSYCHOSOCIAL_SUPPORT_OFFICER', 'kobo.manage'),
@@ -15,5 +15,7 @@ FROM (
         ('SOCIAL_SERVICES_INTERN', 'kobo.sync'),
         ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.manage'),
         ('YOUTH_COMMUNICATIONS_INTERN', 'kobo.sync')
-) AS permissions(role_code, permission_code)
+) AS requested(role_code, permission_code)
+JOIN roles r ON r.code = requested.role_code
+JOIN permissions p ON p.code = requested.permission_code
 ON CONFLICT DO NOTHING;

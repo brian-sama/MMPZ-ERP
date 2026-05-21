@@ -25,6 +25,49 @@ This script will:
 
 From your VPS, authenticated as `brian`:
 
+### Local Docker Desktop Smoke Test
+
+From the ERP project root:
+
+```bash
+docker compose up -d --build
+```
+
+This starts:
+
+- `mmpz_erp_db` - PostgreSQL database
+- `mmpz_erp_app` - ERP API and built React frontend
+- `mmpz_erp_streamlit` - Streamlit dashboard
+
+The app container waits for Postgres, runs `db:migrate:all`, runs the non-overwriting seed, then starts the server.
+
+Local URLs:
+
+- ERP: `http://localhost:3001`
+- ERP health: `http://localhost:3001/api/health`
+- Streamlit: `http://localhost:8501/streamlit`
+
+Useful checks:
+
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose logs -f streamlit
+```
+
+Stop without deleting data:
+
+```bash
+docker compose down
+```
+
+Reset the local Docker database volume:
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
 ### A. Deploy MMPZ ERP (mmpzmne.co.zw)
 ```bash
 git clone git@github.com:brian-sama/mmpz-system.git erp-system

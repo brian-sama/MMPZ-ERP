@@ -60,11 +60,18 @@ ALTER TABLE announcements ADD COLUMN IF NOT EXISTS approved_by_user_id INT REFER
 ALTER TABLE announcements ADD COLUMN IF NOT EXISTS approval_status VARCHAR(20) DEFAULT 'approved'; -- pending, approved, rejected
 
 -- 5. Seed Permissions for Admin Assistant and Logistics Assistant
--- Admin Assistant: access to finance dashboards
-INSERT INTO role_permissions (role_code, permission_code) VALUES
-    ('ADMIN_ASSISTANT', 'expense.read'),
-    ('ADMIN_ASSISTANT', 'settings.finance_threshold.read'),
-    ('LOGISTICS_ASSISTANT', 'expense.read')
+-- Admin Assistant: access to finance dashboards. Legacy role rows may not
+-- exist in fresh canonical deployments, so only grant to roles present.
+INSERT INTO role_permissions (role_code, permission_code)
+SELECT requested.role_code, requested.permission_code
+FROM (
+    VALUES
+        ('ADMIN_ASSISTANT', 'expense.read'),
+        ('ADMIN_ASSISTANT', 'settings.finance_threshold.read'),
+        ('LOGISTICS_ASSISTANT', 'expense.read')
+) AS requested(role_code, permission_code)
+JOIN roles r ON r.code = requested.role_code
+JOIN permissions p ON p.code = requested.permission_code
 ON CONFLICT DO NOTHING;
 
 -- 6. Align Social Services and Communications Interns
@@ -76,12 +83,14 @@ INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'SOCIAL_SERVICES_INTERN', permission_code
 FROM role_permissions
 WHERE role_code = 'PSYCHOSOCIAL_SUPPORT_OFFICER'
+  AND EXISTS (SELECT 1 FROM roles WHERE code = 'SOCIAL_SERVICES_INTERN')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO role_permissions (role_code, permission_code)
 SELECT 'YOUTH_COMMUNICATIONS_INTERN', permission_code
 FROM role_permissions
 WHERE role_code = 'PSYCHOSOCIAL_SUPPORT_OFFICER'
+  AND EXISTS (SELECT 1 FROM roles WHERE code = 'YOUTH_COMMUNICATIONS_INTERN')
 ON CONFLICT DO NOTHING;
 
 -- 7. Add Audit Triggers for New Tables

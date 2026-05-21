@@ -86,6 +86,8 @@ export default function FinanceAdminPage() {
     const financeLogisticsRoles = [
         'DIRECTOR',
         'SYSTEM_ADMIN',
+        'FINANCE_OFFICER',
+        'ADMIN_FINANCE_ASSISTANT',
         'FINANCE_ADMIN_OFFICER',
         'ADMIN_ASSISTANT',
         'LOGISTICS_ASSISTANT',
@@ -190,6 +192,8 @@ export default function FinanceAdminPage() {
     const canReviewBidAnalysis =
         user?.system_role === 'SUPER_ADMIN' ||
         user?.role_code === 'DIRECTOR' ||
+        user?.role_code === 'FINANCE_OFFICER' ||
+        user?.role_code === 'ADMIN_FINANCE_ASSISTANT' ||
         user?.role_code === 'FINANCE_ADMIN_OFFICER';
     const canApproveBidAnalysis =
         user?.system_role === 'SUPER_ADMIN' || user?.role_code === 'DIRECTOR';

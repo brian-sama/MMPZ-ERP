@@ -14,6 +14,7 @@ import {
   BookOpen,
   Calendar,
   LineChart,
+  Workflow,
 } from 'lucide-react';
 import { canAccessRole } from './accessControl';
 
@@ -41,6 +42,23 @@ export const NAV_SECTIONS = [
         label: 'Analytics',
         icon: LineChart,
         allowedRoles: ['DIRECTOR', 'MEL_OFFICER', 'SYSTEM_ADMIN'],
+      },
+      {
+        to: '/lifecycle',
+        label: 'Program Lifecycle',
+        icon: Workflow,
+        allowedRoles: [
+          'DIRECTOR',
+          'FINANCE_OFFICER',
+          'ADMIN_FINANCE_ASSISTANT',
+          'PROGRAMS_ME_OFFICER',
+          'SRHR_OFFICER',
+          'FIELD_OFFICER_1',
+          'FIELD_OFFICER_2',
+          'YOUTH_KNOWLEDGE_HUB_OFFICER',
+          'MEL_OFFICER',
+          'SYSTEM_ADMIN',
+        ],
       },
     ],
   },

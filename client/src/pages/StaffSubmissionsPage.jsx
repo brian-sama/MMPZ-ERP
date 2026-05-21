@@ -28,6 +28,14 @@ const SUBMISSION_TYPES = [
     { value: 'other', label: 'Other Official Document', icon: ClipboardList },
 ];
 
+const FINANCE_REVIEW_ROLES = [
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+];
+
 export default function StaffSubmissionsPage() {
     const { user } = useAuth();
     const [submissions, setSubmissions] = useState([]);
@@ -53,7 +61,8 @@ export default function StaffSubmissionsPage() {
         }
     });
 
-    const isManager = ['DIRECTOR', 'FINANCE_ADMIN_OFFICER', 'SYSTEM_ADMIN'].includes(user?.role_code);
+    const isFinanceReviewer = FINANCE_REVIEW_ROLES.includes(user?.role_code);
+    const isManager = ['DIRECTOR', 'SYSTEM_ADMIN'].includes(user?.role_code) || isFinanceReviewer;
 
     useEffect(() => {
         fetchSubmissions();
@@ -501,7 +510,7 @@ export default function StaffSubmissionsPage() {
                                                 style={{ minHeight: '80px', marginBottom: '12px' }}
                                             />
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {user.role_code === 'FINANCE_ADMIN_OFFICER' && selectedSub.status === 'submitted' && (
+                                                {isFinanceReviewer && selectedSub.status === 'submitted' && (
                                                     <button className="btn btn-success" onClick={() => handleAction(selectedSub.id, 'verify')} disabled={submitting}>
                                                         <UserCheck size={16} /> Verify & Pass to Director
                                                     </button>

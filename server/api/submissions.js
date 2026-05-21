@@ -8,6 +8,16 @@ import {
 } from './utils/rbac.js';
 import { successResponse, errorResponse } from './utils/response.js';
 
+const FINANCE_REVIEW_ROLES = [
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+];
+
+const isFinanceReviewer = (roleCode) => FINANCE_REVIEW_ROLES.includes(roleCode);
+
 export const handler = async (event) => {
     const method = event.httpMethod;
     const path = event.path;
@@ -39,9 +49,9 @@ export const handler = async (event) => {
             // Determine initial handler based on type
             let current_handler_role = 'DIRECTOR';
             if (submission_type === 'leave_application') {
-                current_handler_role = 'FINANCE_ADMIN_OFFICER';
+                current_handler_role = 'FINANCE_OFFICER';
             } else if (submission_type === 'request_for_funds') {
-                current_handler_role = 'FINANCE_ADMIN_OFFICER';
+                current_handler_role = 'FINANCE_OFFICER';
             }
 
             const [submission] = await sql`
@@ -126,6 +136,17 @@ export const handler = async (event) => {
                         ORDER BY s.created_at DESC
                         LIMIT ${limit} OFFSET ${offset}
                     `;
+                } else if (isFinanceReviewer(userContext.role_code)) {
+                    results = await sql`
+                        SELECT s.*, u.name as submitter_name
+                        FROM unified_submissions s
+                        JOIN users u ON s.submitter_user_id = u.id
+                        WHERE s.current_handler_role = ANY(${FINANCE_REVIEW_ROLES})
+                          AND (${type}::text IS NULL OR s.submission_type = ${type})
+                          AND (${status}::text IS NULL OR s.status = ${status})
+                        ORDER BY s.created_at DESC
+                        LIMIT ${limit} OFFSET ${offset}
+                    `;
                 } else {
                     results = await sql`
                         SELECT s.*, u.name as submitter_name
@@ -168,7 +189,11 @@ export const handler = async (event) => {
             if (!submission) throw new HttpError('Submission not found', 404);
 
             // Permission check: only current handler or Director can act
-            if (submission.current_handler_role !== userContext.role_code && 
+            const currentHandlerMatchesFinance =
+                isFinanceReviewer(userContext.role_code) &&
+                FINANCE_REVIEW_ROLES.includes(submission.current_handler_role);
+            if (submission.current_handler_role !== userContext.role_code &&
+                !currentHandlerMatchesFinance &&
                 userContext.role_code !== 'DIRECTOR' && 
                 userContext.role_code !== 'SYSTEM_ADMIN') {
                 throw new HttpError('You are not authorized to act on this submission', 403);
@@ -182,7 +207,7 @@ export const handler = async (event) => {
                 if (next_handler_role) {
                     toStatus = 'reviewed';
                     currentHandlerRole = next_handler_role;
-                } else if (submission.submission_type === 'leave_application' && userContext.role_code === 'FINANCE_ADMIN_OFFICER') {
+                } else if (submission.submission_type === 'leave_application' && isFinanceReviewer(userContext.role_code)) {
                     // Specific workflow for leave: Finance verifies, then Director authorizes
                     toStatus = 'verified';
                     currentHandlerRole = 'DIRECTOR';

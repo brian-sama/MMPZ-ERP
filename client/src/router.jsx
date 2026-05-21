@@ -10,6 +10,7 @@ import LoginPage from './pages/LoginPage';
 import ForcePasswordResetPage from './pages/ForcePasswordResetPage';
 import ExecutiveDashboardPage from './pages/ExecutiveDashboardPage';
 import AnalyticsDashboardPage from './pages/AnalyticsDashboardPage';
+import ProgramLifecyclePage from './pages/ProgramLifecyclePage';
 import ProgramsPage from './pages/ProgramsPage';
 import FacilitatorsPage from './pages/FacilitatorsPage';
 import MonitoringEvaluationPage from './pages/MonitoringEvaluationPage';
@@ -63,6 +64,7 @@ export default function AppRouter() {
                 <Route path="/" element={<Navigate to={getDefaultRouteForUser(user)} replace />} />
                 <Route path="/dashboard" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/dashboard')}><ExecutiveDashboardPage /></ProtectedRoute>} />
                 <Route path="/analytics" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/analytics')}><AnalyticsDashboardPage /></ProtectedRoute>} />
+                <Route path="/lifecycle" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/lifecycle')}><ProgramLifecyclePage /></ProtectedRoute>} />
                 <Route path="/programs" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/programs')}><ProgramsPage /></ProtectedRoute>} />
                 <Route path="/facilitators" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/facilitators')}><FacilitatorsPage /></ProtectedRoute>} />
                 <Route path="/me" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/me')}><MonitoringEvaluationPage /></ProtectedRoute>} />

@@ -36,6 +36,7 @@ import { handler as facilitatorAssignmentsHandler } from "./server/api/facilitat
 import { handler as facilitatorAttendanceHandler } from "./server/api/facilitator-attendance.js";
 import { handler as financeCoreHandler } from "./server/api/finance-core.js";
 import { handler as procurementHandler } from "./server/api/procurement.js";
+import { handler as programLifecycleHandler } from "./server/api/program-lifecycle.js";
 import { handler as meHandler } from "./server/api/me.js";
 import { handler as governanceHandler } from "./server/api/governance.js";
 import { handler as announcementsHandler } from "./server/api/announcements.js";
@@ -277,6 +278,7 @@ app.use(
   functionToExpress(pendingRoleAssignmentsHandler),
 );
 app.use("/api/governance/queue", functionToExpress(governanceHandler));
+app.use("/api/governance/action", functionToExpress(governanceHandler));
 
 // Dashboard
 app.use(
@@ -300,6 +302,7 @@ app.use("/api/budget/programs", functionToExpress(budgetHandler));
 app.use("/api/budget/indicators", functionToExpress(budgetHandler));
 app.use("/api/budget/activities", functionToExpress(budgetHandler));
 app.use("/api/procurement/:id", functionToExpress(procurementHandler));
+app.use("/api/program-lifecycle", functionToExpress(programLifecycleHandler));
 // Programs/projects/expenses/governance
 app.use(
   "/api/settings/finance-threshold",
@@ -318,6 +321,7 @@ app.use(
   "/api/governance/approvals",
   functionToExpress(governanceApprovalsHandler),
 );
+app.use("/api/governance/:id", functionToExpress(governanceHandler));
 app.use("/api/reports/pdf", functionToExpress(reportsHandler));
 app.use("/api/reports/excel", functionToExpress(reportsHandler));
 app.use("/api/export/indicators", functionToExpress(reportsHandler));

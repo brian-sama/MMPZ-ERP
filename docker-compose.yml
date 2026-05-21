@@ -9,8 +9,6 @@ services:
       POSTGRES_DB: ${MMPZ_DB_NAME:-mmpz_db}
     volumes:
       - mmpz_db_data:/var/lib/postgresql/data
-      - ./database:/docker-init-scripts
-      - ./database/setup_db.sh:/docker-entrypoint-initdb.d/init.sh
     healthcheck:
       test:
         ["CMD-SHELL", 'pg_isready -d "$${POSTGRES_DB}" -U "$${POSTGRES_USER}"']
@@ -32,7 +30,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
+      DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@mmpz_erp_db:5432/${MMPZ_DB_NAME:-mmpz_db}
       MMPZ_API_URL: https://mmpzmne.co.zw/api
       MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:-replace-with-long-random-secret}
       ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN:-replace-with-shared-erp-integration-token}
@@ -70,7 +68,7 @@ services:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@db:5432/${MMPZ_DB_NAME:-mmpz_db}
+      - DATABASE_URL=postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@mmpz_erp_db:5432/${MMPZ_DB_NAME:-mmpz_db}
     healthcheck:
       test:
         [
@@ -88,7 +86,8 @@ services:
 
 networks:
   apps_network:
-    external: true
+    name: ${MMPZ_DOCKER_NETWORK:-apps_network}
+    driver: bridge
 
 volumes:
   mmpz_db_data:

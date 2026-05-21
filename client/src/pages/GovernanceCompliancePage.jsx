@@ -1,622 +1,887 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { 
-  ShieldCheck, 
-  Users, 
-  FileText, 
-  WalletCards, 
-  CheckSquare, 
-  BookOpen, 
-  Link, 
-  BarChart3, 
-  Search, 
-  AlertTriangle, 
-  ChevronRight, 
-  Calendar,
-  CheckCircle,
-  FileSpreadsheet,
-  Plus
+import {
+    AlertTriangle,
+    BarChart3,
+    BookOpen,
+    Calendar,
+    CheckSquare,
+    ChevronRight,
+    ClipboardCheck,
+    Clock,
+    Database,
+    FileSpreadsheet,
+    FileText,
+    Link as LinkIcon,
+    RefreshCw,
+    Search,
+    ShieldCheck,
+    Users,
+    WalletCards,
 } from 'lucide-react';
+import API_BASE from '../apiConfig';
+import PageHeader from '../components/PageHeader';
+import { useAuth } from '../context/AuthContext';
+
+const MODULES = [
+    { id: 'safeguarding', label: 'Safeguarding', path: '/governance/safeguarding', icon: ShieldCheck },
+    { id: 'volunteers', label: 'Volunteer Management', path: '/governance/volunteers', icon: Users },
+    { id: 'donors', label: 'Donor Compliance', path: '/governance/donors', icon: FileText },
+    { id: 'grants', label: 'Grant Management', path: '/governance/grants', icon: WalletCards },
+    { id: 'supervision', label: 'Supervision Logs', path: '/governance/supervision', icon: CheckSquare },
+    { id: 'knowledge-hub', label: 'Knowledge Hub', path: '/governance/knowledge-hub', icon: BookOpen },
+    { id: 'referrals', label: 'Referral Governance', path: '/governance/referrals', icon: LinkIcon },
+    { id: 'performance', label: 'Staff Performance', path: '/governance/performance', icon: BarChart3 },
+];
+
+const formatCurrency = (value) =>
+    new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+const formatDate = (value) =>
+    value
+        ? new Date(value).toLocaleDateString(undefined, {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+          })
+        : 'Not set';
+
+const formatStatus = (value) => String(value || 'pending').replace(/_/g, ' ');
+
+const asPercent = (value) => `${Math.round(Number(value || 0))}%`;
+
+const daysUntil = (dateValue) => {
+    if (!dateValue) return null;
+    const end = new Date(dateValue).getTime();
+    if (Number.isNaN(end)) return null;
+    return Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24));
+};
+
+const matchesSearch = (term, values) => {
+    if (!term) return true;
+    const normalized = term.toLowerCase();
+    return values.some((value) => String(value || '').toLowerCase().includes(normalized));
+};
+
+function MetricCard({ icon: Icon, tone = 'primary', label, value, note }) {
+    return (
+        <div className="metric-card">
+            <div className="metric-top">
+                <div>
+                    <div className="metric-title">{label}</div>
+                    <div className="metric-value">{value}</div>
+                </div>
+                <div className={`metric-icon ${tone}`}>
+                    <Icon size={18} />
+                </div>
+            </div>
+            {note && <div className="metric-text">{note}</div>}
+        </div>
+    );
+}
+
+function EmptyModuleState({ icon: Icon = Database, title, text }) {
+    return (
+        <div className="empty-state">
+            <div className="empty-state-icon">
+                <Icon size={26} />
+            </div>
+            <div className="empty-state-title">{title}</div>
+            {text && <p className="empty-state-text">{text}</p>}
+        </div>
+    );
+}
 
 export default function GovernanceCompliancePage({ activeTab = 'safeguarding' }) {
-  const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+    const { user } = useAuth();
+    const navigate = useNavigate();
+    const [searchTerm, setSearchTerm] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState('');
+    const [queue, setQueue] = useState([]);
+    const [financeSummary, setFinanceSummary] = useState(null);
+    const [grants, setGrants] = useState([]);
+    const [facilitators, setFacilitators] = useState([]);
+    const [documents, setDocuments] = useState([]);
+    const [riskSummary, setRiskSummary] = useState(null);
+    const [projects, setProjects] = useState([]);
+    const [submissions, setSubmissions] = useState([]);
 
-  const tabs = [
-    { id: 'safeguarding', label: 'Safeguarding', icon: ShieldCheck, color: 'text-rose-400 border-rose-500 bg-rose-500/10' },
-    { id: 'volunteers', label: 'Volunteer Management', icon: Users, color: 'text-amber-400 border-amber-500 bg-amber-500/10' },
-    { id: 'donors', label: 'Donor Compliance', icon: FileText, color: 'text-teal-400 border-teal-500 bg-teal-500/10' },
-    { id: 'grants', label: 'Grant Management', icon: WalletCards, color: 'text-indigo-400 border-indigo-500 bg-indigo-500/10' },
-    { id: 'supervision', label: 'Supervision', icon: CheckSquare, color: 'text-sky-400 border-sky-500 bg-sky-500/10' },
-    { id: 'knowledge-hub', label: 'Knowledge Hub', icon: BookOpen, color: 'text-emerald-400 border-emerald-500 bg-emerald-500/10' },
-    { id: 'referrals', label: 'Referral Governance', icon: Link, color: 'text-purple-400 border-purple-500 bg-purple-500/10' },
-    { id: 'performance', label: 'Performance & KPIs', icon: BarChart3, color: 'text-fuchsia-400 border-fuchsia-500 bg-fuchsia-500/10' },
-  ];
+    const activeModule = MODULES.find((module) => module.id === activeTab) || MODULES[0];
+    const ActiveIcon = activeModule.icon;
 
-  const handleTabChange = (tabId) => {
-    navigate(`/governance/${tabId}`);
-  };
+    const fetchWorkspace = async ({ silent = false } = {}) => {
+        if (!user?.id) return;
+        if (silent) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+        setError('');
 
-  // Mock Premium Demo Data for the 8 sub-modules
-  const demoData = {
-    safeguarding: {
-      stats: [
-        { label: 'Active Incidents', value: '2 Pending Escalation', badgeColor: 'bg-rose-500/20 text-rose-400' },
-        { label: 'Compliance Audit Score', value: '100% Verified', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Staff Trainings completed', value: '42 of 45 Officers', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-      ],
-      incidents: [
-        { id: 'SG-2026-08', type: 'Clinical Adherence Risk', clientCode: 'ZW-BYO-021', date: '2026-05-18', priority: 'HIGH', status: 'Escalated to Director', description: 'Repeated unsuppressed viral load with missed buddy visits.' },
-        { id: 'SG-2026-07', type: 'Community Support Gap', clientCode: 'ZW-BYO-144', date: '2026-05-15', priority: 'MEDIUM', status: 'Investigating', description: 'Defaulter home-visit tracing reports logistic constraints.' },
-      ],
-    },
-    volunteers: {
-      stats: [
-        { label: 'Active Facilitators', value: '28 Peer Educators', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Pending Onboarding', value: '3 Facilitators', badgeColor: 'bg-amber-500/20 text-amber-400' },
-        { label: 'Average Cases / Facilitator', value: '5.2 Clients', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-      ],
-      roster: [
-        { name: 'Lorraine', email: 'lorraine@mmpzim.org.zw', role: 'Youth Facilitator / Peer Educator', district: 'Bulawayo', cases: 6, status: 'Active' },
-        { name: 'Tanaka', email: 'tanaka@mmpzim.org.zw', role: 'Youth Facilitator / Peer Educator', district: 'Bulawayo', cases: 5, status: 'Active' },
-        { name: 'Freddy', email: 'freddy@mmpzim.org.zw', role: 'Youth Facilitator / Peer Educator', district: 'Harare', cases: 4, status: 'Pending Review' },
-      ],
-    },
-    donors: {
-      stats: [
-        { label: 'Active Core Donors', value: '4 Partners', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-        { label: 'Compliance Reports Due', value: '1 in next 30 days', badgeColor: 'bg-amber-500/20 text-amber-400' },
-        { label: 'Financial Audit Rating', value: 'Clean Bill (A+)', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-      ],
-      requirements: [
-        { id: 'DON-01', donorName: 'USAID / PEPFAR', project: 'Youth Adherence Care', reportType: 'Semi-Annual Clinical Summary', deadline: '2026-06-15', status: 'In Compilation', progress: 75 },
-        { id: 'DON-02', donorName: 'Global Fund', project: 'SRHR Key Population Support', reportType: 'Quarterly Output Roster', deadline: '2026-06-30', status: 'Not Started', progress: 10 },
-      ],
-    },
-    grants: {
-      stats: [
-        { label: 'Total Grant Pool', value: '$245,000 USD', badgeColor: 'bg-teal-500/20 text-teal-400' },
-        { label: 'Overall Burn Rate', value: '62.4%', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-        { label: 'Remaining Cash Reserve', value: '$92,120 USD', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-      ],
-      grantsList: [
-        { name: 'PEPFAR Adherence Grant ZW-098', allocation: 150000, spend: 98400, balance: 51600, burn: 65.6, status: 'ON TRACK' },
-        { name: 'Global Fund SRHR Outreach', allocation: 95000, spend: 54600, balance: 40400, burn: 57.5, status: 'ON TRACK' },
-      ],
-    },
-    supervision: {
-      stats: [
-        { label: 'Case Reviews Conducted', value: '14 This Month', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Action Items Pending', value: '4 Escalations', badgeColor: 'bg-rose-500/20 text-rose-400' },
-        { label: 'Next Joint Audit', value: 'May 25, 2026', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-      ],
-      actions: [
-        { id: 'SUP-421', type: 'Clinical Case Audit', auditor: 'Programs & M&E Officer', subject: 'Facilitator Adherence Checklist Review', date: '2026-05-19', status: 'Completed', notes: 'Validated outcome harvesting logs for 4 peer educators. Output aligns with targets.' },
-        { id: 'SUP-422', type: 'Offline Sync Reconciliation', auditor: 'MEL Officer', subject: 'Correction Inbox Submissions', date: '2026-05-18', status: 'Action Required', notes: 'Correction items returned for Tanaka\'s logsheet. Needs facilitator revision.' },
-      ],
-    },
-    'knowledge-hub': {
-      stats: [
-        { label: 'Approved SOP Documents', value: '18 Protocols', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Documentation Downloads', value: '142 Registers', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-        { label: 'Updates Pending Approval', value: '2 SOP Revisions', badgeColor: 'bg-amber-500/20 text-amber-400' },
-      ],
-      documents: [
-        { title: 'Standard Operating Procedures for Defaulter Tracing', code: 'MMPZ-SOP-012', version: 'v3.1', approvedDate: '2026-02-14', status: 'Active', category: 'Field Manuals' },
-        { title: 'Clinical Safeguarding and PII Guidelines', code: 'MMPZ-SOP-005', version: 'v4.0', approvedDate: '2026-04-01', status: 'Active', category: 'Compliance' },
-        { title: 'Youth Buddy System Interaction Logsheet Template', code: 'MMPZ-SOP-019', version: 'v1.2', approvedDate: '2026-05-10', status: 'Active', category: 'Templates' },
-      ],
-    },
-    referrals: {
-      stats: [
-        { label: 'Referrals Linkages Logged', value: '45 Active Linkages', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-        { label: 'Linkage Success Rate', value: '91.1%', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Clinic Follow-Ups Pending', value: '4 Cases', badgeColor: 'bg-amber-500/20 text-amber-400' },
-      ],
-      referralsList: [
-        { clientCode: 'ZW-BYO-021', destinationClinic: 'Bulawayo General Clinic', referralReason: 'Adherence and Viral Load Review', dateReferred: '2026-05-10', successStatus: 'Confirmed', verifiedBy: 'SRHR Officer' },
-        { clientCode: 'ZW-BYO-108', destinationClinic: 'Mpilo Opportunity Clinic', referralReason: 'Psychosocial Counseling support', dateReferred: '2026-05-14', successStatus: 'Pending Verification', verifiedBy: 'System Administrator' },
-        { clientCode: 'ZW-BYO-144', destinationClinic: 'Magwegwe Poly Clinic', referralReason: 'ART Regimen Swapping', dateReferred: '2026-05-17', successStatus: 'Confirmed', verifiedBy: 'SRHR Officer' },
-      ],
-    },
-    performance: {
-      stats: [
-        { label: 'Target Completion Rate', value: '87.5% Average', badgeColor: 'bg-emerald-500/20 text-emerald-400' },
-        { label: 'Active KPI Metrics', value: '12 Operational Ind.', badgeColor: 'bg-indigo-500/20 text-indigo-400' },
-        { label: 'Supervisors Review Complete', value: '9 of 11 Officers', badgeColor: 'bg-teal-500/20 text-teal-400' },
-      ],
-      kpis: [
-        { metric: 'Longitudinal Adherence (90% Suppression Target)', goal: '95.0%', actual: '92.4%', variance: '-2.6%', status: 'ACCOMPLISHED' },
-        { metric: 'Defaulter Tracing Conversion Rate (Ret. to care)', goal: '80.0%', actual: '85.2%', variance: '+5.2%', status: 'EXCEEDED' },
-        { metric: 'Volunteer Logsheet Validation Accuracy', goal: '100.0%', actual: '98.5%', variance: '-1.5%', status: 'NEEDS_IMPROVEMENT' },
-      ],
-    },
-  };
+        const params = { userId: user.id };
+        const sources = {
+            queue: axios.get(`${API_BASE}/governance/queue`, { params }),
+            financeSummary: axios.get(`${API_BASE}/finance/summary`, { params }),
+            grants: axios.get(`${API_BASE}/finance/grants`, { params }),
+            facilitators: axios.get(`${API_BASE}/facilitators`, { params }),
+            documents: axios.get(`${API_BASE}/documents`, { params }),
+            riskSummary: axios.get(`${API_BASE}/analytics/risk-summary`, { params }),
+            projects: axios.get(`${API_BASE}/projects`, { params }),
+            submissions: axios.get(`${API_BASE}/submissions`, {
+                params: { ...params, view: 'admin', limit: 30 },
+            }),
+        };
 
-  const activeTabContent = demoData[activeTab];
+        const results = await Promise.allSettled(
+            Object.entries(sources).map(([key, request]) => request.then((res) => [key, res.data]))
+        );
 
-  return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-8 font-sans">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-8 pb-6 border-b border-slate-800">
-        <div>
-          <div className="flex items-center space-x-2 text-indigo-400 mb-1">
-            <ShieldCheck size={20} />
-            <span className="text-sm font-semibold tracking-wider uppercase">MMPZ Strategic Governance</span>
-          </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            Governance & Compliance Center
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Authoritative platform for monitoring cross-system QA, donor expectations, legal compliance, and field operations.
-          </p>
-        </div>
-        
-        {/* Search */}
-        <div className="mt-4 md:mt-0 relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-          <input
-            type="text"
-            placeholder="Search governance logs..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-900/60 backdrop-blur-md border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all duration-300"
-          />
-        </div>
-      </div>
+        let fulfilled = 0;
+        for (const result of results) {
+            if (result.status !== 'fulfilled') continue;
+            fulfilled += 1;
+            const [key, data] = result.value;
+            if (key === 'queue') setQueue(Array.isArray(data) ? data : []);
+            if (key === 'financeSummary') setFinanceSummary(data || null);
+            if (key === 'grants') setGrants(Array.isArray(data) ? data : []);
+            if (key === 'facilitators') setFacilitators(Array.isArray(data) ? data : []);
+            if (key === 'documents') setDocuments(Array.isArray(data?.items) ? data.items : []);
+            if (key === 'riskSummary') setRiskSummary(data || null);
+            if (key === 'projects') setProjects(Array.isArray(data) ? data : []);
+            if (key === 'submissions') setSubmissions(Array.isArray(data) ? data : []);
+        }
 
-      {/* Main Tabbed Grid Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        
-        {/* Left Navigation (Glassmorphic Sidebar) */}
-        <div className="lg:col-span-1 space-y-2 bg-slate-900/40 border border-slate-800/80 p-4 rounded-2xl backdrop-blur-lg">
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-3">Compliance Modules</h2>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-300 text-left ${
-                  isActive 
-                    ? `${tab.color} font-bold shadow-lg border border-slate-700/50` 
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <Icon size={18} className={isActive ? '' : 'text-slate-500'} />
-                  <span className="text-sm">{tab.label}</span>
-                </div>
-                <ChevronRight size={14} className={isActive ? 'opacity-100' : 'opacity-0'} />
-              </button>
-            );
-          })}
-        </div>
+        if (fulfilled === 0) {
+            setError('Governance workspace data is currently unavailable.');
+        }
+        setLoading(false);
+        setRefreshing(false);
+    };
 
-        {/* Right Content Section */}
-        <div className="lg:col-span-3 space-y-6">
-          
-          {/* Active Tab Stats Banner */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {activeTabContent.stats.map((stat, index) => (
-              <div key={index} className="bg-slate-900/60 border border-slate-800/80 p-5 rounded-2xl backdrop-blur-md shadow-md flex flex-col justify-between">
-                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{stat.label}</span>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="text-lg md:text-xl font-bold tracking-tight text-white">{stat.value}</span>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${stat.badgeColor}`}>Active</span>
-                </div>
-              </div>
-            ))}
-          </div>
+    useEffect(() => {
+        fetchWorkspace();
+    }, [user?.id]);
 
-          {/* Module-Specific Render Engine */}
-          <div className="bg-slate-900/60 border border-slate-800/80 p-6 rounded-2xl backdrop-blur-lg shadow-xl min-h-[450px]">
-            
-            {/* SAFEGUARDING TAB */}
-            {activeTab === 'safeguarding' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Active Safeguarding & Escalation Logs</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">High-priority clinical safety concerns escalated directly from the mobile capture sync.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-rose-500/20 text-rose-400 border border-rose-500/30 px-3 py-1.5 rounded-xl text-xs hover:bg-rose-500/30 transition-all duration-300">
-                    <AlertTriangle size={14} />
-                    <span>Escalate Incident</span>
-                  </button>
-                </div>
+    const pendingQueue = useMemo(
+        () => queue.filter((item) => ['pending', 'submitted', 'verified'].includes(String(item.status || 'pending'))),
+        [queue]
+    );
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase">
-                        <th className="py-3 px-4">Case ID</th>
-                        <th className="py-3 px-4">Incident Type</th>
-                        <th className="py-3 px-4">Client</th>
-                        <th className="py-3 px-4">Priority</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTabContent.incidents.map((incident) => (
-                        <tr key={incident.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 text-sm">
-                          <td className="py-4 px-4 font-mono font-semibold text-rose-400">{incident.id}</td>
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-medium text-slate-200">{incident.type}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{incident.description}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-slate-300">{incident.clientCode}</td>
-                          <td className="py-4 px-4">
-                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                              incident.priority === 'HIGH' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
-                            }`}>{incident.priority}</span>
-                          </td>
-                          <td className="py-4 px-4 text-slate-400 text-xs">{incident.status}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+    const riskIndicators = riskSummary?.indicators || [];
+    const highRiskIndicators = riskIndicators.filter((item) => item.risk_level === 'high');
+    const endingGrants = grants.filter((grant) => {
+        const days = daysUntil(grant.end_date);
+        return days !== null && days >= 0 && days <= 60;
+    });
+    const activeFacilitators = facilitators.filter((facilitator) => facilitator.status === 'active');
+    const recentDocuments = [...documents].sort(
+        (a, b) => new Date(b.updated_at || b.created_at || 0) - new Date(a.updated_at || a.created_at || 0)
+    );
+    const searchableRiskIndicators = riskIndicators.filter((item) =>
+        matchesSearch(searchTerm, [item.title, item.project_name, item.program_name, item.risk_level])
+    );
+    const searchableQueue = pendingQueue.filter((item) =>
+        matchesSearch(searchTerm, [item.display_type, item.entity_type, item.requester_name, item.requester_role])
+    );
+    const searchableGrants = grants.filter((grant) =>
+        matchesSearch(searchTerm, [grant.name, grant.code, grant.donor_name, grant.status])
+    );
+    const searchableFacilitators = facilitators.filter((facilitator) =>
+        matchesSearch(searchTerm, [facilitator.name, facilitator.email, facilitator.status, facilitator.phone])
+    );
+    const searchableDocuments = recentDocuments.filter((document) =>
+        matchesSearch(searchTerm, [document.title, document.file_name, document.category, document.uploaded_by_name])
+    );
+    const searchableSubmissions = submissions.filter((submission) =>
+        matchesSearch(searchTerm, [
+            submission.title,
+            submission.submission_title,
+            submission.submitter_name,
+            submission.status,
+            submission.submission_type,
+        ])
+    );
 
-            {/* VOLUNTEER MANAGEMENT TAB */}
-            {activeTab === 'volunteers' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Youth Facilitators & Peer Educators</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Offline field staff onboarding checklists, case logs and sync audits.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs transition-all duration-300">
-                    <Plus size={14} />
-                    <span>Onboard Facilitator</span>
-                  </button>
-                </div>
+    const financeMetrics = financeSummary?.metrics || {};
+    const averagePerformance =
+        riskIndicators.length > 0
+            ? Math.round(
+                  riskIndicators.reduce((sum, item) => sum + Number(item.progress_percentage || 0), 0) /
+                      riskIndicators.length
+              )
+            : 0;
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase">
-                        <th className="py-3 px-4">Facilitator Name</th>
-                        <th className="py-3 px-4">District</th>
-                        <th className="py-3 px-4">Assigned Cases</th>
-                        <th className="py-3 px-4">Role Title</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTabContent.roster.map((v, i) => (
-                        <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/20 text-sm">
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-semibold text-slate-200">{v.name}</p>
-                              <p className="text-xs text-slate-500">{v.email}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-slate-300">{v.district}</td>
-                          <td className="py-4 px-4 font-medium text-indigo-400">{v.cases} Clients</td>
-                          <td className="py-4 px-4 text-slate-400 text-xs">{v.role}</td>
-                          <td className="py-4 px-4">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              v.status === 'Active' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                            }`}>{v.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+    const recentDocumentCount = recentDocuments.filter((document) => {
+        const updatedAt = new Date(document.updated_at || document.created_at || 0).getTime();
+        return updatedAt > Date.now() - 30 * 24 * 60 * 60 * 1000;
+    }).length;
 
-            {/* DONOR COMPLIANCE TAB */}
-            {activeTab === 'donors' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Donor Compliance & Requirements</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Tracking reporting deadlines, semi-annual metrics, and regulatory checks.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-teal-500/20 text-teal-400 border border-teal-500/30 px-3 py-1.5 rounded-xl text-xs hover:bg-teal-500/30 transition-all duration-300">
-                    <FileSpreadsheet size={14} />
-                    <span>Export Compliance Sheet</span>
-                  </button>
-                </div>
+    const renderSafeguarding = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard
+                    icon={AlertTriangle}
+                    tone="warning"
+                    label="High Risk Indicators"
+                    value={highRiskIndicators.length}
+                    note="M&E records flagged for immediate control attention"
+                />
+                <MetricCard
+                    icon={ClipboardCheck}
+                    tone="primary"
+                    label="Open Approvals"
+                    value={pendingQueue.length}
+                    note="Items currently waiting in the governance queue"
+                />
+                <MetricCard
+                    icon={Clock}
+                    tone="info"
+                    label="Older Than 30 Days"
+                    value={riskIndicators.filter((item) => Number(item.days_since_update || 0) > 30).length}
+                    note="Controls with stale supporting evidence"
+                />
+            </div>
 
-                <div className="space-y-4">
-                  {activeTabContent.requirements.map((req) => (
-                    <div key={req.id} className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-mono text-teal-400 font-bold bg-teal-500/10 px-2 py-0.5 rounded">{req.id}</span>
-                          <span className="font-semibold text-slate-200">{req.donorName}</span>
-                          <span className="text-xs text-slate-500">| Project: {req.project}</span>
+            <div className="panels-row">
+                <div className="panel">
+                    <div className="panel-header">
+                        <div>
+                            <h2 className="panel-title">Escalation Watchlist</h2>
+                            <p className="panel-subtitle">Risk records drawn from the M&E engine.</p>
                         </div>
-                        <p className="text-sm text-slate-400 mt-2 font-medium">{req.reportType}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <Calendar size={12} className="text-slate-500" />
-                          <span className="text-xs text-slate-500">Deadline: {req.deadline}</span>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col items-end justify-between min-w-[200px]">
-                        <span className="text-xs text-slate-400 mb-1.5 font-medium">{req.status} ({req.progress}%)</span>
-                        <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-teal-500 to-indigo-500 h-full rounded-full transition-all duration-500" 
-                            style={{ width: `${req.progress}%` }}
-                          />
-                        </div>
-                      </div>
                     </div>
-                  ))}
+                    {searchableRiskIndicators.length === 0 ? (
+                        <EmptyModuleState icon={ShieldCheck} title="No safeguarding risk records" />
+                    ) : (
+                        <div className="data-table-wrap">
+                            <table className="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Indicator</th>
+                                        <th>Project</th>
+                                        <th>Risk</th>
+                                        <th>Progress</th>
+                                        <th>Last Update</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {searchableRiskIndicators.slice(0, 8).map((item) => (
+                                        <tr key={item.id}>
+                                            <td>
+                                                <div style={{ fontWeight: 700 }}>{item.title}</div>
+                                                <div className="form-hint">{item.program_name || 'Program not set'}</div>
+                                            </td>
+                                            <td>{item.project_name || 'Unassigned'}</td>
+                                            <td>
+                                                <span className={`badge badge-${item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'}`}>
+                                                    {item.risk_level || 'low'}
+                                                </span>
+                                            </td>
+                                            <td>{asPercent(item.progress_percentage)}</td>
+                                            <td>{Number(item.days_since_update || 0)} days ago</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
                 </div>
-              </div>
-            )}
 
-            {/* GRANT MANAGEMENT TAB */}
-            {activeTab === 'grants' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Grant Allocation & Financial Monitoring</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Tracking current budget distributions, expenditures, and allocation burn rates.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1.5 rounded-xl text-xs hover:bg-indigo-500/30 transition-all duration-300">
-                    <CheckCircle size={14} />
-                    <span>Audit New Budget</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {activeTabContent.grantsList.map((grant, i) => (
-                    <div key={i} className="bg-slate-950/50 border border-slate-800 p-5 rounded-2xl flex flex-col justify-between">
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-bold text-slate-200 text-sm md:text-base leading-tight">{grant.name}</h4>
-                          <span className="text-xs px-2 py-0.5 rounded font-bold bg-emerald-500/20 text-emerald-400">{grant.status}</span>
+                <div className="panel">
+                    <div className="panel-header">
+                        <div>
+                            <h2 className="panel-title">Approval Escalations</h2>
+                            <p className="panel-subtitle">The same queue used by Finance and Director approvals.</p>
                         </div>
-                        <div className="grid grid-cols-3 gap-2 py-3 border-y border-slate-800/80 my-3 text-xs md:text-sm">
-                          <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Allocated</span>
-                            <span className="font-semibold text-slate-300">${grant.allocation.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Spent</span>
-                            <span className="font-semibold text-slate-300">${grant.spend.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-500 block text-[10px] uppercase font-bold tracking-wider">Balance</span>
-                            <span className="font-bold text-indigo-400">${grant.balance.toLocaleString()}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-2">
-                        <div className="flex justify-between items-center text-xs mb-1.5">
-                          <span className="text-slate-500 font-medium">Allocation Burn Rate</span>
-                          <span className="font-semibold text-indigo-400">{grant.burn}%</span>
-                        </div>
-                        <div className="bg-slate-800 h-2.5 rounded-full overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500" 
-                            style={{ width: `${grant.burn}%` }}
-                          />
-                        </div>
-                      </div>
+                        <button className="btn btn-secondary btn-sm" onClick={() => navigate('/governance')}>
+                            Open Queue <ChevronRight size={14} />
+                        </button>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* SUPERVISION TAB */}
-            {activeTab === 'supervision' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Supervision Logs & Quality Assurance</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Tracking manager check-ins, case study reviews, and offline sync rectifications.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-sky-500/20 text-sky-400 border border-sky-500/30 px-3 py-1.5 rounded-xl text-xs hover:bg-sky-500/30 transition-all duration-300">
-                    <CheckSquare size={14} />
-                    <span>Log Review Session</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase">
-                        <th className="py-3 px-4">Audit ID</th>
-                        <th className="py-3 px-4">Supervision Type</th>
-                        <th className="py-3 px-4">Subject Reviewed</th>
-                        <th className="py-3 px-4">Auditor</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTabContent.actions.map((act) => (
-                        <tr key={act.id} className="border-b border-slate-800/50 hover:bg-slate-800/20 text-sm">
-                          <td className="py-4 px-4 font-mono text-sky-400 font-semibold">{act.id}</td>
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-semibold text-slate-200">{act.type}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">{act.notes}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-slate-300">{act.subject}</td>
-                          <td className="py-4 px-4 text-slate-400 text-xs">{act.auditor}</td>
-                          <td className="py-4 px-4">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                              act.status === 'Completed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                            }`}>{act.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* KNOWLEDGE HUB TAB */}
-            {activeTab === 'knowledge-hub' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Knowledge Hub Governance</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Approved Standard Operating Procedures (SOPs), manuals, and reference guidelines.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs transition-all duration-300">
-                    <Plus size={14} />
-                    <span>Upload SOP Document</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase">
-                        <th className="py-3 px-4">Document Title</th>
-                        <th className="py-3 px-4">Reference Code</th>
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4">Approved Date</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTabContent.documents.map((doc, i) => (
-                        <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/20 text-sm">
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-semibold text-slate-200">{doc.title}</p>
-                              <p className="text-xs text-slate-500 mt-0.5">Version: {doc.version}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 font-mono text-emerald-400 font-semibold text-xs">{doc.code}</td>
-                          <td className="py-4 px-4 text-slate-300 text-xs">{doc.category}</td>
-                          <td className="py-4 px-4 text-slate-400 text-xs">{doc.approvedDate}</td>
-                          <td className="py-4 px-4">
-                            <span className="px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/20 text-emerald-400">{doc.status}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* REFERRAL GOVERNANCE TAB */}
-            {activeTab === 'referrals' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Clinical Linkages & Referral Auditing</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Monitoring referral success rates and medical facility support linkages.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-purple-500/20 text-purple-400 border border-purple-500/30 px-3 py-1.5 rounded-xl text-xs hover:bg-purple-500/30 transition-all duration-300">
-                    <Link size={14} />
-                    <span>Audit Clinic Connection</span>
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-slate-800 text-xs font-semibold text-slate-500 uppercase">
-                        <th className="py-3 px-4">Client Code</th>
-                        <th className="py-3 px-4">Destination Clinic</th>
-                        <th className="py-3 px-4">Referral Reason</th>
-                        <th className="py-3 px-4">Logged Date</th>
-                        <th className="py-3 px-4">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeTabContent.referralsList.map((ref, i) => (
-                        <tr key={i} className="border-b border-slate-800/50 hover:bg-slate-800/20 text-sm">
-                          <td className="py-4 px-4 font-mono text-purple-400 font-semibold">{ref.clientCode}</td>
-                          <td className="py-4 px-4 font-semibold text-slate-200">{ref.destinationClinic}</td>
-                          <td className="py-4 px-4 text-slate-300 text-xs">
-                            <div>
-                              <p className="font-medium">{ref.referralReason}</p>
-                              <p className="text-slate-500 mt-0.5">Audited by: {ref.verifiedBy}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-slate-400 text-xs">{ref.dateReferred}</td>
-                          <td className="py-4 px-4">
-                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              ref.successStatus === 'Confirmed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400 animate-pulse'
-                            }`}>{ref.successStatus}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* PERFORMANCE & KPIS TAB */}
-            {activeTab === 'performance' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xl font-semibold text-white">Staff KPIs & Operational Targets</h3>
-                    <p className="text-slate-400 text-xs mt-0.5">Longitudinal goal matrices, conversion targets, and performance quality scoring.</p>
-                  </div>
-                  <button className="flex items-center space-x-2 bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-3 py-1.5 rounded-xl text-xs transition-all duration-300">
-                    <BarChart3 size={14} />
-                    <span>Configure Target Goals</span>
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {activeTabContent.kpis.map((kpi, i) => (
-                    <div key={i} className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                      <div className="md:w-1/2">
-                        <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">Operational Target Indicator</span>
-                        <h4 className="font-bold text-slate-200 text-sm md:text-base leading-tight mt-1">{kpi.metric}</h4>
-                      </div>
-
-                      <div className="flex items-center space-x-6">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block uppercase font-bold">Goal</span>
-                          <span className="font-semibold text-slate-300 text-sm">{kpi.goal}</span>
+                    {searchableQueue.length === 0 ? (
+                        <EmptyModuleState icon={ClipboardCheck} title="Governance queue is clear" />
+                    ) : (
+                        <div className="control-stack compact">
+                            {searchableQueue.slice(0, 6).map((item) => (
+                                <button
+                                    key={item.id}
+                                    className="control-row"
+                                    onClick={() => navigate(`/governance?approvalId=${item.id}`)}
+                                >
+                                    <div>
+                                        <div className="control-title">{item.display_type || formatStatus(item.entity_type)}</div>
+                                        <div className="control-copy">
+                                            {item.requester_name || 'Unknown requester'} · {formatDate(item.created_at)}
+                                        </div>
+                                    </div>
+                                    <span className="badge badge-warning">{formatStatus(item.status)}</span>
+                                </button>
+                            ))}
                         </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block uppercase font-bold">Actual</span>
-                          <span className="font-bold text-slate-100 text-sm">{kpi.actual}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-slate-500 block uppercase font-bold">Variance</span>
-                          <span className={`font-bold text-sm ${kpi.variance.startsWith('+') ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {kpi.variance}
-                          </span>
-                        </div>
-                        <div>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            kpi.status === 'EXCEEDED' ? 'bg-emerald-500/20 text-emerald-400' :
-                            kpi.status === 'ACCOMPLISHED' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-amber-500/20 text-amber-400'
-                          }`}>{kpi.status}</span>
-                        </div>
-                      </div>
+                    )}
+                </div>
+            </div>
+        </>
+    );
+
+    const renderVolunteers = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={Users} label="Registered Facilitators" value={facilitators.length} note="Field profiles from the Facilitators module" />
+                <MetricCard icon={ClipboardCheck} tone="success" label="Active Facilitators" value={activeFacilitators.length} note="Profiles currently marked active" />
+                <MetricCard
+                    icon={CheckSquare}
+                    tone="info"
+                    label="Active Assignments"
+                    value={facilitators.reduce((sum, item) => sum + Number(item.active_assignments || 0), 0)}
+                    note="Project assignment controls"
+                />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Facilitator Governance Registry</h2>
+                        <p className="panel-subtitle">Pulled directly from field staff profiles and project assignments.</p>
                     </div>
-                  ))}
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/facilitators')}>
+                        Manage <ChevronRight size={14} />
+                    </button>
                 </div>
-              </div>
-            )}
+                {searchableFacilitators.length === 0 ? (
+                    <EmptyModuleState icon={Users} title="No facilitator records found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Facilitator</th>
+                                    <th>Status</th>
+                                    <th>Contact</th>
+                                    <th>Assignments</th>
+                                    <th>Joined</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableFacilitators.slice(0, 12).map((facilitator) => (
+                                    <tr key={facilitator.user_id}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{facilitator.name}</div>
+                                            <div className="form-hint">{facilitator.email}</div>
+                                        </td>
+                                        <td>
+                                            <span className={`badge badge-${facilitator.status === 'active' ? 'success' : 'muted'}`}>
+                                                {facilitator.status || 'active'}
+                                            </span>
+                                        </td>
+                                        <td>{facilitator.phone || 'No phone'}</td>
+                                        <td>{Number(facilitator.active_assignments || 0)} active</td>
+                                        <td>{formatDate(facilitator.joined_at)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
 
-          </div>
+    const renderDonors = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={FileText} label="Donors" value={financeMetrics.total_donors || 0} note="From finance master data" />
+                <MetricCard icon={WalletCards} tone="success" label="Active Grants" value={financeMetrics.total_grants || grants.length} note={formatCurrency(financeMetrics.commitment_total)} />
+                <MetricCard icon={Calendar} tone="warning" label="Closing In 60 Days" value={endingGrants.length} note="Grant end dates needing reporting focus" />
+            </div>
 
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Donor Commitments & Reporting Windows</h2>
+                        <p className="panel-subtitle">Grant dates and utilization come from Finance, not a duplicate compliance list.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/finance')}>
+                        Finance <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableGrants.length === 0 ? (
+                    <EmptyModuleState icon={FileText} title="No donor grant records found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Donor / Grant</th>
+                                    <th>Commitment</th>
+                                    <th>Used</th>
+                                    <th>End Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableGrants.slice(0, 10).map((grant) => {
+                                    const used = Number(grant.total_used || 0);
+                                    const amount = Number(grant.total_amount || 0);
+                                    const percent = amount > 0 ? (used / amount) * 100 : 0;
+                                    return (
+                                        <tr key={grant.id}>
+                                            <td>
+                                                <div style={{ fontWeight: 700 }}>{grant.name}</div>
+                                                <div className="form-hint">{grant.donor_name} · {grant.code || 'No code'}</div>
+                                            </td>
+                                            <td>{formatCurrency(amount)}</td>
+                                            <td>
+                                                <div className="progress-bar-wrap" style={{ marginBottom: '5px' }}>
+                                                    <div className="progress-bar-fill" style={{ width: `${Math.min(percent, 100)}%`, background: 'var(--brand-primary)' }} />
+                                                </div>
+                                                <span>{formatCurrency(used)} · {asPercent(percent)}</span>
+                                            </td>
+                                            <td>{formatDate(grant.end_date)}</td>
+                                            <td>
+                                                <span className={`badge badge-${daysUntil(grant.end_date) !== null && daysUntil(grant.end_date) <= 60 ? 'warning' : 'success'}`}>
+                                                    {daysUntil(grant.end_date) !== null && daysUntil(grant.end_date) <= 60 ? 'reporting window' : 'active'}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderGrants = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={WalletCards} label="Grant Pool" value={formatCurrency(financeMetrics.commitment_total)} note={`${financeMetrics.total_grants || grants.length} grant records`} />
+                <MetricCard icon={FileSpreadsheet} tone="info" label="Allocated" value={formatCurrency(financeMetrics.allocated_total)} note="Budget lines under grant controls" />
+                <MetricCard icon={ClipboardCheck} tone="warning" label="Pending Commitments" value={formatCurrency(financeMetrics.pending_procurement_total)} note="Awaiting approval before spend" />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Grant Allocation Discipline</h2>
+                        <p className="panel-subtitle">Budget and procurement commitments share the same Finance data source.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/budget')}>
+                        Budget <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableGrants.length === 0 ? (
+                    <EmptyModuleState icon={WalletCards} title="No grant budget records found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Grant</th>
+                                    <th>Budgeted</th>
+                                    <th>Allocated</th>
+                                    <th>Spent</th>
+                                    <th>Balance</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableGrants.slice(0, 10).map((grant) => {
+                                    const amount = Number(grant.total_amount || 0);
+                                    const used = Number(grant.total_used || 0);
+                                    const balance = amount - used;
+                                    return (
+                                        <tr key={grant.id}>
+                                            <td>
+                                                <div style={{ fontWeight: 700 }}>{grant.name}</div>
+                                                <div className="form-hint">{grant.donor_name || 'No donor'} · {grant.code || 'No code'}</div>
+                                            </td>
+                                            <td>{formatCurrency(grant.total_budgeted || 0)}</td>
+                                            <td>{formatCurrency(grant.total_allocated || 0)}</td>
+                                            <td>{formatCurrency(used)}</td>
+                                            <td>
+                                                <span className={`badge badge-${balance < 0 ? 'danger' : 'success'}`}>
+                                                    {formatCurrency(balance)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderSupervision = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={CheckSquare} label="Review Queue" value={searchableSubmissions.length} note="Unified staff submissions in review" />
+                <MetricCard icon={AlertTriangle} tone="warning" label="Risk Follow Ups" value={highRiskIndicators.length} note="M&E records requiring supervision" />
+                <MetricCard icon={ClipboardCheck} tone="success" label="Approved Items" value={submissions.filter((item) => item.status === 'approved').length} note="Closed staff submission controls" />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Supervision & QA Worklist</h2>
+                        <p className="panel-subtitle">Staff submissions, approvals, and M&E risk signals in one review surface.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/submissions')}>
+                        Submissions <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableSubmissions.length === 0 ? (
+                    <EmptyModuleState icon={CheckSquare} title="No supervision submissions found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Submission</th>
+                                    <th>Submitter</th>
+                                    <th>Status</th>
+                                    <th>Handler</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableSubmissions.slice(0, 10).map((submission) => (
+                                    <tr key={submission.id}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{submission.title || submission.submission_title || 'Untitled submission'}</div>
+                                            <div className="form-hint">{formatStatus(submission.submission_type)}</div>
+                                        </td>
+                                        <td>{submission.submitter_name || 'Unknown'}</td>
+                                        <td>
+                                            <span className={`badge badge-${submission.status === 'approved' ? 'success' : submission.status === 'rejected' ? 'danger' : 'warning'}`}>
+                                                {formatStatus(submission.status)}
+                                            </span>
+                                        </td>
+                                        <td>{formatStatus(submission.current_handler_role)}</td>
+                                        <td>{formatDate(submission.created_at)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderKnowledgeHub = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={BookOpen} label="Documents" value={documents.length} note="Shared policy and resource library" />
+                <MetricCard icon={FileText} tone="info" label="Categories" value={new Set(documents.map((document) => document.category)).size} note="Library classification controls" />
+                <MetricCard icon={Clock} tone="success" label="Recent Uploads" value={recentDocumentCount} note="Updated in the last 30 days" />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Approved Knowledge Assets</h2>
+                        <p className="panel-subtitle">Documents come from the ERP intranet library.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/intranet/documents')}>
+                        Library <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableDocuments.length === 0 ? (
+                    <EmptyModuleState icon={BookOpen} title="No knowledge hub documents found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Category</th>
+                                    <th>Owner</th>
+                                    <th>Updated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableDocuments.slice(0, 12).map((document) => (
+                                    <tr key={document.id}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{document.title}</div>
+                                            <div className="form-hint">{document.file_name || 'No file name'}</div>
+                                        </td>
+                                        <td><span className="badge badge-info">{document.category || 'General'}</span></td>
+                                        <td>{document.uploaded_by_name || 'System'}</td>
+                                        <td>{formatDate(document.updated_at || document.created_at)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderReferrals = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={LinkIcon} label="Active Projects" value={projects.length} note="Program linkage boundary" />
+                <MetricCard icon={AlertTriangle} tone="warning" label="Referral Watchlist" value={highRiskIndicators.length} note="Client-service linkage signals from M&E risk" />
+                <MetricCard icon={Users} tone="info" label="Field Facilitators" value={activeFacilitators.length} note="People available for follow-up assignments" />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Referral Governance Watchlist</h2>
+                        <p className="panel-subtitle">Project ownership, field coverage, and M&E risk records are reviewed together.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/me')}>
+                        M&E <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableRiskIndicators.length === 0 ? (
+                    <EmptyModuleState icon={LinkIcon} title="No referral watchlist items found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Indicator</th>
+                                    <th>Program / Project</th>
+                                    <th>Risk</th>
+                                    <th>Evidence Age</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableRiskIndicators.slice(0, 10).map((item) => (
+                                    <tr key={item.id}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{item.title}</div>
+                                            <div className="form-hint">Target progress {asPercent(item.progress_percentage)}</div>
+                                        </td>
+                                        <td>
+                                            <div>{item.project_name || 'Unassigned project'}</div>
+                                            <div className="form-hint">{item.program_name || 'Program not set'}</div>
+                                        </td>
+                                        <td>
+                                            <span className={`badge badge-${item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'}`}>
+                                                {item.risk_level || 'low'}
+                                            </span>
+                                        </td>
+                                        <td>{Number(item.days_since_update || 0)} days</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderPerformance = () => (
+        <>
+            <div className="metric-grid">
+                <MetricCard icon={BarChart3} label="Average Performance" value={asPercent(averagePerformance)} note={`${riskIndicators.length} indicators in view`} />
+                <MetricCard icon={AlertTriangle} tone="warning" label="High Risk" value={riskSummary?.high_risk_count || 0} note="Risk engine score above threshold" />
+                <MetricCard icon={ClipboardCheck} tone="success" label="Low Risk" value={riskSummary?.low_risk_count || 0} note="Controls tracking normally" />
+            </div>
+
+            <div className="panel">
+                <div className="panel-header">
+                    <div>
+                        <h2 className="panel-title">Performance Governance Matrix</h2>
+                        <p className="panel-subtitle">KPI performance and risk are shared with the Analytics workspace.</p>
+                    </div>
+                    <button className="btn btn-secondary btn-sm" onClick={() => navigate('/analytics')}>
+                        Analytics <ChevronRight size={14} />
+                    </button>
+                </div>
+                {searchableRiskIndicators.length === 0 ? (
+                    <EmptyModuleState icon={BarChart3} title="No performance records found" />
+                ) : (
+                    <div className="data-table-wrap">
+                        <table className="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Indicator</th>
+                                    <th>Progress</th>
+                                    <th>Budget Used</th>
+                                    <th>Velocity</th>
+                                    <th>Risk</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {searchableRiskIndicators.slice(0, 12).map((item) => (
+                                    <tr key={item.id}>
+                                        <td>
+                                            <div style={{ fontWeight: 700 }}>{item.title}</div>
+                                            <div className="form-hint">{item.project_name || item.program_name || 'No project'}</div>
+                                        </td>
+                                        <td>{asPercent(item.progress_percentage)}</td>
+                                        <td>{asPercent(item.budget_utilization_percent)}</td>
+                                        <td>{Number(item.velocity || 0).toFixed(2)}</td>
+                                        <td>
+                                            <span className={`badge badge-${item.risk_level === 'high' ? 'danger' : item.risk_level === 'medium' ? 'warning' : 'success'}`}>
+                                                {item.risk_level || 'low'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+            </div>
+        </>
+    );
+
+    const renderModule = () => {
+        if (activeTab === 'volunteers') return renderVolunteers();
+        if (activeTab === 'donors') return renderDonors();
+        if (activeTab === 'grants') return renderGrants();
+        if (activeTab === 'supervision') return renderSupervision();
+        if (activeTab === 'knowledge-hub') return renderKnowledgeHub();
+        if (activeTab === 'referrals') return renderReferrals();
+        if (activeTab === 'performance') return renderPerformance();
+        return renderSafeguarding();
+    };
+
+    if (loading) {
+        return <div className="page-loading"><div className="spinner" /></div>;
+    }
+
+    return (
+        <div className="fade-in governance-workspace">
+            <PageHeader
+                title="Governance & Compliance"
+                subtitle="Shared control view across approvals, finance, field delivery, documents, and M&E evidence."
+                actions={
+                    <div className="governance-toolbar">
+                        <div className="search-box">
+                            <Search size={14} className="search-icon" />
+                            <input
+                                className="form-input"
+                                style={{ height: '36px', paddingLeft: '32px' }}
+                                placeholder="Search controls..."
+                                value={searchTerm}
+                                onChange={(event) => setSearchTerm(event.target.value)}
+                            />
+                        </div>
+                        <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => fetchWorkspace({ silent: true })}
+                            disabled={refreshing}
+                        >
+                            <RefreshCw size={14} className={refreshing ? 'spin' : ''} />
+                            {refreshing ? 'Refreshing...' : 'Refresh'}
+                        </button>
+                    </div>
+                }
+            />
+
+            {error && <div className="page-message error">{error}</div>}
+
+            <section className="domain-hero">
+                <div>
+                    <div className="domain-kicker">ERP Control Layer</div>
+                    <h2>Governance now sits on top of the same records the teams already use every day.</h2>
+                    <p>
+                        The compliance modules read approvals, grants, facilitators, shared documents, submissions, projects,
+                        and analytics from the core ERP instead of maintaining a separate demo workspace.
+                    </p>
+                </div>
+                <div className="hero-control-card">
+                    <div className="hero-control-label">Active Module</div>
+                    <div className="hero-control-value" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <ActiveIcon size={28} />
+                        {activeModule.label}
+                    </div>
+                    <p>{pendingQueue.length} governance item{pendingQueue.length === 1 ? '' : 's'} waiting across the shared approval queue.</p>
+                </div>
+            </section>
+
+            <div className="signal-strip">
+                <div className="signal-card">
+                    <div className="signal-icon primary"><ShieldCheck size={18} /></div>
+                    <div className="signal-meta">
+                        <div className="signal-label">Approval Queue</div>
+                        <div className="signal-value">{pendingQueue.length}</div>
+                        <div className="signal-note">Pending governance actions</div>
+                    </div>
+                </div>
+                <div className="signal-card">
+                    <div className="signal-icon success"><WalletCards size={18} /></div>
+                    <div className="signal-meta">
+                        <div className="signal-label">Commitments</div>
+                        <div className="signal-value">{formatCurrency(financeMetrics.commitment_total)}</div>
+                        <div className="signal-note">{financeMetrics.total_grants || grants.length} active grants</div>
+                    </div>
+                </div>
+                <div className="signal-card">
+                    <div className="signal-icon warning"><AlertTriangle size={18} /></div>
+                    <div className="signal-meta">
+                        <div className="signal-label">High Risk</div>
+                        <div className="signal-value">{highRiskIndicators.length}</div>
+                        <div className="signal-note">M&E risk engine records</div>
+                    </div>
+                </div>
+                <div className="signal-card">
+                    <div className="signal-icon accent"><Users size={18} /></div>
+                    <div className="signal-meta">
+                        <div className="signal-label">Field Coverage</div>
+                        <div className="signal-value">{activeFacilitators.length}</div>
+                        <div className="signal-note">Active facilitator profiles</div>
+                    </div>
+                </div>
+            </div>
+
+            <div className="governance-module-grid">
+                <aside className="panel governance-module-nav">
+                    <div className="panel-header">
+                        <div>
+                            <h2 className="panel-title">Compliance Modules</h2>
+                            <p className="panel-subtitle">Connected ERP workstreams</p>
+                        </div>
+                    </div>
+                    <div className="control-stack compact">
+                        {MODULES.map((module) => {
+                            const Icon = module.icon;
+                            const isActive = module.id === activeTab;
+                            return (
+                                <button
+                                    key={module.id}
+                                    className={`control-row ${isActive ? 'active' : ''}`}
+                                    onClick={() => navigate(module.path)}
+                                    style={{
+                                        background: isActive ? 'var(--brand-primary-light)' : undefined,
+                                        borderColor: isActive ? 'var(--brand-primary)' : undefined,
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                                        <Icon size={16} style={{ color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+                                        <span className="control-title">{module.label}</span>
+                                    </div>
+                                    <ChevronRight size={14} style={{ color: isActive ? 'var(--brand-primary)' : 'var(--text-muted)' }} />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </aside>
+
+                <section className="content-stack" style={{ minWidth: 0 }}>
+                    {renderModule()}
+                </section>
+            </div>
         </div>
-
-      </div>
-    </div>
-  );
+    );
 }

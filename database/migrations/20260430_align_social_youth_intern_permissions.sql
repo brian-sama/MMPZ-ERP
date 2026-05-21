@@ -3,7 +3,7 @@
 -- and Psychosocial Support Officers while keeping their canonical job titles.
 
 INSERT INTO role_permissions (role_code, permission_code)
-SELECT role_code, permission_code
+SELECT requested.role_code, requested.permission_code
 FROM (
     VALUES
         ('SOCIAL_SERVICES_INTERN', 'program.read'),
@@ -32,5 +32,7 @@ FROM (
         ('YOUTH_COMMUNICATIONS_INTERN', 'expense.create'),
         ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.submit'),
         ('YOUTH_COMMUNICATIONS_INTERN', 'volunteer.read_own')
-) AS permissions(role_code, permission_code)
+) AS requested(role_code, permission_code)
+JOIN roles r ON r.code = requested.role_code
+JOIN permissions p ON p.code = requested.permission_code
 ON CONFLICT DO NOTHING;

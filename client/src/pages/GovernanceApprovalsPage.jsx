@@ -10,6 +10,14 @@ import {
     Search, Filter, ExternalLink, AlertTriangle
 } from 'lucide-react';
 
+const FINANCE_REVIEW_ROLES = [
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+];
+
 export default function GovernanceApprovalsPage() {
     const { user } = useAuth();
     const navigate = useNavigate();
@@ -21,7 +29,7 @@ export default function GovernanceApprovalsPage() {
     const [actionLoading, setActionLoading] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const isDirector = user?.role_code === 'DIRECTOR' || user?.role_code === 'SYSTEM_ADMIN';
-    const isFinance = user?.role_code === 'FINANCE_ADMIN_OFFICER';
+    const isFinance = FINANCE_REVIEW_ROLES.includes(user?.role_code);
     const canAction = isDirector || isFinance;
 
     useEffect(() => {
@@ -41,7 +49,7 @@ export default function GovernanceApprovalsPage() {
             const res = await axios.get(`${API_BASE}/governance/queue`, { params: { userId: user.id } });
             setQueue(res.data);
         } catch (err) {
-            console.error('Failed to fetch governance queue');
+            console.error('Failed to fetch governance queue', err);
         } finally {
             setLoading(false);
         }
@@ -349,7 +357,7 @@ export default function GovernanceApprovalsPage() {
                         {!canAction && (selectedItem.status === 'pending' || ['submitted', 'verified'].includes(selectedItem.status)) && (
                         <div className="page-message error">
                             <AlertTriangle size={16} style={{ marginRight: '8px' }} />
-                            You don't have permission to approve or reject requests. Only users with DIRECTOR role can take action.
+                            You don't have permission to action this request. Only authorized finance reviewers and Directors can approve, verify, or reject requests.
                         </div>
                     )}
                 </div>

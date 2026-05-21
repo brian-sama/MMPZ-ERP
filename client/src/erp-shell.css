@@ -2012,6 +2012,125 @@ select:-webkit-autofill {
   gap: 20px;
 }
 
+.governance-workspace {
+  display: grid;
+  gap: 20px;
+}
+
+.governance-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.governance-toolbar .search-box {
+  width: min(320px, 100%);
+}
+
+.governance-module-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.governance-module-nav {
+  position: sticky;
+  top: 84px;
+}
+
+.lifecycle-hero .hero-control-card {
+  min-height: 100%;
+}
+
+.lifecycle-stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.lifecycle-stage-card {
+  display: grid;
+  gap: 14px;
+  min-height: 236px;
+  padding: 18px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.lifecycle-stage-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--brand-primary);
+}
+
+.lifecycle-stage-card.success::before {
+  background: var(--brand-success);
+}
+
+.lifecycle-stage-card.warning::before {
+  background: var(--brand-warning);
+}
+
+.lifecycle-stage-card.danger::before {
+  background: var(--brand-danger);
+}
+
+.lifecycle-stage-card.info::before {
+  background: var(--brand-secondary);
+}
+
+.lifecycle-stage-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lifecycle-stage-card h3 {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  margin-bottom: 8px;
+}
+
+.lifecycle-stage-value {
+  font-family: var(--font-heading);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.lifecycle-stage-status {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.lifecycle-stage-card p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.control-row.active {
+  background: var(--brand-primary-light);
+  border-color: var(--brand-primary);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
@@ -2430,9 +2549,14 @@ select:-webkit-autofill {
   .domain-hero,
   .signal-strip,
   .finance-split,
+  .governance-module-grid,
   .requisition-layout,
   .detail-grid {
     grid-template-columns: 1fr;
+  }
+
+  .governance-module-nav {
+    position: static;
   }
 
   .requisition-line-grid {

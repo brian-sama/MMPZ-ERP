@@ -41,26 +41,90 @@ const loadThresholdValue = async () => {
     return Number.parseFloat(rows[0]?.value_text || '500');
 };
 
-const loadPendingCount = async () => {
-    const tableCheck = await sql`
+const tableExists = async (tableName) => {
+    const rows = await sql`
         SELECT EXISTS (
             SELECT 1
             FROM information_schema.tables
             WHERE table_schema = current_schema()
-              AND table_name = 'approvals'
+              AND table_name = ${tableName}
         ) AS exists
     `;
-    if (!tableCheck[0]?.exists) return 0;
-
-    const rows = await sql`
-        SELECT COUNT(*)::int AS total
-        FROM approvals
-        WHERE status = 'pending'
-    `;
-    return rows[0]?.total || 0;
+    return Boolean(rows[0]?.exists);
 };
 
-const FINANCE_TEAM_ROLES = ['FINANCE_ADMIN_OFFICER', 'ADMIN_ASSISTANT', 'LOGISTICS_ASSISTANT'];
+const FINANCE_REVIEW_ROLES = [
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'FINANCE_ADMIN_OFFICER',
+    'ADMIN_ASSISTANT',
+    'LOGISTICS_ASSISTANT',
+];
+
+const FINANCE_TEAM_ROLES = FINANCE_REVIEW_ROLES;
+
+const isFinanceReviewer = (roleCode) => FINANCE_REVIEW_ROLES.includes(roleCode);
+
+const isDirectorReviewer = (actor) =>
+    actor?.role_code === 'DIRECTOR' ||
+    actor?.role_code === 'SYSTEM_ADMIN' ||
+    actor?.system_role === 'SUPER_ADMIN';
+
+const formatDisplayType = (entityType, subType) => {
+    if (entityType === 'procurement') return 'Procurement Requisition';
+    if (entityType === 'volunteer_submission') {
+        if (!subType) return 'Document Submission';
+        return subType.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    }
+    if (entityType === 'unified_submission' && subType) {
+        return subType.split('_').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    }
+    return String(entityType || 'approval')
+        .split('_')
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+};
+
+const loadPendingCount = async (actor) => {
+    let total = 0;
+
+    if (await tableExists('approvals')) {
+        const rows = await sql`
+            SELECT COUNT(*)::int AS total
+            FROM approvals
+            WHERE status = 'pending'
+        `;
+        total += rows[0]?.total || 0;
+    }
+
+    if (!(await tableExists('unified_submissions'))) return total;
+
+    let unifiedRows;
+    if (isDirectorReviewer(actor)) {
+        unifiedRows = await sql`
+            SELECT COUNT(*)::int AS total
+            FROM unified_submissions
+            WHERE status IN ('submitted', 'verified')
+              AND (current_handler_role = 'DIRECTOR' OR status = 'verified')
+        `;
+    } else if (isFinanceReviewer(actor?.role_code)) {
+        unifiedRows = await sql`
+            SELECT COUNT(*)::int AS total
+            FROM unified_submissions
+            WHERE status IN ('submitted', 'verified')
+              AND current_handler_role = ANY(${FINANCE_REVIEW_ROLES})
+        `;
+    } else {
+        unifiedRows = await sql`
+            SELECT COUNT(*)::int AS total
+            FROM unified_submissions
+            WHERE status IN ('submitted', 'verified')
+              AND current_handler_role = ${actor?.role_code || ''}
+        `;
+    }
+
+    return total + (unifiedRows[0]?.total || 0);
+};
 
 const buildProcurementPolicy = (amount, thresholdValue) => {
     const total = Number(amount || 0);
@@ -100,7 +164,7 @@ export const handler = async (event) => {
             if (query.countOnly === 'true') {
                 try {
                     return successResponse({
-                        total: await loadPendingCount(),
+                        total: await loadPendingCount(actor),
                     });
                 } catch (err) {
                     console.error('Database error in governance queue count:', err);
@@ -135,15 +199,15 @@ export const handler = async (event) => {
                     LEFT JOIN volunteer_submissions vs
                         ON a.entity_type = 'volunteer_submission'
                        AND vs.id::text = a.entity_id
-                    LEFT JOIN unified_submissions us
-                        ON a.entity_type = 'unified_submission'
-                       AND us.id::text = a.entity_id
                     LEFT JOIN projects p ON vs.project_id = p.id
                     WHERE a.id = ${id}
                 `;
                 let currentApproval = approval[0];
                 
                 if (!currentApproval) {
+                    if (!(await tableExists('unified_submissions'))) {
+                        return errorResponse('Approval not found', 404);
+                    }
                     // Try to fetch from unified_submissions directly if not in approvals table
                     const unified = await sql`
                         SELECT 
@@ -160,7 +224,7 @@ export const handler = async (event) => {
                     if (unified.length > 0) {
                         currentApproval = {
                             ...unified[0],
-                            display_type: unified[0].submission_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                            display_type: formatDisplayType('unified_submission', unified[0].submission_type),
                             entity_data: {
                                 title: unified[0].submission_title,
                                 description: unified[0].submission_description,
@@ -247,16 +311,6 @@ export const handler = async (event) => {
                     };
                 }
 
-                // Add display_type helper
-                const formatDisplayType = (entityType, subType) => {
-                    if (entityType === 'procurement') return 'Procurement Requisition';
-                    if (entityType === 'volunteer_submission') {
-                        if (!subType) return 'Document Submission';
-                        return subType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    }
-                    return entityType.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                };
-
                 return successResponse({ 
                     ...approval[0], 
                     logs, 
@@ -267,52 +321,98 @@ export const handler = async (event) => {
             }
 
             try {
-                const results = await sql`
-                    (
+                const results = [];
+
+                if (await tableExists('approvals')) {
+                    const approvalRows = await sql`
                         SELECT
-                            a.id, a.entity_type, a.entity_id, a.status, a.current_step, a.created_at,
+                            a.id,
+                            a.entity_type,
+                            a.entity_id,
+                            a.status,
+                            a.current_step,
+                            a.created_at,
                             u.name AS requester_name,
-                            'DIRECTOR' as requester_role, -- Simplified for union
-                            pr.title AS procurement_title,
-                            vs.type AS submission_type
+                            u.role_code AS requester_role,
+                            NULL::text AS procurement_title,
+                            NULL::text AS submission_type
                         FROM approvals a
                         INNER JOIN users u ON a.requested_by_user_id = u.id
-                        LEFT JOIN procurement_requests pr
-                            ON a.entity_type = 'procurement'
-                           AND pr.id::text = a.entity_id
-                        LEFT JOIN volunteer_submissions vs
-                            ON a.entity_type = 'volunteer_submission'
-                           AND vs.id::text = a.entity_id
                         WHERE a.status = 'pending'
-                    )
-                    UNION ALL
-                    (
-                        SELECT
-                            s.id::text as id, 'unified_submission' as entity_type, s.id::text as entity_id, s.status, 1 as current_step, s.created_at,
-                            u.name AS requester_name,
-                            u.role_code as requester_role,
-                            s.title as procurement_title,
-                            s.submission_type as submission_type
-                        FROM unified_submissions s
-                        JOIN users u ON s.submitter_user_id = u.id
-                        WHERE s.status IN ('submitted', 'verified')
-                          AND (
-                            (${actor.role_code} = 'DIRECTOR' AND (s.current_handler_role = 'DIRECTOR' OR s.status = 'verified'))
-                            OR (${actor.role_code} = 'FINANCE_ADMIN_OFFICER' AND s.current_handler_role = 'FINANCE_ADMIN_OFFICER')
-                          )
-                    )
-                    ORDER BY created_at DESC
-                `;
+                        ORDER BY a.created_at DESC
+                    `;
+                    results.push(...approvalRows);
+                }
 
-                const queue = results.map(item => {
-                    let display_type = item.entity_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    if (item.entity_type === 'volunteer_submission' && item.submission_type) {
-                        display_type = item.submission_type.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    } else if (item.entity_type === 'procurement') {
-                        display_type = 'Procurement Requisition';
+                if (await tableExists('unified_submissions')) {
+                    let unifiedRows = [];
+                    if (isDirectorReviewer(actor)) {
+                        unifiedRows = await sql`
+                            SELECT
+                                s.id::text AS id,
+                                'unified_submission' AS entity_type,
+                                s.id::text AS entity_id,
+                                s.status,
+                                1 AS current_step,
+                                s.created_at,
+                                u.name AS requester_name,
+                                u.role_code AS requester_role,
+                                s.title AS procurement_title,
+                                s.submission_type AS submission_type
+                            FROM unified_submissions s
+                            JOIN users u ON s.submitter_user_id = u.id
+                            WHERE s.status IN ('submitted', 'verified')
+                              AND (s.current_handler_role = 'DIRECTOR' OR s.status = 'verified')
+                            ORDER BY s.created_at DESC
+                        `;
+                    } else if (isFinanceReviewer(actor.role_code)) {
+                        unifiedRows = await sql`
+                            SELECT
+                                s.id::text AS id,
+                                'unified_submission' AS entity_type,
+                                s.id::text AS entity_id,
+                                s.status,
+                                1 AS current_step,
+                                s.created_at,
+                                u.name AS requester_name,
+                                u.role_code AS requester_role,
+                                s.title AS procurement_title,
+                                s.submission_type AS submission_type
+                            FROM unified_submissions s
+                            JOIN users u ON s.submitter_user_id = u.id
+                            WHERE s.status IN ('submitted', 'verified')
+                              AND s.current_handler_role = ANY(${FINANCE_REVIEW_ROLES})
+                            ORDER BY s.created_at DESC
+                        `;
+                    } else {
+                        unifiedRows = await sql`
+                            SELECT
+                                s.id::text AS id,
+                                'unified_submission' AS entity_type,
+                                s.id::text AS entity_id,
+                                s.status,
+                                1 AS current_step,
+                                s.created_at,
+                                u.name AS requester_name,
+                                u.role_code AS requester_role,
+                                s.title AS procurement_title,
+                                s.submission_type AS submission_type
+                            FROM unified_submissions s
+                            JOIN users u ON s.submitter_user_id = u.id
+                            WHERE s.status IN ('submitted', 'verified')
+                              AND s.current_handler_role = ${actor.role_code}
+                            ORDER BY s.created_at DESC
+                        `;
                     }
-                    return { ...item, display_type };
-                });
+                    results.push(...unifiedRows);
+                }
+
+                const queue = results
+                    .map((item) => ({
+                        ...item,
+                        display_type: formatDisplayType(item.entity_type, item.submission_type),
+                    }))
+                    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
 
                 return successResponse(queue);
             } catch (err) {
@@ -344,6 +444,9 @@ export const handler = async (event) => {
             let isUnified = false;
 
             if (approvals.length === 0) {
+                if (!(await tableExists('unified_submissions'))) {
+                    return errorResponse('Approval not found', 404);
+                }
                 // Check unified submissions
                 const unified = await sql`
                     SELECT s.*, u.name as requester_name
@@ -376,7 +479,7 @@ export const handler = async (event) => {
             }
 
 
-            const finalStatus = action === 'approve' ? 'approved' : 'rejected';
+            const finalStatus = action === 'reject' ? 'rejected' : action === 'verify' ? 'verified' : 'approved';
             const procurementColumns = await getProcurementRequestColumns();
             const bidAnalysisEnabled = hasBidAnalysisColumns(procurementColumns);
 
@@ -385,7 +488,7 @@ export const handler = async (event) => {
                     let toStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'verified';
                     let currentHandlerRole = null;
                     
-                    if (action === 'approve' && approval.submission_type === 'leave_application' && actor.role_code === 'FINANCE_ADMIN_OFFICER') {
+                    if (action === 'approve' && approval.submission_type === 'leave_application' && isFinanceReviewer(actor.role_code)) {
                         toStatus = 'verified';
                         currentHandlerRole = 'DIRECTOR';
                     } else if (action === 'verify') {
