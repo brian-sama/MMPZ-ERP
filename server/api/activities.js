@@ -180,8 +180,14 @@ export const handler = async (event) => {
             const offset = parseInt(query.offset) || 0;
             const status = query.status || null;
 
+            const isFacilitatorView =
+                userContext.role_code === 'DEVELOPMENT_FACILITATOR' ||
+                userContext.role_code === 'YOUTH_FACILITATOR_PEER_EDUCATOR' ||
+                userContext.system_role === 'FACILITATOR' ||
+                query.view === 'facilitator';
+
             let results;
-            if (userContext.role_code === 'DEVELOPMENT_FACILITATOR') {
+            if (isFacilitatorView) {
                 results = await sql`
                     SELECT a.*, u.name as reviewer_name, p.name as project_name, i.title as indicator_title
                     FROM field_activities a

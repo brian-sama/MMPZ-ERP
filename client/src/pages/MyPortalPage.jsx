@@ -81,7 +81,7 @@ export default function MyPortalPage() {
                 });
 
             const [activityRes, projectRes, indicatorRes, userRes, compassActivityRes] = await Promise.all([
-                axios.get(`${API_BASE}/activities`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/activities`, { params: { userId: user.id, view: 'facilitator' } }),
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/users`),
