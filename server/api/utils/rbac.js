@@ -45,7 +45,18 @@ const legacyToCanonicalMap = {
     officer: 'PROGRAMS_ME_OFFICER',
     intern: 'FIELD_OFFICER_1',
     volunteer: 'YOUTH_FACILITATOR_PEER_EDUCATOR',
+    // Mappings for frontend legacy/display roles:
+    finance_admin_officer: 'FINANCE_OFFICER',
+    admin_assistant: 'ADMIN_FINANCE_ASSISTANT',
+    logistics_assistant: 'ADMIN_FINANCE_ASSISTANT',
+    psychosocial_support_officer: 'SRHR_OFFICER',
+    community_development_officer: 'PROGRAMS_ME_OFFICER',
+    me_intern_acting_officer: 'MEL_OFFICER',
+    social_services_intern: 'FIELD_OFFICER_1',
+    youth_communications_intern: 'YOUTH_KNOWLEDGE_HUB_OFFICER',
+    development_facilitator: 'YOUTH_FACILITATOR_PEER_EDUCATOR',
 };
+
 
 export const SYSTEM_ROLES = {
     SUPER_ADMIN: 'SUPER_ADMIN',

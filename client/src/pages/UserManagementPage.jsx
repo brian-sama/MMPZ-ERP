@@ -22,7 +22,7 @@ export default function UserManagementPage() {
         name: '',
         email: '',
         password: '',
-        role_code: 'FINANCE_ADMIN_OFFICER',
+        role_code: 'FINANCE_OFFICER',
         phone: '',
         require_password_reset: true
     });
@@ -30,15 +30,15 @@ export default function UserManagementPage() {
     const roles = [
         { code: 'SYSTEM_ADMIN', label: 'System Admin' },
         { code: 'DIRECTOR', label: 'Director' },
-        { code: 'FINANCE_ADMIN_OFFICER', label: 'Finance & Admin Officer' },
-        { code: 'ADMIN_ASSISTANT', label: 'Admin Assistant' },
-        { code: 'LOGISTICS_ASSISTANT', label: 'Logistics Assistant' },
-        { code: 'PSYCHOSOCIAL_SUPPORT_OFFICER', label: 'PSS Officer' },
-        { code: 'COMMUNITY_DEVELOPMENT_OFFICER', label: 'CD Officer' },
-        { code: 'ME_INTERN_ACTING_OFFICER', label: 'M&E Officer' },
-        { code: 'SOCIAL_SERVICES_INTERN', label: 'Social Services Intern' },
-        { code: 'YOUTH_COMMUNICATIONS_INTERN', label: 'Youth & Comms Intern' },
-        { code: 'DEVELOPMENT_FACILITATOR', label: 'Development Facilitator' }
+        { code: 'FINANCE_OFFICER', label: 'Finance Officer' },
+        { code: 'ADMIN_FINANCE_ASSISTANT', label: 'Admin & Finance Assistant' },
+        { code: 'SRHR_OFFICER', label: 'SRHR Officer' },
+        { code: 'PROGRAMS_ME_OFFICER', label: 'Programs & M&E Officer' },
+        { code: 'MEL_OFFICER', label: 'MEL Officer' },
+        { code: 'FIELD_OFFICER_1', label: 'Field Officer 1' },
+        { code: 'FIELD_OFFICER_2', label: 'Field Officer 2' },
+        { code: 'YOUTH_KNOWLEDGE_HUB_OFFICER', label: 'Youth & Knowledge Hub Officer' },
+        { code: 'YOUTH_FACILITATOR_PEER_EDUCATOR', label: 'Youth Facilitator / Peer Educator' }
     ];
 
     useEffect(() => {
@@ -71,7 +71,7 @@ export default function UserManagementPage() {
             }
             setShowForm(false);
             setEditingUser(null);
-            setFormData({ name: '', email: '', password: '', role_code: 'FINANCE_ADMIN_OFFICER', phone: '', require_password_reset: true });
+            setFormData({ name: '', email: '', password: '', role_code: 'FINANCE_OFFICER', phone: '', require_password_reset: true });
             fetchUsers();
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to save user');
