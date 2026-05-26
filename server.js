@@ -385,8 +385,12 @@ app.get("/api/me/session", async (req, res) => {
 });
 app.post("/api/upload-avatar", uploadAvatarHandler);
 app.post("/api/me/upload-avatar", uploadAvatarHandler);
+app.use("/api/me/change-password", functionToExpress(changePasswordHandler));
+app.use("/api/me/profile", functionToExpress(userProfileHandler));
 app.use("/api/me/leave", functionToExpress(leaveHandler));
 app.use("/api/me", functionToExpress(meHandler));
+
+
 
 // Kobo
 app.use("/api/kobo/config", functionToExpress(koboConfigHandler));
