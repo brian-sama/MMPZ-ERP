@@ -128,6 +128,9 @@ const programOfficerPermissions = [
     'activity.read',
     'activity.create',
     'expense.create',
+    'operations.inventory.read',
+    'operations.inventory.request',
+    'operations.challenge_course.read',
     'kobo.manage',
     'kobo.sync',
     'volunteer.submit',
@@ -143,6 +146,13 @@ const rolePermissionFallbacks = {
         'expense.review_finance',
         'settings.finance_threshold.read',
         'approval.read',
+        'operations.compliance.read',
+        'operations.compliance.manage',
+        'operations.inventory.read',
+        'operations.inventory.manage',
+        'operations.assets.read',
+        'operations.procurement_evidence.manage',
+        'operations.challenge_course.read',
         'volunteer.submit',
         'volunteer.read_own',
     ],
@@ -160,6 +170,16 @@ const rolePermissionFallbacks = {
         'indicator.read_assigned',
         'activity.create',
         'project.read',
+        'operations.compliance.read',
+        'operations.compliance.manage',
+        'operations.inventory.read',
+        'operations.inventory.request',
+        'operations.inventory.manage',
+        'operations.assets.read',
+        'operations.assets.checkout',
+        'operations.assets.manage',
+        'operations.procurement_evidence.manage',
+        'operations.challenge_course.read',
     ],
     SRHR_OFFICER: programOfficerPermissions,
     PROGRAMS_ME_OFFICER: programOfficerPermissions,
@@ -172,6 +192,10 @@ const rolePermissionFallbacks = {
         'approval.read',
         'kobo.manage',
         'kobo.sync',
+        'operations.compliance.read',
+        'operations.inventory.read',
+        'operations.inventory.request',
+        'operations.challenge_course.read',
         'volunteer.submit',
         'volunteer.read_own',
     ],
@@ -193,8 +217,20 @@ const rolePermissionFallbacks = {
         'volunteer.submit',
         'volunteer.read_own',
         'announcement.create',
+        'operations.challenge_course.read',
     ],
 };
+
+rolePermissionFallbacks.PROGRAMS_ME_OFFICER.push(
+    'operations.assets.read',
+    'operations.assets.checkout',
+    'operations.challenge_course.manage',
+);
+
+rolePermissionFallbacks.SRHR_OFFICER.push(
+    'operations.assets.read',
+    'operations.assets.checkout',
+);
 
 // Add announcement.create and announcement.approve to other roles
 [

@@ -4,9 +4,13 @@ import {
   FolderKanban,
   Users,
   BarChart3,
+  Boxes,
   DollarSign,
   WalletCards,
   ShieldCheck,
+  Laptop,
+  Landmark,
+  LockKeyhole,
   FileText,
   Settings,
   Radio,
@@ -15,6 +19,7 @@ import {
   Calendar,
   LineChart,
   Workflow,
+  Activity,
 } from 'lucide-react';
 import { canAccessRole } from './accessControl';
 
@@ -111,6 +116,22 @@ export const NAV_SECTIONS = [
           'SYSTEM_ADMIN',
         ],
       },
+      {
+        to: '/operations/challenge-course',
+        label: 'Challenge Course',
+        icon: Activity,
+        allowedRoles: [
+          'DIRECTOR',
+          'PROGRAMS_ME_OFFICER',
+          'SRHR_OFFICER',
+          'FIELD_OFFICER_1',
+          'FIELD_OFFICER_2',
+          'YOUTH_KNOWLEDGE_HUB_OFFICER',
+          'MEL_OFFICER',
+          'YOUTH_FACILITATOR_PEER_EDUCATOR',
+          'SYSTEM_ADMIN',
+        ],
+      },
     ],
   },
   {
@@ -151,6 +172,39 @@ export const NAV_SECTIONS = [
         ],
       },
       {
+        to: '/operations/inventory',
+        label: 'Inventory Operations',
+        icon: Boxes,
+        allowedRoles: [
+          'DIRECTOR',
+          'FINANCE_OFFICER',
+          'ADMIN_FINANCE_ASSISTANT',
+          'PROGRAMS_ME_OFFICER',
+          'SRHR_OFFICER',
+          'MEL_OFFICER',
+          'FIELD_OFFICER_1',
+          'FIELD_OFFICER_2',
+          'YOUTH_KNOWLEDGE_HUB_OFFICER',
+          'SYSTEM_ADMIN',
+        ],
+      },
+      {
+        to: '/operations/assets',
+        label: 'Asset Management',
+        icon: Laptop,
+        allowedRoles: [
+          'DIRECTOR',
+          'FINANCE_OFFICER',
+          'ADMIN_FINANCE_ASSISTANT',
+          'PROGRAMS_ME_OFFICER',
+          'SRHR_OFFICER',
+          'FIELD_OFFICER_1',
+          'FIELD_OFFICER_2',
+          'YOUTH_KNOWLEDGE_HUB_OFFICER',
+          'SYSTEM_ADMIN',
+        ],
+      },
+      {
         to: '/governance',
         label: 'Governance Queue',
         icon: ShieldCheck,
@@ -178,6 +232,12 @@ export const NAV_SECTIONS = [
   {
     group: 'Governance & Compliance',
     items: [
+      {
+        to: '/governance/institutional',
+        label: 'Institutional Compliance',
+        icon: Landmark,
+        allowedRoles: ['DIRECTOR', 'FINANCE_OFFICER', 'ADMIN_FINANCE_ASSISTANT', 'MEL_OFFICER', 'SYSTEM_ADMIN'],
+      },
       {
         to: '/governance/safeguarding',
         label: 'Safeguarding',
@@ -225,6 +285,12 @@ export const NAV_SECTIONS = [
         label: 'Staff Performance',
         icon: BarChart3,
         allowedRoles: ['DIRECTOR', 'MEL_OFFICER', 'SYSTEM_ADMIN'],
+      },
+      {
+        to: '/governance/confidential',
+        label: 'Executive Workspace',
+        icon: LockKeyhole,
+        allowedRoles: ['DIRECTOR', 'SYSTEM_ADMIN'],
       },
     ],
   },

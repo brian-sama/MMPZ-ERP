@@ -18,6 +18,11 @@ import FinanceAdminPage from './pages/FinanceAdminPage';
 import BudgetTrackerPage from './pages/BudgetTrackerPage';
 import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
 import GovernanceCompliancePage from './pages/GovernanceCompliancePage';
+import InstitutionalCompliancePage from './pages/InstitutionalCompliancePage';
+import InventoryOperationsPage from './pages/InventoryOperationsPage';
+import AssetManagementPage from './pages/AssetManagementPage';
+import ChallengeCourseOperationsPage from './pages/ChallengeCourseOperationsPage';
+import ExecutiveWorkspacePage from './pages/ExecutiveWorkspacePage';
 import ReportsPage from './pages/ReportsPage';
 import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
@@ -82,6 +87,13 @@ export default function AppRouter() {
                 <Route path="/governance/knowledge-hub" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/knowledge-hub')}><GovernanceCompliancePage activeTab="knowledge-hub" /></ProtectedRoute>} />
                 <Route path="/governance/referrals" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/referrals')}><GovernanceCompliancePage activeTab="referrals" /></ProtectedRoute>} />
                 <Route path="/governance/performance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/performance')}><GovernanceCompliancePage activeTab="performance" /></ProtectedRoute>} />
+                <Route path="/governance/institutional" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/institutional')}><InstitutionalCompliancePage /></ProtectedRoute>} />
+                <Route path="/governance/confidential" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/confidential')}><ExecutiveWorkspacePage /></ProtectedRoute>} />
+
+                {/* Operational Accountability Routes */}
+                <Route path="/operations/inventory" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/inventory')}><InventoryOperationsPage /></ProtectedRoute>} />
+                <Route path="/operations/assets" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/assets')}><AssetManagementPage /></ProtectedRoute>} />
+                <Route path="/operations/challenge-course" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/challenge-course')}><ChallengeCourseOperationsPage /></ProtectedRoute>} />
 
                 <Route path="/reports" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/reports')}><ReportsPage /></ProtectedRoute>} />
                 <Route path="/settings" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/settings')}><SettingsPage /></ProtectedRoute>} />
