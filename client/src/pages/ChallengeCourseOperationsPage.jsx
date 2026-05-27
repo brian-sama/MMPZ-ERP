@@ -45,7 +45,7 @@ const initialIncident = {
 
 const canManageChallenge = (user) =>
     user?.system_role === 'SUPER_ADMIN' ||
-    ['DIRECTOR', 'PROGRAMS_ME_OFFICER', 'SYSTEM_ADMIN'].includes(user?.role_code);
+    ['DIRECTOR', 'PROGRAMS_ME_OFFICER', 'LOGISTICS_FINANCE_ASSISTANT', 'SYSTEM_ADMIN'].includes(user?.role_code);
 
 export default function ChallengeCourseOperationsPage() {
     const { user } = useAuth();

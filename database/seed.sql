@@ -53,6 +53,18 @@ VALUES
         'officer'
     ),
     (
+        'Logistics & Finance Assistant',
+        'logistics.assistant@mmpz.org',
+        'LOGISTICS_FINANCE_ASSISTANT',
+        'OPERATIONS',
+        'Logistics & Finance Assistant',
+        crypt('Mmpz@123', gen_salt('bf')),
+        FALSE,
+        'pending_reassignment',
+        NULL,
+        'officer'
+    ),
+    (
         'Programs & M&E Officer',
         'community.officer@mmpz.org',
         'PROGRAMS_ME_OFFICER',

@@ -32,6 +32,7 @@ export default function UserManagementPage() {
         { code: 'DIRECTOR', label: 'Director' },
         { code: 'FINANCE_OFFICER', label: 'Finance Officer' },
         { code: 'ADMIN_FINANCE_ASSISTANT', label: 'Admin & Finance Assistant' },
+        { code: 'LOGISTICS_FINANCE_ASSISTANT', label: 'Logistics & Finance Assistant' },
         { code: 'SRHR_OFFICER', label: 'SRHR Officer' },
         { code: 'PROGRAMS_ME_OFFICER', label: 'Programs & M&E Officer' },
         { code: 'MEL_OFFICER', label: 'MEL Officer' },

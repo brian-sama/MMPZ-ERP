@@ -16,6 +16,7 @@ export const ROLE_CODES = [
     'DIRECTOR',
     'FINANCE_OFFICER',
     'ADMIN_FINANCE_ASSISTANT',
+    'LOGISTICS_FINANCE_ASSISTANT',
     'SRHR_OFFICER',
     'PROGRAMS_ME_OFFICER',
     'MEL_OFFICER',
@@ -30,6 +31,7 @@ const legacyRoleMap = {
     DIRECTOR: 'admin',
     FINANCE_OFFICER: 'officer',
     ADMIN_FINANCE_ASSISTANT: 'admin',
+    LOGISTICS_FINANCE_ASSISTANT: 'officer',
     SRHR_OFFICER: 'officer',
     PROGRAMS_ME_OFFICER: 'officer',
     MEL_OFFICER: 'officer',
@@ -48,7 +50,8 @@ const legacyToCanonicalMap = {
     // Mappings for frontend legacy/display roles:
     finance_admin_officer: 'FINANCE_OFFICER',
     admin_assistant: 'ADMIN_FINANCE_ASSISTANT',
-    logistics_assistant: 'ADMIN_FINANCE_ASSISTANT',
+    logistics_assistant: 'LOGISTICS_FINANCE_ASSISTANT',
+    logistics_finance_assistant: 'LOGISTICS_FINANCE_ASSISTANT',
     psychosocial_support_officer: 'SRHR_OFFICER',
     community_development_officer: 'PROGRAMS_ME_OFFICER',
     me_intern_acting_officer: 'MEL_OFFICER',
@@ -71,6 +74,7 @@ export const ROLE_TO_SYSTEM_ROLE = {
     DIRECTOR: SYSTEM_ROLES.MANAGEMENT,
     FINANCE_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
     ADMIN_FINANCE_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
+    LOGISTICS_FINANCE_ASSISTANT: SYSTEM_ROLES.OPERATIONS,
     SRHR_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
     PROGRAMS_ME_OFFICER: SYSTEM_ROLES.PROGRAM_STAFF,
     MEL_OFFICER: SYSTEM_ROLES.INTERN,
@@ -146,10 +150,15 @@ const rolePermissionFallbacks = {
         'expense.review_finance',
         'settings.finance_threshold.read',
         'approval.read',
+        'operations.admin_dashboard.read',
+        'operations.logistics_dashboard.read',
         'operations.compliance.read',
         'operations.compliance.manage',
         'operations.inventory.read',
         'operations.inventory.manage',
+        'operations.delivery.verify',
+        'operations.liquidation.support',
+        'operations.procurement.prepare',
         'operations.assets.read',
         'operations.procurement_evidence.manage',
         'operations.challenge_course.read',
@@ -170,16 +179,38 @@ const rolePermissionFallbacks = {
         'indicator.read_assigned',
         'activity.create',
         'project.read',
+        'operations.admin_dashboard.read',
         'operations.compliance.read',
         'operations.compliance.manage',
+        'operations.governance_documents.upload',
+        'operations.hr_documents.support',
+        'operations.inventory.read',
+        'operations.assets.read',
+        'operations.procurement_evidence.manage',
+        'operations.procurement.prepare',
+        'operations.liquidation.support',
+    ],
+    LOGISTICS_FINANCE_ASSISTANT: [
+        'activity.read',
+        'approval.read',
+        'project.read',
+        'volunteer.submit',
+        'volunteer.read_own',
+        'operations.logistics_dashboard.read',
         'operations.inventory.read',
         'operations.inventory.request',
         'operations.inventory.manage',
+        'operations.stock.minor_issue.approve',
+        'operations.delivery.verify',
         'operations.assets.read',
         'operations.assets.checkout',
         'operations.assets.manage',
+        'operations.asset.return.verify',
         'operations.procurement_evidence.manage',
+        'operations.procurement.prepare',
+        'operations.liquidation.support',
         'operations.challenge_course.read',
+        'operations.challenge_course.manage',
     ],
     SRHR_OFFICER: programOfficerPermissions,
     PROGRAMS_ME_OFFICER: programOfficerPermissions,
@@ -237,13 +268,14 @@ rolePermissionFallbacks.SRHR_OFFICER.push(
     'DIRECTOR',
     'FINANCE_OFFICER',
     'ADMIN_FINANCE_ASSISTANT',
+    'LOGISTICS_FINANCE_ASSISTANT',
     'SRHR_OFFICER',
     'PROGRAMS_ME_OFFICER',
     'MEL_OFFICER'
 ].forEach(role => {
     if (rolePermissionFallbacks[role]) {
         rolePermissionFallbacks[role].push('announcement.create');
-        if (role !== 'ADMIN_FINANCE_ASSISTANT') {
+        if (!['ADMIN_FINANCE_ASSISTANT', 'LOGISTICS_FINANCE_ASSISTANT'].includes(role)) {
             rolePermissionFallbacks[role].push('announcement.approve');
         }
     }
@@ -395,6 +427,56 @@ export const getUserContext = async (userId) => {
         permissions.add(permission);
     }
 
+    let roleAccessProfile = null;
+    let userAccessProfile = null;
+    try {
+        const roleProfileRows = await sql`
+            SELECT *
+            FROM role_access_profiles
+            WHERE role_code = ${user.role_code}
+            LIMIT 1
+        `;
+        roleAccessProfile = roleProfileRows[0] || null;
+    } catch (profileErr) {
+        console.warn('Could not load role access profile:', profileErr.message);
+    }
+
+    try {
+        const userProfileRows = await sql`
+            SELECT *
+            FROM user_access_profiles
+            WHERE user_id = ${user.id}
+            LIMIT 1
+        `;
+        userAccessProfile = userProfileRows[0] || null;
+    } catch (profileErr) {
+        console.warn('Could not load user access profile:', profileErr.message);
+    }
+
+    const accessProfile = {
+        organizational_unit:
+            userAccessProfile?.organizational_unit ||
+            roleAccessProfile?.organizational_unit ||
+            identity.department,
+        functional_access: roleAccessProfile?.functional_access || [],
+        sensitivity_clearance:
+            userAccessProfile?.sensitivity_clearance ||
+            roleAccessProfile?.sensitivity_clearance ||
+            'internal',
+        operational_scope: roleAccessProfile?.operational_scope || {},
+        approval_scope: {
+            ...(roleAccessProfile?.approval_scope || {}),
+            ...(userAccessProfile?.approval_limits || {}),
+        },
+        restrictions: [
+            ...((roleAccessProfile?.restrictions || [])),
+            ...((userAccessProfile?.restrictions || [])),
+        ],
+        district_scope: userAccessProfile?.district_scope || null,
+        program_scope: userAccessProfile?.program_scope || null,
+        activity_scope: userAccessProfile?.activity_scope || null,
+    };
+
     // Role boundary enforcement
     // System settings and administrative user management should ONLY be accessible to SYSTEM_ADMIN (SUPER_ADMIN)
     if (systemRole !== SYSTEM_ROLES.SUPER_ADMIN) {
@@ -420,6 +502,7 @@ export const getUserContext = async (userId) => {
         department: identity.department,
         employment_type: identity.employmentType,
         identity,
+        access_profile: accessProfile,
         role_code: user.role_code,
         role_assignment_status: roleAssignmentStatus,
         role: toLegacyRole(user.role_code, systemRole),

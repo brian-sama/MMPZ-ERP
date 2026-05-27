@@ -19,6 +19,8 @@ import BudgetTrackerPage from './pages/BudgetTrackerPage';
 import GovernanceApprovalsPage from './pages/GovernanceApprovalsPage';
 import GovernanceCompliancePage from './pages/GovernanceCompliancePage';
 import InstitutionalCompliancePage from './pages/InstitutionalCompliancePage';
+import AdminFinanceDashboardPage from './pages/AdminFinanceDashboardPage';
+import OperationalLogisticsDashboardPage from './pages/OperationalLogisticsDashboardPage';
 import InventoryOperationsPage from './pages/InventoryOperationsPage';
 import AssetManagementPage from './pages/AssetManagementPage';
 import ChallengeCourseOperationsPage from './pages/ChallengeCourseOperationsPage';
@@ -91,6 +93,8 @@ export default function AppRouter() {
                 <Route path="/governance/confidential" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/governance/confidential')}><ExecutiveWorkspacePage /></ProtectedRoute>} />
 
                 {/* Operational Accountability Routes */}
+                <Route path="/operations/admin-finance" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/admin-finance')}><AdminFinanceDashboardPage /></ProtectedRoute>} />
+                <Route path="/operations/logistics" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/logistics')}><OperationalLogisticsDashboardPage /></ProtectedRoute>} />
                 <Route path="/operations/inventory" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/inventory')}><InventoryOperationsPage /></ProtectedRoute>} />
                 <Route path="/operations/assets" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/assets')}><AssetManagementPage /></ProtectedRoute>} />
                 <Route path="/operations/challenge-course" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/operations/challenge-course')}><ChallengeCourseOperationsPage /></ProtectedRoute>} />

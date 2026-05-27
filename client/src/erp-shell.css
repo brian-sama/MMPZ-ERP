@@ -1694,7 +1694,17 @@ select:-webkit-autofill {
   color: #67e8f9;
 }
 
+.role-ADMIN_FINANCE_ASSISTANT {
+  background: rgba(6, 182, 212, 0.2);
+  color: #67e8f9;
+}
+
 .role-LOGISTICS_ASSISTANT {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fcd34d;
+}
+
+.role-LOGISTICS_FINANCE_ASSISTANT {
   background: rgba(245, 158, 11, 0.2);
   color: #fcd34d;
 }
@@ -2022,6 +2032,23 @@ select:-webkit-autofill {
 
 .surface-muted p {
   color: var(--text-secondary);
+}
+
+.access-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+}
+
+.access-profile-grid .surface-muted {
+  min-height: 136px;
+}
+
+.access-restriction-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 .control-stack {

@@ -52,7 +52,7 @@ const initialCheckout = {
 
 const canManageAssets = (user) =>
     user?.system_role === 'SUPER_ADMIN' ||
-    ['DIRECTOR', 'ADMIN_FINANCE_ASSISTANT', 'SYSTEM_ADMIN'].includes(user?.role_code);
+    ['DIRECTOR', 'LOGISTICS_FINANCE_ASSISTANT', 'SYSTEM_ADMIN'].includes(user?.role_code);
 
 export default function AssetManagementPage() {
     const { user } = useAuth();

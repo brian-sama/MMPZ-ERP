@@ -64,7 +64,7 @@ const initialDelivery = {
 
 const canManageInventory = (user) =>
     user?.system_role === 'SUPER_ADMIN' ||
-    ['DIRECTOR', 'FINANCE_OFFICER', 'ADMIN_FINANCE_ASSISTANT', 'SYSTEM_ADMIN'].includes(user?.role_code);
+    ['DIRECTOR', 'FINANCE_OFFICER', 'LOGISTICS_FINANCE_ASSISTANT', 'SYSTEM_ADMIN'].includes(user?.role_code);
 
 export default function InventoryOperationsPage() {
     const { user } = useAuth();

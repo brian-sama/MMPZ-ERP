@@ -17,10 +17,12 @@ import {
 } from './utils/rbac.js';
 
 const READ_OPERATIONS_PERMISSIONS = [
+    'operations.admin_dashboard.read',
     'operations.inventory.read',
     'operations.assets.read',
     'operations.compliance.read',
     'operations.challenge_course.read',
+    'operations.logistics_dashboard.read',
 ];
 
 const INVENTORY_MANAGE_PERMISSIONS = ['operations.inventory.manage'];
@@ -28,6 +30,18 @@ const ASSET_MANAGE_PERMISSIONS = ['operations.assets.manage', 'operations.assets
 const COMPLIANCE_MANAGE_PERMISSIONS = ['operations.compliance.manage'];
 const CHALLENGE_MANAGE_PERMISSIONS = ['operations.challenge_course.manage'];
 const PROCUREMENT_EVIDENCE_PERMISSIONS = ['operations.procurement_evidence.manage'];
+const ADMIN_DASHBOARD_PERMISSIONS = [
+    'operations.admin_dashboard.read',
+    'operations.compliance.manage',
+    'operations.procurement_evidence.manage',
+    'operations.liquidation.support',
+];
+const LOGISTICS_DASHBOARD_PERMISSIONS = [
+    'operations.logistics_dashboard.read',
+    'operations.inventory.manage',
+    'operations.delivery.verify',
+    'operations.liquidation.support',
+];
 
 const REQUIRED_TABLES = [
     'inventory_items',
@@ -81,6 +95,17 @@ const ensureOperationalSchema = async () => {
             503
         );
     }
+};
+
+const tableExists = async (tableName) => {
+    const rows = await sql`
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = current_schema()
+          AND table_name = ${tableName}
+        LIMIT 1
+    `;
+    return rows.length > 0;
 };
 
 const getRoute = (event) =>
@@ -547,6 +572,570 @@ const loadDashboard = async (actor) => {
     }
 
     return { inventory, assets, compliance, challenge_course: challenge, confidential };
+};
+
+const writeAccessEvent = async (actor, payload, event = {}) => {
+    if (!(await tableExists('access_events'))) return;
+    await sql`
+        INSERT INTO access_events (
+            actor_user_id,
+            action,
+            module_code,
+            entity_type,
+            entity_id,
+            sensitivity_level,
+            organizational_unit,
+            outcome,
+            ip_address,
+            user_agent,
+            metadata
+        )
+        VALUES (
+            ${actor.id},
+            ${payload.action || 'viewed'},
+            ${payload.module_code || null},
+            ${payload.entity_type || null},
+            ${payload.entity_id || null},
+            ${payload.sensitivity_level || 'internal'},
+            ${actor.access_profile?.organizational_unit || actor.department || null},
+            ${payload.outcome || 'allowed'},
+            ${asNullableText(event.headers?.['x-forwarded-for']) || asNullableText(event.headers?.['x-real-ip'])},
+            ${asNullableText(event.headers?.['user-agent'])},
+            ${sql.json(payload.metadata || {})}
+        )
+    `;
+};
+
+const loadRoleAccessProfile = async (actor) => {
+    if (!(await tableExists('role_access_profiles'))) return actor.access_profile || null;
+    const rows = await sql`
+        SELECT *
+        FROM role_access_profiles
+        WHERE role_code = ${actor.role_code}
+        LIMIT 1
+    `;
+    return rows[0] || actor.access_profile || null;
+};
+
+const loadLogisticsDashboard = async (actor, event) => {
+    ensureAnyPermission(actor, LOGISTICS_DASHBOARD_PERMISSIONS, { allowPending: true });
+
+    const fundingEnabled =
+        (await tableExists('funding_requests')) &&
+        (await tableExists('liquidations')) &&
+        (await tableExists('unified_submissions'));
+
+    const [
+        metricsRows,
+        pendingDeliveries,
+        lowStock,
+        assetReturnsDue,
+        procurementEvidenceGaps,
+        pendingStoreRequests,
+        vehicleAvailability,
+        challengeCourseEquipment,
+        upcomingActivities,
+        accessProfile,
+    ] = await Promise.all([
+        sql`
+            WITH inventory_metrics AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE available_quantity <= minimum_threshold)::int AS low_stock_count
+                FROM inventory_item_balances
+            ),
+            delivery_metrics AS (
+                SELECT COUNT(*) FILTER (WHERE status = 'draft')::int AS pending_delivery_count
+                FROM delivery_notes
+            ),
+            asset_metrics AS (
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE status = 'checked_out'
+                          AND expected_return_date < CURRENT_DATE
+                    )::int AS overdue_asset_return_count,
+                    COUNT(*) FILTER (
+                        WHERE status = 'checked_out'
+                          AND expected_return_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+                    )::int AS asset_returns_due_7_days
+                FROM asset_assignments
+            ),
+            store_request_metrics AS (
+                SELECT COUNT(*) FILTER (WHERE status IN ('submitted', 'reviewed', 'approved'))::int AS pending_store_request_count
+                FROM stock_requests
+            ),
+            vehicle_metrics AS (
+                SELECT
+                    COUNT(*) FILTER (WHERE a.status = 'available')::int AS available_vehicle_count,
+                    COUNT(*) FILTER (
+                        WHERE a.status = 'maintenance'
+                           OR vp.insurance_expiry <= CURRENT_DATE + INTERVAL '30 days'
+                           OR vp.service_due_date <= CURRENT_DATE + INTERVAL '30 days'
+                    )::int AS vehicle_attention_count
+                FROM vehicle_profiles vp
+                JOIN assets a ON a.id = vp.asset_id
+            ),
+            challenge_equipment_metrics AS (
+                SELECT COUNT(*) FILTER (
+                    WHERE cce.status <> 'available'
+                       OR cce.condition_status IN ('poor', 'damaged')
+                       OR COALESCE(iib.available_quantity, 0) <= cce.operational_threshold
+                )::int AS challenge_equipment_attention_count
+                FROM challenge_course_equipment cce
+                LEFT JOIN inventory_item_balances iib ON iib.id = cce.inventory_item_id
+            ),
+            procurement_metrics AS (
+                SELECT COUNT(*)::int AS pending_procurement_upload_count
+                FROM procurement_requests pr
+                WHERE pr.status IN ('draft', 'pending_approval', 'approved', 'ordered')
+                  AND (
+                    NOT EXISTS (
+                        SELECT 1
+                        FROM procurement_evidence pe
+                        WHERE pe.entity_type = 'procurement_request'
+                          AND pe.entity_id = pr.id::text
+                          AND pe.evidence_type = 'quotation'
+                    )
+                    OR (
+                        pr.status IN ('approved', 'ordered')
+                        AND NOT EXISTS (
+                            SELECT 1
+                            FROM procurement_evidence pe
+                            WHERE pe.entity_type = 'procurement_request'
+                              AND pe.entity_id = pr.id::text
+                              AND pe.evidence_type IN ('receipt', 'delivery_note', 'payment_voucher')
+                        )
+                    )
+                  )
+            )
+            SELECT
+                COALESCE(im.low_stock_count, 0) AS low_stock_count,
+                COALESCE(dm.pending_delivery_count, 0) AS pending_delivery_count,
+                COALESCE(am.overdue_asset_return_count, 0) AS overdue_asset_return_count,
+                COALESCE(am.asset_returns_due_7_days, 0) AS asset_returns_due_7_days,
+                COALESCE(srm.pending_store_request_count, 0) AS pending_store_request_count,
+                COALESCE(vm.available_vehicle_count, 0) AS available_vehicle_count,
+                COALESCE(vm.vehicle_attention_count, 0) AS vehicle_attention_count,
+                COALESCE(ccem.challenge_equipment_attention_count, 0) AS challenge_equipment_attention_count,
+                COALESCE(pm.pending_procurement_upload_count, 0) AS pending_procurement_upload_count
+            FROM inventory_metrics im, delivery_metrics dm, asset_metrics am, store_request_metrics srm, vehicle_metrics vm, challenge_equipment_metrics ccem, procurement_metrics pm
+        `,
+        sql`
+            SELECT
+                dn.*,
+                receiver.name AS received_by_name,
+                pr.title AS procurement_title
+            FROM delivery_notes dn
+            LEFT JOIN users receiver ON receiver.id = dn.received_by_user_id
+            LEFT JOIN procurement_requests pr ON pr.id = dn.procurement_request_id
+            WHERE dn.status = 'draft'
+            ORDER BY dn.delivery_date ASC, dn.created_at ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT *
+            FROM inventory_item_balances
+            WHERE available_quantity <= minimum_threshold
+            ORDER BY available_quantity ASC, name ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                aa.*,
+                a.asset_code,
+                a.name AS asset_name,
+                assigned.name AS assigned_to_name
+            FROM asset_assignments aa
+            JOIN assets a ON a.id = aa.asset_id
+            LEFT JOIN users assigned ON assigned.id = aa.assigned_to_user_id
+            WHERE aa.status = 'checked_out'
+              AND aa.expected_return_date <= CURRENT_DATE + INTERVAL '7 days'
+            ORDER BY aa.expected_return_date ASC NULLS LAST
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                pr.id,
+                pr.title,
+                pr.status,
+                pr.total_estimated_cost,
+                pr.created_at,
+                requester.name AS requester_name,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation')::int AS quotation_count,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'receipt')::int AS receipt_count,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'delivery_note')::int AS delivery_note_count
+            FROM procurement_requests pr
+            LEFT JOIN users requester ON requester.id = pr.requested_by_user_id
+            LEFT JOIN procurement_evidence pe
+              ON pe.entity_type = 'procurement_request'
+             AND pe.entity_id = pr.id::text
+            WHERE pr.status IN ('draft', 'pending_approval', 'approved', 'ordered')
+            GROUP BY pr.id, requester.name
+            HAVING
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation') = 0
+                OR (
+                    pr.status IN ('approved', 'ordered')
+                    AND COUNT(pe.id) FILTER (WHERE pe.evidence_type IN ('receipt', 'delivery_note', 'payment_voucher')) = 0
+                )
+            ORDER BY pr.created_at DESC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                sr.*,
+                requester.name AS requester_name,
+                approver.name AS approver_name,
+                (
+                    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                        'item_name', ii.name,
+                        'quantity_requested', sri.quantity_requested,
+                        'quantity_approved', sri.quantity_approved,
+                        'unit', ii.unit
+                    ) ORDER BY ii.name), '[]'::jsonb)
+                    FROM stock_request_items sri
+                    JOIN inventory_items ii ON ii.id = sri.item_id
+                    WHERE sri.request_id = sr.id
+                ) AS items
+            FROM stock_requests sr
+            LEFT JOIN users requester ON requester.id = sr.requested_by_user_id
+            LEFT JOIN users approver ON approver.id = sr.approved_by_user_id
+            WHERE sr.status IN ('submitted', 'reviewed', 'approved')
+            ORDER BY sr.created_at ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                vp.*,
+                a.asset_code,
+                a.name AS asset_name,
+                a.status AS asset_status,
+                a.condition_status,
+                a.current_location
+            FROM vehicle_profiles vp
+            JOIN assets a ON a.id = vp.asset_id
+            ORDER BY
+                CASE
+                    WHEN a.status = 'available' THEN 0
+                    WHEN a.status = 'checked_out' THEN 1
+                    ELSE 2
+                END,
+                vp.service_due_date ASC NULLS LAST
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                cce.*,
+                a.asset_code,
+                a.status AS asset_status,
+                iib.name AS inventory_item_name,
+                iib.available_quantity,
+                iib.unit
+            FROM challenge_course_equipment cce
+            LEFT JOIN assets a ON a.id = cce.asset_id
+            LEFT JOIN inventory_item_balances iib ON iib.id = cce.inventory_item_id
+            ORDER BY
+                CASE
+                    WHEN cce.status <> 'available' THEN 0
+                    WHEN cce.condition_status IN ('poor', 'damaged') THEN 1
+                    WHEN COALESCE(iib.available_quantity, 0) <= cce.operational_threshold THEN 2
+                    ELSE 3
+                END,
+                cce.name ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                a.id,
+                a.description,
+                a.category,
+                a.activity_date,
+                a.cost,
+                p.name AS project_name,
+                pg.name AS program_name,
+                assigned.name AS assigned_user_name
+            FROM activities a
+            LEFT JOIN projects p ON p.id = a.project_id
+            LEFT JOIN programs pg ON pg.id = p.program_id
+            LEFT JOIN users assigned ON assigned.id = a.assigned_user_id
+            WHERE a.activity_date >= CURRENT_DATE
+              AND a.category IN ('materials', 'equipment', 'procurement', 'logistics', 'training')
+            ORDER BY a.activity_date ASC
+            LIMIT 8
+        `,
+        loadRoleAccessProfile(actor),
+    ]);
+
+    const pendingLiquidations = fundingEnabled
+        ? await sql`
+            SELECT
+                fr.id,
+                fr.activity_name,
+                fr.total_requested_amount,
+                fr.created_at,
+                submitter.name AS submitter_name,
+                s.status AS submission_status,
+                COALESCE(l.status, 'missing') AS liquidation_status,
+                l.receipts,
+                l.actual_amount_spent
+            FROM funding_requests fr
+            LEFT JOIN users submitter ON submitter.id = fr.submitter_user_id
+            LEFT JOIN unified_submissions s ON s.id = fr.submission_id
+            LEFT JOIN liquidations l ON l.funding_request_id = fr.id
+            WHERE s.status = 'approved'
+              AND (l.id IS NULL OR l.status <> 'verified')
+            ORDER BY fr.created_at DESC
+            LIMIT 8
+        `
+        : [];
+
+    await writeAccessEvent(
+        actor,
+        {
+            action: 'viewed',
+            module_code: 'operations.logistics_dashboard',
+            entity_type: 'dashboard',
+            sensitivity_level: 'internal',
+            metadata: { role_code: actor.role_code },
+        },
+        event,
+    );
+
+    return {
+        metrics: {
+            ...(metricsRows[0] || {}),
+            pending_liquidation_count: pendingLiquidations.length,
+        },
+        pending_deliveries: pendingDeliveries,
+        low_stock: lowStock,
+        asset_returns_due: assetReturnsDue,
+        procurement_evidence_gaps: procurementEvidenceGaps,
+        pending_store_requests: pendingStoreRequests,
+        vehicle_availability: vehicleAvailability,
+        challenge_course_equipment: challengeCourseEquipment,
+        pending_liquidations: pendingLiquidations,
+        upcoming_activity_logistics: upcomingActivities,
+        access_profile: accessProfile,
+    };
+};
+
+const loadAdminFinanceDashboard = async (actor, event) => {
+    ensureAnyPermission(actor, ADMIN_DASHBOARD_PERMISSIONS, { allowPending: true });
+
+    const fundingEnabled =
+        (await tableExists('funding_requests')) &&
+        (await tableExists('liquidations')) &&
+        (await tableExists('unified_submissions'));
+
+    const [
+        metricsRows,
+        pendingApprovals,
+        pendingFinanceDocuments,
+        upcomingBoardMeetings,
+        complianceExpiryAlerts,
+        uploadedQuotations,
+        meetingRecords,
+        accessProfile,
+    ] = await Promise.all([
+        sql`
+            WITH approval_metrics AS (
+                SELECT COUNT(*) FILTER (WHERE status = 'pending')::int AS pending_approval_count
+                FROM approvals
+            ),
+            procurement_metrics AS (
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE pr.status IN ('draft', 'pending_approval', 'approved', 'ordered')
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM procurement_evidence pe
+                              WHERE pe.entity_type = 'procurement_request'
+                                AND pe.entity_id = pr.id::text
+                                AND pe.evidence_type = 'quotation'
+                          )
+                    )::int AS missing_quotation_count,
+                    COUNT(*) FILTER (
+                        WHERE pr.status IN ('approved', 'ordered')
+                          AND NOT EXISTS (
+                              SELECT 1
+                              FROM procurement_evidence pe
+                              WHERE pe.entity_type = 'procurement_request'
+                                AND pe.entity_id = pr.id::text
+                                AND pe.evidence_type IN ('receipt', 'payment_voucher', 'invoice')
+                          )
+                    )::int AS missing_receipt_count
+                FROM procurement_requests pr
+            ),
+            compliance_metrics AS (
+                SELECT COUNT(*) FILTER (
+                    WHERE expiry_date IS NOT NULL
+                      AND expiry_date <= CURRENT_DATE + INTERVAL '60 days'
+                      AND compliance_status <> 'archived'
+                )::int AS compliance_expiry_count
+                FROM compliance_records
+            ),
+            board_metrics AS (
+                SELECT COUNT(*) FILTER (
+                    WHERE start_at >= NOW()
+                      AND (
+                          event_type IN ('board_meeting', 'governance_meeting')
+                          OR title ILIKE '%board%'
+                          OR title ILIKE '%governance%'
+                      )
+                )::int AS upcoming_board_meeting_count
+                FROM calendar_events
+            ),
+            document_metrics AS (
+                SELECT COUNT(*) FILTER (
+                    WHERE category ILIKE ANY(ARRAY['%quotation%', '%receipt%', '%finance%', '%liquidation%', '%governance%', '%board%', '%policy%', '%hr%', '%staff%'])
+                      OR title ILIKE ANY(ARRAY['%quotation%', '%receipt%', '%liquidation%', '%minutes%', '%board%', '%policy%', '%contract%'])
+                )::int AS administrative_document_count
+                FROM document_library_files
+            )
+            SELECT
+                COALESCE(am.pending_approval_count, 0) AS pending_approval_count,
+                COALESCE(pm.missing_quotation_count, 0) AS missing_quotation_count,
+                COALESCE(pm.missing_receipt_count, 0) AS missing_receipt_count,
+                COALESCE(cm.compliance_expiry_count, 0) AS compliance_expiry_count,
+                COALESCE(bm.upcoming_board_meeting_count, 0) AS upcoming_board_meeting_count,
+                COALESCE(dm.administrative_document_count, 0) AS administrative_document_count
+            FROM approval_metrics am, procurement_metrics pm, compliance_metrics cm, board_metrics bm, document_metrics dm
+        `,
+        sql`
+            SELECT
+                ap.*,
+                requester.name AS requester_name
+            FROM approvals ap
+            LEFT JOIN users requester ON requester.id = ap.requested_by_user_id
+            WHERE ap.status = 'pending'
+            ORDER BY ap.created_at ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                pr.id,
+                pr.title,
+                pr.status,
+                pr.total_estimated_cost,
+                pr.created_at,
+                requester.name AS requester_name,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation')::int AS quotation_count,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type IN ('receipt', 'invoice', 'payment_voucher'))::int AS receipt_count
+            FROM procurement_requests pr
+            LEFT JOIN users requester ON requester.id = pr.requested_by_user_id
+            LEFT JOIN procurement_evidence pe
+              ON pe.entity_type = 'procurement_request'
+             AND pe.entity_id = pr.id::text
+            WHERE pr.status IN ('draft', 'pending_approval', 'approved', 'ordered')
+            GROUP BY pr.id, requester.name
+            HAVING
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation') = 0
+                OR (
+                    pr.status IN ('approved', 'ordered')
+                    AND COUNT(pe.id) FILTER (WHERE pe.evidence_type IN ('receipt', 'invoice', 'payment_voucher')) = 0
+                )
+            ORDER BY pr.created_at DESC
+            LIMIT 8
+        `,
+        sql`
+            SELECT *
+            FROM calendar_events
+            WHERE start_at >= NOW()
+              AND (
+                  event_type IN ('board_meeting', 'governance_meeting')
+                  OR title ILIKE '%board%'
+                  OR title ILIKE '%governance%'
+              )
+            ORDER BY start_at ASC
+            LIMIT 8
+        `,
+        sql`
+            SELECT *
+            FROM compliance_records
+            WHERE compliance_status <> 'archived'
+              AND (
+                  expiry_date <= CURRENT_DATE + INTERVAL '60 days'
+                  OR compliance_status IN ('at_risk', 'expired')
+              )
+            ORDER BY expiry_date ASC NULLS LAST, updated_at DESC
+            LIMIT 8
+        `,
+        sql`
+            SELECT
+                pr.id,
+                pr.title,
+                pr.status,
+                pr.created_at,
+                requester.name AS requester_name,
+                COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation')::int AS quotation_count
+            FROM procurement_requests pr
+            LEFT JOIN users requester ON requester.id = pr.requested_by_user_id
+            LEFT JOIN procurement_evidence pe
+              ON pe.entity_type = 'procurement_request'
+             AND pe.entity_id = pr.id::text
+            GROUP BY pr.id, requester.name
+            HAVING COUNT(pe.id) FILTER (WHERE pe.evidence_type = 'quotation') > 0
+            ORDER BY pr.created_at DESC
+            LIMIT 8
+        `,
+        sql`
+            SELECT *
+            FROM document_library_files
+            WHERE category ILIKE ANY(ARRAY['%meeting%', '%board%', '%governance%', '%policy%', '%hr%', '%staff%'])
+               OR title ILIKE ANY(ARRAY['%minutes%', '%board%', '%meeting%', '%policy%', '%contract%', '%staff%'])
+            ORDER BY created_at DESC
+            LIMIT 8
+        `,
+        loadRoleAccessProfile(actor),
+    ]);
+
+    const pendingLiquidations = fundingEnabled
+        ? await sql`
+            SELECT
+                fr.id,
+                fr.activity_name,
+                fr.total_requested_amount,
+                fr.created_at,
+                submitter.name AS submitter_name,
+                s.status AS submission_status,
+                COALESCE(l.status, 'missing') AS liquidation_status,
+                l.receipts,
+                l.actual_amount_spent
+            FROM funding_requests fr
+            LEFT JOIN users submitter ON submitter.id = fr.submitter_user_id
+            LEFT JOIN unified_submissions s ON s.id = fr.submission_id
+            LEFT JOIN liquidations l ON l.funding_request_id = fr.id
+            WHERE s.status IN ('submitted', 'reviewed', 'verified', 'approved')
+              AND (l.id IS NULL OR l.status <> 'verified')
+            ORDER BY fr.created_at DESC
+            LIMIT 8
+        `
+        : [];
+
+    await writeAccessEvent(
+        actor,
+        {
+            action: 'viewed',
+            module_code: 'operations.admin_finance_dashboard',
+            entity_type: 'dashboard',
+            sensitivity_level: 'confidential',
+            metadata: { role_code: actor.role_code },
+        },
+        event,
+    );
+
+    return {
+        metrics: {
+            ...(metricsRows[0] || {}),
+            pending_liquidation_count: pendingLiquidations.length,
+        },
+        pending_approvals: pendingApprovals,
+        pending_finance_documents: pendingFinanceDocuments,
+        upcoming_board_meetings: upcomingBoardMeetings,
+        compliance_expiry_alerts: complianceExpiryAlerts,
+        pending_liquidations: pendingLiquidations,
+        uploaded_quotations: uploadedQuotations,
+        meeting_records: meetingRecords,
+        access_profile: accessProfile,
+    };
 };
 
 const assertStockAvailable = async (dbClient, itemId, quantity, movementDirection) => {
@@ -1417,6 +2006,12 @@ export const handler = async (event) => {
             if (!resource || resource === 'dashboard') {
                 ensureAnyPermission(actor, READ_OPERATIONS_PERMISSIONS, { allowPending: true });
                 return successResponse(await loadDashboard(actor));
+            }
+            if (resource === 'admin-finance-dashboard') {
+                return successResponse(await loadAdminFinanceDashboard(actor, event));
+            }
+            if (resource === 'logistics-dashboard') {
+                return successResponse(await loadLogisticsDashboard(actor, event));
             }
             if (resource === 'inventory') {
                 ensurePermission(actor, 'operations.inventory.read', { allowPending: true });

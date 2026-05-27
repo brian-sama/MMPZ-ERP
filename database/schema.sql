@@ -34,7 +34,8 @@ VALUES
     ('DIRECTOR', 'Director', 'Executive authority for strategic and final approvals', TRUE),
     ('SYSTEM_ADMIN', 'System Administrator', 'Highest level of administrative access and control.', TRUE),
     ('FINANCE_OFFICER', 'Finance Officer', 'Financial accountability and administrative leadership', FALSE),
-    ('ADMIN_FINANCE_ASSISTANT', 'Admin & Finance Assistant', 'Procurement, finance and logistics support', FALSE),
+    ('ADMIN_FINANCE_ASSISTANT', 'Admin & Finance Assistant', 'Administrative operations, finance documentation, governance support, records coordination, scheduling, and internal administration.', FALSE),
+    ('LOGISTICS_FINANCE_ASSISTANT', 'Logistics & Finance Assistant', 'Operational logistics, inventory, delivery notes, assets, vehicles, warehouse records, procurement logistics, and field distribution coordination.', FALSE),
     ('SRHR_OFFICER', 'SRHR Officer', 'Technical lead for SRHR and psychosocial support', FALSE),
     ('PROGRAMS_ME_OFFICER', 'Programs & M&E Officer', 'Technical lead for programs and M&E alignment', FALSE),
     ('MEL_OFFICER', 'MEL Officer', 'Monitoring, evaluation and learning oversight', FALSE),
@@ -206,6 +207,7 @@ SET role_code = CASE
         'SYSTEM_ADMIN',
         'FINANCE_OFFICER',
         'ADMIN_FINANCE_ASSISTANT',
+        'LOGISTICS_FINANCE_ASSISTANT',
         'SRHR_OFFICER',
         'PROGRAMS_ME_OFFICER',
         'MEL_OFFICER',
@@ -216,7 +218,7 @@ SET role_code = CASE
     ) THEN UPPER(role_code)
     WHEN UPPER(role_code) = 'FINANCE_ADMIN_OFFICER' THEN 'FINANCE_OFFICER'
     WHEN UPPER(role_code) = 'ADMIN_ASSISTANT' THEN 'ADMIN_FINANCE_ASSISTANT'
-    WHEN UPPER(role_code) = 'LOGISTICS_ASSISTANT' THEN 'ADMIN_FINANCE_ASSISTANT'
+    WHEN UPPER(role_code) = 'LOGISTICS_ASSISTANT' THEN 'LOGISTICS_FINANCE_ASSISTANT'
     WHEN UPPER(role_code) = 'PSYCHOSOCIAL_SUPPORT_OFFICER' THEN 'SRHR_OFFICER'
     WHEN UPPER(role_code) = 'COMMUNITY_DEVELOPMENT_OFFICER' THEN 'PROGRAMS_ME_OFFICER'
     WHEN UPPER(role_code) = 'ME_INTERN_ACTING_OFFICER' THEN 'MEL_OFFICER'
@@ -243,6 +245,7 @@ WHERE role_assignment_status IS NULL
            'SYSTEM_ADMIN',
            'FINANCE_OFFICER',
            'ADMIN_FINANCE_ASSISTANT',
+           'LOGISTICS_FINANCE_ASSISTANT',
            'SRHR_OFFICER',
            'PROGRAMS_ME_OFFICER',
            'MEL_OFFICER',
@@ -259,6 +262,7 @@ SET system_role = CASE
     WHEN role_code = 'SYSTEM_ADMIN' THEN 'SUPER_ADMIN'
     WHEN role_code = 'FINANCE_OFFICER' THEN 'PROGRAM_STAFF'
     WHEN role_code = 'ADMIN_FINANCE_ASSISTANT' THEN 'OPERATIONS'
+    WHEN role_code = 'LOGISTICS_FINANCE_ASSISTANT' THEN 'OPERATIONS'
     WHEN role_code = 'SRHR_OFFICER' THEN 'PROGRAM_STAFF'
     WHEN role_code = 'PROGRAMS_ME_OFFICER' THEN 'PROGRAM_STAFF'
     WHEN role_code = 'MEL_OFFICER' THEN 'INTERN'
