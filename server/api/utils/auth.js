@@ -74,10 +74,28 @@ export const isValidEmail = (email) => {
  * @returns {Object} Validation result with isValid and message
  */
 export const validatePassword = (password) => {
-    if (!password || password.length < 6) {
+    if (!password || password.length < 8) {
         return {
             isValid: false,
-            message: 'Password must be at least 6 characters long',
+            message: 'Password must be at least 8 characters long',
+        };
+    }
+    if (!/[A-Z]/.test(password)) {
+        return {
+            isValid: false,
+            message: 'Password must contain at least one uppercase letter',
+        };
+    }
+    if (!/[0-9]/.test(password)) {
+        return {
+            isValid: false,
+            message: 'Password must contain at least one number',
+        };
+    }
+    if (!/[^A-Za-z0-9]/.test(password)) {
+        return {
+            isValid: false,
+            message: 'Password must contain at least one special character',
         };
     }
     return {

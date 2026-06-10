@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LogOut, User } from 'lucide-react';
+import { LogOut, User, BarChart3, ExternalLink } from 'lucide-react';
 import axios from 'axios';
 import API_BASE from '../apiConfig';
 import { useAuth } from '../context/AuthContext';
@@ -58,8 +58,48 @@ const compressAvatarImage = (file) =>
         image.src = objectUrl;
     });
 
+function AppSwitcher({ token }) {
+    const [switching, setSwitching] = React.useState(false);
+
+    const handleSwitch = async () => {
+        if (switching || !token) return;
+        setSwitching(true);
+        try {
+            const res = await fetch('/api/auth/handoff', {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok) throw new Error('handoff_failed');
+            const data = await res.json();
+            window.location.href = data.handoffUrl;
+        } catch {
+            setSwitching(false);
+        }
+    };
+
+    return (
+        <div style={{ padding: '8px 12px 4px', borderTop: '1px solid var(--border-color, rgba(255,255,255,0.08))' }}>
+            <div style={{ fontSize: '9px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px', paddingLeft: '2px', fontWeight: 600 }}>
+                Apps
+            </div>
+            <button
+                type="button"
+                onClick={handleSwitch}
+                disabled={switching || !token}
+                title="Switch to M&E Compass"
+                className="sidebar-nav-item"
+                style={{ width: '100%', cursor: switching ? 'wait' : 'pointer', opacity: switching ? 0.6 : 1, background: 'none', border: 'none', textAlign: 'left' }}
+            >
+                <BarChart3 size={18} className="sidebar-nav-icon" />
+                <span style={{ flex: 1 }}>{switching ? 'Switching…' : 'M&E Compass'}</span>
+                <ExternalLink size={12} style={{ opacity: 0.4, flexShrink: 0 }} />
+            </button>
+        </div>
+    );
+}
+
 export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }) {
-    const { user, updateUserProfile, logout } = useAuth();
+    const { user, token, updateUserProfile, logout } = useAuth();
     const { theme } = useTheme();
     const navigate = useNavigate();
     const [updating, setUpdating] = React.useState(false);
@@ -147,6 +187,7 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
                     </div>
                 ))}
             </nav>
+            <AppSwitcher token={token} />
             <div className="sidebar-footer">
                 <input 
                     type="file" 

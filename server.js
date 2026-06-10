@@ -53,10 +53,78 @@ import { handler as integrationMasterDataHandler } from "./server/api/integratio
 import { handler as integrationMeSummariesHandler } from "./server/api/integration-me-summaries.js";
 import { handler as operationsHandler } from "./server/api/operations.js";
 import { subscribeRealtime } from "./server/api/utils/notification-center.js";
+import crypto from "crypto";
 import {
   getBearerTokenFromHeaders,
+  issueSessionToken,
   verifySessionToken,
 } from "./server/api/utils/session-token.js";
+
+// Short-lived single-use tickets for EventSource connections (60 second TTL).
+// Keyed by ticket string → { userId, expiresAt }.
+const sseTickets = new Map();
+const SSE_TICKET_TTL_MS = 60_000;
+
+function issueSseTicket(userId) {
+  const ticket = crypto.randomBytes(24).toString("hex");
+  sseTickets.set(ticket, { userId, expiresAt: Date.now() + SSE_TICKET_TTL_MS });
+  return ticket;
+}
+
+function redeemSseTicket(ticket) {
+  const entry = sseTickets.get(ticket);
+  if (!entry) return null;
+  sseTickets.delete(ticket);
+  if (Date.now() > entry.expiresAt) return null;
+  return entry.userId;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of sseTickets) {
+    if (now > entry.expiresAt) sseTickets.delete(key);
+  }
+}, 5 * 60 * 1000);
+
+// Handoff token helpers — 60-second single-use tokens for cross-app SSO.
+// ERP signs with ERP_INTEGRATION_TOKEN; M&E verifies with the same key (and vice versa).
+const HANDOFF_TTL_MS = 60_000;
+
+function createHandoffToken(email, signingKey) {
+  const payload = Buffer.from(
+    JSON.stringify({ email, exp: Date.now() + HANDOFF_TTL_MS }),
+    "utf8",
+  ).toString("base64url");
+  const sig = crypto.createHmac("sha256", signingKey).update(payload).digest("base64url");
+  return `${payload}.${sig}`;
+}
+
+function verifyHandoffToken(token, signingKey) {
+  const dot = token.indexOf(".");
+  if (dot < 0) return null;
+  const payload = token.slice(0, dot);
+  const sig = token.slice(dot + 1);
+  const expected = crypto.createHmac("sha256", signingKey).update(payload).digest("base64url");
+  const expectedBuf = Buffer.from(expected);
+  const sigBuf = Buffer.from(sig);
+  if (expectedBuf.length !== sigBuf.length || !crypto.timingSafeEqual(expectedBuf, sigBuf))
+    return null;
+  try {
+    const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+    if (!data.email || !data.exp || data.exp < Date.now()) return null;
+    return { email: data.email };
+  } catch {
+    return null;
+  }
+}
+
+function handoffErrorHtml(message) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Sign-in failed</title></head>
+<body style="font-family:sans-serif;max-width:480px;margin:64px auto;padding:0 16px">
+<h2>Sign-in failed</h2><p>${message}</p>
+<p><a href="/login">Return to login</a></p></body></html>`;
+}
+
 import { sql } from "./server/api/utils/db.js";
 import { buildIdentity } from "./server/api/utils/identity.js";
 import { resolveSystemRole, toLegacyRole } from "./server/api/utils/rbac.js";
@@ -95,6 +163,13 @@ const getClientIp = (req) =>
 const createRateLimiter = ({ windowMs, max, label }) => {
   const buckets = new Map();
 
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, bucket] of buckets) {
+      if (bucket.resetAt <= now) buckets.delete(key);
+    }
+  }, 5 * 60 * 1000);
+
   return (req, res, next) => {
     if (req.method === "OPTIONS") return next();
 
@@ -122,7 +197,24 @@ const createRateLimiter = ({ windowMs, max, label }) => {
 
 app.use(
   helmet({
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: [
+          "'self'",
+          "https://mmpzmne.co.zw",
+          "https://monitoring.mmpzmne.co.zw",
+        ],
+        fontSrc: ["'self'", "data:"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   }),
 );
@@ -225,19 +317,37 @@ app.use("/api/approvals/pending", functionToExpress(approvalsHandler));
 app.use("/api/approvals", functionToExpress(approvalsHandler));
 app.use("/api/progress/:id/approve", functionToExpress(approvalsHandler));
 
-// Notifications
-app.get("/api/notifications/stream", (req, res) => {
-  const token =
-    req.query.token ||
-    req.query.sessionToken ||
-    getBearerTokenFromHeaders(req.headers);
+// Exchange a session token for a short-lived SSE-only ticket.
+// The client calls this first, then connects to /stream with the ticket.
+app.post("/api/notifications/stream-token", (req, res) => {
+  const token = getBearerTokenFromHeaders(req.headers);
   const session = verifySessionToken(token);
   if (!session?.userId) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
+  res.json({ ticket: issueSseTicket(session.userId) });
+});
 
-  const userId = Number(session.userId);
+// Notifications
+app.get("/api/notifications/stream", (req, res) => {
+  // Prefer the short-lived SSE ticket; fall back to Bearer header for
+  // backwards-compatibility. Raw session tokens in query strings are no
+  // longer accepted — use the /stream-token endpoint instead.
+  let userId;
+  const ticket = req.query.ticket;
+  if (ticket) {
+    userId = redeemSseTicket(ticket);
+  } else {
+    const session = verifySessionToken(getBearerTokenFromHeaders(req.headers));
+    userId = session?.userId ?? null;
+  }
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const numericUserId = Number(userId);
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -247,11 +357,11 @@ app.get("/api/notifications/stream", (req, res) => {
   res.flushHeaders?.();
 
   const send = (payload) => {
-    if (payload?.user_id && Number(payload.user_id) !== userId) return;
+    if (payload?.user_id && Number(payload.user_id) !== numericUserId) return;
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
 
-  send({ kind: "connected", user_id: userId });
+  send({ kind: "connected", user_id: numericUserId });
   const unsubscribe = subscribeRealtime(send);
   const heartbeat = setInterval(() => {
     res.write("event: heartbeat\ndata: {}\n\n");
@@ -385,6 +495,135 @@ app.get("/api/me/session", async (req, res) => {
     },
   });
 });
+// Issues a 60-second handoff token the M&E server can verify to establish a Compass session.
+app.post("/api/auth/handoff", async (req, res) => {
+  const token = getBearerTokenFromHeaders(req.headers);
+  const session = verifySessionToken(token);
+  if (!session?.userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  const signingKey = process.env.ERP_INTEGRATION_TOKEN;
+  if (!signingKey) {
+    res.status(503).json({ error: "Cross-app handoff is not configured on this server." });
+    return;
+  }
+
+  const rows = await sql`SELECT email FROM users WHERE id = ${session.userId} LIMIT 1`;
+  if (!rows[0]?.email) {
+    res.status(404).json({ error: "User not found." });
+    return;
+  }
+
+  const meBaseUrl = (process.env.ME_PUBLIC_URL ?? "https://monitoring.mmpzmne.co.zw").replace(
+    /\/+$/,
+    "",
+  );
+  const handoffToken = createHandoffToken(rows[0].email, signingKey);
+  res.json({
+    handoffUrl: `${meBaseUrl}/api/auth/accept-handoff?token=${encodeURIComponent(handoffToken)}`,
+  });
+});
+
+// Accepts a 60-second handoff token from M&E and returns an HTML page that sets sessionStorage
+// and redirects to the dashboard. The AuthContext will re-verify via /api/me/session on mount.
+app.get("/api/auth/accept-handoff", async (req, res) => {
+  const rawToken = typeof req.query.token === "string" ? req.query.token : "";
+
+  const signingKey = process.env.ME_INTEGRATION_TOKEN;
+  if (!signingKey) {
+    res.status(503).send(handoffErrorHtml("Cross-app handoff is not configured on this server."));
+    return;
+  }
+
+  const claims = verifyHandoffToken(rawToken, signingKey);
+  if (!claims) {
+    res
+      .status(401)
+      .send(
+        handoffErrorHtml(
+          "This sign-in link has expired or is invalid. Please try switching apps again.",
+        ),
+      );
+    return;
+  }
+
+  const rows = await sql`SELECT id FROM users WHERE email = ${claims.email} LIMIT 1`;
+  if (!rows[0]) {
+    res.status(403).send(handoffErrorHtml("Your account was not found in the ERP system."));
+    return;
+  }
+
+  const sessionToken = issueSessionToken(rows[0].id);
+  // Encode token as base64 so it is safe to embed in a JS string literal.
+  const encodedToken = Buffer.from(sessionToken, "utf8").toString("base64");
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8").send(
+    `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Signing in…</title></head>
+<body>
+<script>
+try {
+  sessionStorage.setItem('mmpz_auth_token', atob('${encodedToken}'));
+  window.location.replace('/dashboard');
+} catch (e) {
+  window.location.replace('/login?error=handoff_failed');
+}
+</script>
+<noscript><meta http-equiv="refresh" content="0;url=/login?error=handoff_noscript"></noscript>
+</body>
+</html>`,
+  );
+});
+
+// Aggregated health status for the System Health panel in Settings.
+// Queries ERP DB for the last M&E summary sync and calls M&E's lightweight health endpoint.
+app.get("/api/admin/system-health", async (req, res) => {
+  const token = getBearerTokenFromHeaders(req.headers);
+  const session = verifySessionToken(token);
+  if (!session?.userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  // ERP-side: last time M&E summaries were received
+  const summaryRows = await sql`
+    SELECT COUNT(*) AS total, MAX(last_synced_at) AS last_received_at
+    FROM me_activity_summaries
+  `.catch(() => []);
+  const summaryStats = summaryRows[0] ?? { total: 0, last_received_at: null };
+
+  // M&E-side: call M&E health endpoint (5-second timeout, non-fatal if unreachable)
+  let meHealth = null;
+  const meInternalUrl = (process.env.ME_INTERNAL_API_URL ?? "").replace(/\/api\/?$/, "").replace(/\/+$/, "");
+  const meToken = process.env.ME_INTEGRATION_TOKEN;
+  if (meInternalUrl && meToken) {
+    try {
+      const ac = new AbortController();
+      const tid = setTimeout(() => ac.abort(), 5000);
+      const r = await fetch(`${meInternalUrl}/api/integration/health`, {
+        headers: { Authorization: `Bearer ${meToken}` },
+        signal: ac.signal,
+      });
+      clearTimeout(tid);
+      if (r.ok) meHealth = await r.json();
+    } catch {
+      // M&E unreachable — frontend will show "offline"
+    }
+  }
+
+  res.json({
+    checkedAt: new Date().toISOString(),
+    erp: {
+      lastReceivedMeSummaryAt: summaryStats.last_received_at ?? null,
+      totalMeSummariesStored: Number(summaryStats.total ?? 0),
+    },
+    me: meHealth,
+  });
+});
+
 app.post("/api/upload-avatar", uploadAvatarHandler);
 app.post("/api/me/upload-avatar", uploadAvatarHandler);
 app.use("/api/me/change-password", functionToExpress(changePasswordHandler));

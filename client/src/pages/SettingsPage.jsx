@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
+    Activity,
     Bell,
+    CheckCircle2,
     Database,
     Globe,
+    RefreshCw,
     Save,
     Shield,
-    ShieldCheck,
     Truck,
     Users,
+    WifiOff,
 } from 'lucide-react';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
@@ -41,6 +44,24 @@ export default function SettingsPage() {
     const [koboMessage, setKoboMessage] = useState('');
     const [koboError, setKoboError] = useState('');
     const [koboStorageReady, setKoboStorageReady] = useState(true);
+
+    // System Health state
+    const [health, setHealth] = useState(null);
+    const [healthLoading, setHealthLoading] = useState(true);
+    const [healthError, setHealthError] = useState('');
+
+    const fetchHealth = async () => {
+        setHealthLoading(true);
+        setHealthError('');
+        try {
+            const res = await axios.get(`${API_BASE}/admin/system-health`);
+            setHealth(res.data);
+        } catch (err) {
+            setHealthError(err.response?.data?.error || 'Unable to fetch system health.');
+        } finally {
+            setHealthLoading(false);
+        }
+    };
 
     const fetchSettings = async () => {
         setLoading(true);
@@ -81,6 +102,7 @@ export default function SettingsPage() {
     useEffect(() => {
         fetchSettings();
         fetchKoboConfig();
+        fetchHealth();
     }, []);
 
     const dirty = useMemo(
@@ -317,26 +339,73 @@ export default function SettingsPage() {
                 <div className="panel">
                     <div className="panel-header">
                         <div>
-                            <h2 className="panel-title">System Status</h2>
-                            <div className="panel-subtitle">Operational signals connected to administration.</div>
+                            <h2 className="panel-title">System Health</h2>
+                            <div className="panel-subtitle">Live integration status across ERP and M&E Compass.</div>
                         </div>
+                        <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={fetchHealth}
+                            disabled={healthLoading}
+                            title="Refresh"
+                        >
+                            <RefreshCw size={14} style={{ animation: healthLoading ? 'spin 1s linear infinite' : 'none' }} />
+                        </button>
                     </div>
-                    <div className="control-stack">
-                        <div className="control-row static">
-                            <div>
-                                <div className="control-title">Settings store</div>
-                                <div className="control-copy">Finance threshold is persisted in system settings and used by live workflows.</div>
+                    {healthLoading && !health ? (
+                        <div className="empty-state" style={{ height: '120px' }}><div className="spinner"></div></div>
+                    ) : healthError ? (
+                        <div className="page-message error">{healthError}</div>
+                    ) : (
+                        <div className="control-stack">
+                            {/* M&E Compass status */}
+                            <div className="control-row static">
+                                <div>
+                                    <div className="control-title">M&E Compass</div>
+                                    {health?.me ? (
+                                        <div className="control-copy">
+                                            {health.me.approvedActivities ?? 0} approved activities —{' '}
+                                            {health.me.pendingSyncToErp ?? 0} pending ERP sync
+                                            {health.me.lastSyncedAt
+                                                ? ` · last synced ${new Date(health.me.lastSyncedAt).toLocaleDateString()}`
+                                                : ''}
+                                        </div>
+                                    ) : (
+                                        <div className="control-copy" style={{ color: 'var(--text-muted)' }}>Offline or unreachable</div>
+                                    )}
+                                </div>
+                                {health?.me ? <CheckCircle2 size={18} style={{ color: 'var(--success)' }} /> : <WifiOff size={18} style={{ color: 'var(--text-muted)' }} />}
                             </div>
-                            <Database size={18} />
-                        </div>
-                        <div className="control-row static">
-                            <div>
-                                <div className="control-title">Next hardening target</div>
-                                <div className="control-copy">Move more approval and logistics policies from UI guidance into enforceable backend rules.</div>
+                            {/* ERP summaries received */}
+                            <div className="control-row static">
+                                <div>
+                                    <div className="control-title">M&E Summaries in ERP</div>
+                                    <div className="control-copy">
+                                        {health?.erp?.totalMeSummariesStored ?? 0} activity records stored
+                                        {health?.erp?.lastReceivedMeSummaryAt
+                                            ? ` · last received ${new Date(health.erp.lastReceivedMeSummaryAt).toLocaleDateString()}`
+                                            : ' · none received yet'}
+                                    </div>
+                                </div>
+                                <Database size={18} />
                             </div>
-                            <ShieldCheck size={18} />
+                            {/* Pending sync alert */}
+                            {(health?.me?.pendingSyncToErp ?? 0) > 0 && (
+                                <div className="control-row static" style={{ background: 'var(--warning-bg, rgba(234,179,8,0.08))', borderRadius: '6px', padding: '8px 12px' }}>
+                                    <div>
+                                        <div className="control-title" style={{ color: 'var(--warning, #ca8a04)' }}>Sync Pending</div>
+                                        <div className="control-copy">
+                                            {health.me.pendingSyncToErp} approved {health.me.pendingSyncToErp === 1 ? 'activity' : 'activities'} waiting to sync to ERP. These will push automatically when the next activity is approved.
+                                        </div>
+                                    </div>
+                                    <Activity size={18} style={{ color: 'var(--warning, #ca8a04)', flexShrink: 0 }} />
+                                </div>
+                            )}
+                            <div className="control-row static" style={{ opacity: 0.6, fontSize: '11px' }}>
+                                <div className="control-copy">Checked {health?.checkedAt ? new Date(health.checkedAt).toLocaleTimeString() : '—'}</div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             </div>
         </div>

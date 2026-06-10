@@ -255,6 +255,18 @@ export const handler = async (event) => {
                 return created[0];
             });
 
+            // Fire-and-forget: notify M&E so it can create the matching ErpReference entry.
+            // Does not block the user creation response if M&E is unreachable.
+            const meApiBase = (process.env.ME_INTERNAL_API_URL ?? '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+            const meToken = process.env.ME_INTEGRATION_TOKEN;
+            if (meApiBase && meToken) {
+                fetch(`${meApiBase}/api/integration/users/push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${meToken}` },
+                    body: JSON.stringify({ action: 'upsert', users: [sanitizeUser(inserted)] }),
+                }).catch(() => {});
+            }
+
             return successResponse({
                 message: 'User created successfully',
                 user: sanitizeUser(inserted),
