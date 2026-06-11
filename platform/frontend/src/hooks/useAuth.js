@@ -9,14 +9,35 @@ export const useAuth = () => {
   useEffect(() => {
     const access = localStorage.getItem("portal_access_token");
     if (!access) {
-      setUser(null);
       setLoading(false);
       return;
     }
+
+    // Show cached user immediately so the portal loads without a spinner
+    const cached = localStorage.getItem("portal_user");
+    if (cached) {
+      try {
+        setUser(JSON.parse(cached));
+      } catch {
+        localStorage.removeItem("portal_user");
+      }
+    }
+    setLoading(false);
+
+    // Verify session in the background and refresh cached profile
     getSession()
-      .then((session) => setUser(session.user || null))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
+      .then((session) => {
+        const freshUser = session.user || null;
+        setUser(freshUser);
+        if (freshUser) localStorage.setItem("portal_user", JSON.stringify(freshUser));
+      })
+      .catch(() => {
+        // Token expired or invalid — clear everything and force re-login
+        localStorage.removeItem("portal_access_token");
+        localStorage.removeItem("portal_refresh_token");
+        localStorage.removeItem("portal_user");
+        setUser(null);
+      });
   }, []);
 
   const value = useMemo(
@@ -24,9 +45,9 @@ export const useAuth = () => {
       user,
       loading,
       login: async (email, password) => {
-        await loginService(email, password);
-        const session = await getSession();
-        setUser(session.user || null);
+        // login response now includes user — no second getSession() needed
+        const data = await loginService(email, password);
+        setUser(data.user || null);
       },
       logout: async () => {
         await logoutService();

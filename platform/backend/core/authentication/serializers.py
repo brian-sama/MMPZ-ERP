@@ -9,6 +9,12 @@ User = get_user_model()
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = User.EMAIL_FIELD
 
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        from core.users.services import get_user_profile_payload
+        data["user"] = get_user_profile_payload(self.user)
+        return data
+
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
