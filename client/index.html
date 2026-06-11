@@ -91,24 +91,7 @@
     }
   </style>
 
-  <script>
-    (function () {
-      try {
-        const savedTheme = localStorage.getItem('mmpz_theme');
-        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        const finalTheme = savedTheme || systemTheme;
-
-        if (finalTheme === 'dark') {
-          document.documentElement.setAttribute('data-theme', 'dark');
-          // Since React code uses body.dark-mode, we check if body exists or use documentElement
-          // We apply to documentElement for now, but ThemeContext will handle the body class
-          document.documentElement.classList.add('dark-mode');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
-      } catch (e) { }
-    })();
-  </script>
+  <script src="/theme-init.js"></script>
 </head>
 
 <body class="transition-colors duration-500">
