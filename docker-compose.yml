@@ -31,11 +31,12 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://${MMPZ_DB_USER:-mmpz_admin}:${MMPZ_DB_PASSWORD:-mmpz}@mmpz_erp_db:5432/${MMPZ_DB_NAME:-mmpz_db}
-      MMPZ_API_URL: https://mmpzmne.co.zw/api
-      MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET:-replace-with-long-random-secret}
-      ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN:-replace-with-shared-erp-integration-token}
+      MMPZ_API_URL: ${MMPZ_API_URL:-https://mmpzmne.co.zw/api}
+      MMPZ_AUTH_SECRET: ${MMPZ_AUTH_SECRET}
+      ERP_INTEGRATION_TOKEN: ${ERP_INTEGRATION_TOKEN}
       ME_INTERNAL_API_URL: ${ME_INTERNAL_API_URL:-http://mmpz-compass-app:4000/api}
-      ME_INTEGRATION_TOKEN: ${ME_INTEGRATION_TOKEN:-replace-with-shared-me-integration-token}
+      ME_INTEGRATION_TOKEN: ${ME_INTEGRATION_TOKEN}
+      ME_PUBLIC_URL: ${ME_PUBLIC_URL:-https://monitoring.mmpzmne.co.zw}
       PORT: 3000
       RUN_DB_MIGRATIONS_ON_STARTUP: "true"
       RUN_DB_SEED_ON_STARTUP: "true"
