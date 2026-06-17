@@ -32,16 +32,7 @@ export const NAV_SECTIONS = [
         to: '/dashboard',
         label: 'Executive Dashboard',
         icon: LayoutDashboard,
-        allowedRoles: [
-          'DIRECTOR',
-          'PROGRAMS_ME_OFFICER',
-          'SRHR_OFFICER',
-          'FIELD_OFFICER_1',
-          'FIELD_OFFICER_2',
-          'YOUTH_KNOWLEDGE_HUB_OFFICER',
-          'MEL_OFFICER',
-          'SYSTEM_ADMIN',
-        ],
+        allowedRoles: ['DIRECTOR', 'SYSTEM_ADMIN'],
       },
       {
         to: '/analytics',

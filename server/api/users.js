@@ -190,8 +190,12 @@ export const handler = async (event) => {
                 ? 'confirmed'
                 : 'pending_reassignment';
 
+            const userColumns = await getUserColumns();
+
             const inserted = await sql.begin(async (tx) => {
                 await setAuditActor(tx, actor.id);
+
+                // Insert only the columns guaranteed to exist in every deployment
                 const created = await tx`
                     INSERT INTO users (
                         name,
@@ -204,9 +208,7 @@ export const handler = async (event) => {
                         role_assignment_status,
                         role_confirmed_by_user_id,
                         role_confirmed_at,
-                        role_legacy_snapshot,
-                        require_password_reset,
-                        phone
+                        require_password_reset
                     )
                     VALUES (
                         ${name},
@@ -219,38 +221,40 @@ export const handler = async (event) => {
                         ${roleStatus},
                         ${roleStatus === 'confirmed' ? actor.id : null},
                         ${roleStatus === 'confirmed' ? new Date().toISOString() : null},
-                        ${body.role || null},
-                        ${requireReset},
-                        ${body.phone || null}
+                        ${requireReset}
                     )
-                    RETURNING
-                        id,
-                        name,
-                        email,
-                        role_code,
-                        system_role,
-                        job_title,
-                        short_bio,
-                        profile_picture_url,
-                        role_assignment_status,
-                        role_confirmed_at,
-                        require_password_reset,
-                        last_login,
-                        created_at
+                    RETURNING id, name, email, role_code, system_role, job_title,
+                              short_bio, profile_picture_url, role_assignment_status,
+                              role_confirmed_at, require_password_reset, last_login, created_at
                 `;
+
+                const userId = created[0].id;
+
+                // Apply optional columns only if they exist in this deployment's schema
+                if (userColumns.has('phone') && (body.phone || null) !== null) {
+                    await tx`UPDATE users SET phone = ${body.phone} WHERE id = ${userId}`;
+                }
+                if (userColumns.has('role_legacy_snapshot')) {
+                    await tx`UPDATE users SET role_legacy_snapshot = ${body.role || null} WHERE id = ${userId}`;
+                }
 
                 await syncFacilitatorProfileForUser(tx, created[0]);
 
-                await tx`
-                    INSERT INTO user_role_history (
-                        user_id,
-                        previous_role_code,
-                        new_role_code,
-                        changed_by_user_id,
-                        reason
-                    )
-                    VALUES (${created[0].id}, ${null}, ${roleCode}, ${actor.id}, ${'Initial role assignment'})
+                // user_role_history is optional — skip if the table doesn't exist yet
+                const hasRoleHistory = await tx`
+                    SELECT EXISTS (
+                        SELECT 1 FROM information_schema.tables
+                        WHERE table_schema = current_schema() AND table_name = 'user_role_history'
+                    ) AS exists
                 `;
+                if (hasRoleHistory[0]?.exists) {
+                    await tx`
+                        INSERT INTO user_role_history (
+                            user_id, previous_role_code, new_role_code, changed_by_user_id, reason
+                        )
+                        VALUES (${userId}, ${null}, ${roleCode}, ${actor.id}, ${'Initial role assignment'})
+                    `;
+                }
 
                 return created[0];
             });
