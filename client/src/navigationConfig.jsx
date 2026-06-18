@@ -21,6 +21,7 @@ import {
   LineChart,
   Workflow,
   Activity,
+  Vault,
 } from 'lucide-react';
 import { canAccessRole } from './accessControl';
 
@@ -208,6 +209,18 @@ export const NAV_SECTIONS = [
           'FIELD_OFFICER_1',
           'FIELD_OFFICER_2',
           'YOUTH_KNOWLEDGE_HUB_OFFICER',
+          'SYSTEM_ADMIN',
+        ],
+      },
+      {
+        to: '/finance/vault',
+        label: 'Finance Vault',
+        icon: Vault,
+        allowedRoles: [
+          'DIRECTOR',
+          'FINANCE_OFFICER',
+          'ADMIN_FINANCE_ASSISTANT',
+          'LOGISTICS_FINANCE_ASSISTANT',
           'SYSTEM_ADMIN',
         ],
       },

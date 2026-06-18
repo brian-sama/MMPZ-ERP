@@ -30,6 +30,7 @@ import SettingsPage from './pages/SettingsPage';
 import UserManagementPage from './pages/UserManagementPage';
 import MyPortalPage from './pages/MyPortalPage';
 import StaffSubmissionsPage from './pages/StaffSubmissionsPage';
+import FinanceVaultPage from './pages/FinanceVaultPage';
 import FundingRequestWizardPage from './pages/FundingRequestWizardPage';
 
 // Intranet
@@ -104,6 +105,7 @@ export default function AppRouter() {
                 <Route path="/users" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/users')}><UserManagementPage /></ProtectedRoute>} />
                 <Route path="/my-portal" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/my-portal')}><MyPortalPage /></ProtectedRoute>} />
                 <Route path="/submissions" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/submissions')}><StaffSubmissionsPage /></ProtectedRoute>} />
+                <Route path="/finance/vault" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/finance/vault')}><FinanceVaultPage /></ProtectedRoute>} />
                 <Route path="/submissions/request-funds" element={<ProtectedRoute allowedRoles={getAllowedRolesForPath('/submissions')}><FundingRequestWizardPage /></ProtectedRoute>} />
 
                 {/* Intranet Routes (All roles can access) */}

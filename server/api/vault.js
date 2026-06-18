@@ -20,9 +20,23 @@ import {
     DOCUMENT_MIME_TYPES,
 } from './utils/uploads.js';
 
-const assertDocumentMutationAllowed = (actor) => {
-    if (actor.role_code === 'DEVELOPMENT_FACILITATOR') {
-        throw new HttpError('Development facilitators cannot manage the shared document library.', 403);
+const VAULT_CATEGORY = 'Finance Vault';
+
+const VAULT_ROLES = new Set([
+    'DIRECTOR',
+    'FINANCE_OFFICER',
+    'ADMIN_FINANCE_ASSISTANT',
+    'LOGISTICS_FINANCE_ASSISTANT',
+    'SYSTEM_ADMIN',
+]);
+
+const assertVaultAccess = (actor) => {
+    if (actor.system_role === 'SUPER_ADMIN') return;
+    if (!VAULT_ROLES.has(actor.role_code)) {
+        throw new HttpError(
+            'Access to the Finance Vault is restricted to finance and administration roles.',
+            403,
+        );
     }
 };
 
@@ -33,93 +47,69 @@ export const handler = async (event) => {
         const method = event.httpMethod;
         const body = parseBody(event);
         const query = getQueryParams(event);
-        const id = getPathParam(event, 'id') || getPathParam(event, 'documents');
+        const rawId = getPathParam(event, 'id') || getPathParam(event, 'vault');
         const actor = await getUserContext(getRequestUserId(event, body));
 
+        assertVaultAccess(actor);
+
         if (method === 'GET') {
-            if (id && event.path.endsWith('/download')) {
-                const documentId = String(id).replace(/\/download$/, '');
+            // Download: GET /api/vault/:id/download
+            if (rawId && event.path?.endsWith('/download')) {
+                const documentId = String(rawId).replace(/\/download$/, '');
                 const rows = await sql`
-                    SELECT
-                        d.id,
-                        d.title,
-                        d.file_name,
-                        d.file_path,
-                        d.mime_type
-                    FROM document_library_files d
-                    WHERE d.id = ${documentId}
+                    SELECT id, title, file_name, file_path, mime_type
+                    FROM document_library_files
+                    WHERE id = ${documentId}
+                      AND category = ${VAULT_CATEGORY}
                     LIMIT 1
                 `;
-                if (rows.length === 0) return errorResponse('Document not found', 404);
-
-                const document = rows[0];
-                const fileData = readUploadedFileAsDataUrl(document.file_path, document.mime_type || 'application/octet-stream');
-                if (!fileData) {
-                    return errorResponse('Document file is no longer available', 404);
-                }
-
-                return successResponse({
-                    ...document,
-                    file_data: fileData,
-                });
+                if (rows.length === 0) return errorResponse('Vault document not found', 404);
+                const doc = rows[0];
+                const fileData = readUploadedFileAsDataUrl(doc.file_path, doc.mime_type || 'application/octet-stream');
+                if (!fileData) return errorResponse('File is no longer available on disk', 404);
+                return successResponse({ ...doc, file_data: fileData });
             }
 
-            const category = query.category || null;
-
-            if (id) {
+            // Single document
+            if (rawId) {
                 const rows = await sql`
-                    SELECT
-                        d.*,
-                        u.name AS uploaded_by_name
+                    SELECT d.*, u.name AS uploaded_by_name
                     FROM document_library_files d
                     LEFT JOIN users u ON d.uploaded_by_user_id = u.id
-                    WHERE d.id = ${id}
+                    WHERE d.id = ${rawId}
+                      AND d.category = ${VAULT_CATEGORY}
                     LIMIT 1
                 `;
-                if (rows.length === 0) return errorResponse('Document not found', 404);
+                if (rows.length === 0) return errorResponse('Vault document not found', 404);
                 return successResponse(rows[0]);
             }
 
+            // List — optional sub-category filter within the vault
+            const sub = query.sub_category || null;
             let rows;
-            if (category && category !== 'All') {
+            if (sub) {
                 rows = await sql`
-                    SELECT
-                        d.*,
-                        u.name AS uploaded_by_name
+                    SELECT d.*, u.name AS uploaded_by_name
                     FROM document_library_files d
                     LEFT JOIN users u ON d.uploaded_by_user_id = u.id
-                    WHERE d.category = ${category}
-                      AND d.category != 'Finance Vault'
+                    WHERE d.category = ${VAULT_CATEGORY}
+                      AND d.description ILIKE ${'%[' + sub + ']%'}
                     ORDER BY d.created_at DESC
                 `;
             } else {
                 rows = await sql`
-                    SELECT
-                        d.*,
-                        u.name AS uploaded_by_name
+                    SELECT d.*, u.name AS uploaded_by_name
                     FROM document_library_files d
                     LEFT JOIN users u ON d.uploaded_by_user_id = u.id
-                    WHERE d.category != 'Finance Vault'
+                    WHERE d.category = ${VAULT_CATEGORY}
                     ORDER BY d.created_at DESC
                 `;
             }
 
-            const categories = await sql`
-                SELECT DISTINCT category
-                FROM document_library_files
-                WHERE category != 'Finance Vault'
-                ORDER BY category ASC
-            `;
-
-            return successResponse({
-                items: rows,
-                categories: categories.map((row) => row.category),
-            });
+            return successResponse({ items: rows, total: rows.length });
         }
 
         if (method === 'POST') {
-            assertDocumentMutationAllowed(actor);
-
             if (!body.title || !body.fileData || !body.fileName) {
                 return errorResponse('title, fileData and fileName are required', 400);
             }
@@ -128,10 +118,10 @@ export const handler = async (event) => {
                 base64Data: body.fileData,
                 fileName: body.fileName,
                 mimeType: body.mimeType,
-                subdirectory: 'documents',
-                prefix: 'library',
+                subdirectory: 'vault',
+                prefix: 'vault',
                 allowedMimeTypes: DOCUMENT_MIME_TYPES,
-                maxBytes: 8 * 1024 * 1024,
+                maxBytes: 20 * 1024 * 1024,
             });
 
             try {
@@ -153,7 +143,7 @@ export const handler = async (event) => {
                             ${body.fileName},
                             ${uploadedFile.publicPath},
                             ${uploadedFile.mimeType},
-                            ${body.category || 'General'},
+                            ${VAULT_CATEGORY},
                             ${body.description || null},
                             ${actor.id},
                             CURRENT_TIMESTAMP
@@ -164,7 +154,7 @@ export const handler = async (event) => {
                 });
 
                 return successResponse({
-                    message: 'Document uploaded successfully',
+                    message: 'Document added to vault successfully',
                     document: inserted,
                 });
             } catch (dbError) {
@@ -174,24 +164,24 @@ export const handler = async (event) => {
         }
 
         if (method === 'DELETE') {
-            assertDocumentMutationAllowed(actor);
-            if (!id) return errorResponse('Document ID is required', 400);
+            if (!rawId) return errorResponse('Document ID is required', 400);
 
             const rows = await sql`
                 SELECT file_path
                 FROM document_library_files
-                WHERE id = ${id}
+                WHERE id = ${rawId}
+                  AND category = ${VAULT_CATEGORY}
                 LIMIT 1
             `;
-            if (rows.length === 0) return errorResponse('Document not found', 404);
+            if (rows.length === 0) return errorResponse('Vault document not found', 404);
 
             await sql.begin(async (tx) => {
                 await setAuditActor(tx, actor.id);
-                await tx`DELETE FROM document_library_files WHERE id = ${id}`;
+                await tx`DELETE FROM document_library_files WHERE id = ${rawId}`;
             });
             removeUploadedFile(rows[0].file_path);
 
-            return successResponse({ message: 'Document removed successfully' });
+            return successResponse({ message: 'Document removed from vault' });
         }
 
         return errorResponse('Method not allowed', 405);
@@ -199,7 +189,7 @@ export const handler = async (event) => {
         if (error instanceof HttpError) {
             return errorResponse(error.message, error.statusCode);
         }
-        console.error('Document library API error:', error);
+        console.error('Finance Vault API error:', error);
         return errorResponse('Internal server error', 500, error.message);
     }
 };

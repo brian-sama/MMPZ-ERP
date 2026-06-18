@@ -45,6 +45,7 @@ import { handler as userProfileHandler } from "./server/api/user-profile.js";
 import { handler as uploadAvatarHandler } from "./server/api/upload-avatar.js";
 import { handler as calendarEventsHandler } from "./server/api/calendar-events.js";
 import { handler as documentLibraryHandler } from "./server/api/document-library.js";
+import { handler as vaultHandler } from "./server/api/vault.js";
 import { handler as pushSubscriptionsHandler } from "./server/api/push-subscriptions.js";
 import { handler as submissionsHandler } from "./server/api/submissions.js";
 import { handler as fundingRequestsHandler } from "./server/api/funding-requests.js";
@@ -667,6 +668,12 @@ app.use(
 );
 app.use("/api/documents/:id", functionToExpress(documentLibraryHandler));
 app.use("/api/documents", functionToExpress(documentLibraryHandler));
+
+// Finance Vault — restricted to finance/admin roles; vault documents are
+// excluded from the public document library above.
+app.use("/api/vault/:id/download", functionToExpress(vaultHandler));
+app.use("/api/vault/:id", functionToExpress(vaultHandler));
+app.use("/api/vault", functionToExpress(vaultHandler));
 
 app.use("/api/submissions/:id/action", functionToExpress(submissionsHandler));
 app.use("/api/submissions", functionToExpress(submissionsHandler));
