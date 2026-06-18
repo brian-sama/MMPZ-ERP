@@ -558,6 +558,10 @@ export const handler = async (event) => {
         if (error instanceof HttpError) {
             return errorResponse(error.message, error.statusCode);
         }
+        // PostgreSQL unique constraint violation (e.g. duplicate email)
+        if (error?.code === '23505') {
+            return errorResponse('A user with this email address already exists', 409);
+        }
         console.error('Users function error:', error);
         return errorResponse('Internal server error', 500, error.message);
     }

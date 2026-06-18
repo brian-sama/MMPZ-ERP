@@ -174,12 +174,28 @@ export function NotificationProvider({ children }) {
 
         let isClosed = false;
         const apiRoot = new URL(API_BASE, window.location.origin);
-        const streamUrl = new URL(`${apiRoot.pathname.replace(/\/$/, '')}/notifications/stream`, apiRoot.origin);
-        streamUrl.searchParams.set('token', token);
+        const streamBase = new URL(`${apiRoot.pathname.replace(/\/$/, '')}/notifications/stream`, apiRoot.origin);
 
-        const connect = () => {
+        const connect = async () => {
             if (isClosed) return;
 
+            // Exchange the session token for a short-lived SSE ticket so the
+            // raw session token is never exposed in a URL query parameter.
+            let streamUrl = streamBase;
+            try {
+                const ticketRes = await axios.post(
+                    `${API_BASE}/notifications/stream-token`,
+                    {},
+                    { headers: { Authorization: `Bearer ${token}` } },
+                );
+                const ticketUrl = new URL(streamBase.toString());
+                ticketUrl.searchParams.set('ticket', ticketRes.data.ticket);
+                streamUrl = ticketUrl;
+            } catch {
+                // Fall back to no-auth stream attempt; server will reject with 401.
+            }
+
+            if (isClosed) return;
             const source = new EventSource(streamUrl.toString());
             streamRef.current = source;
 
