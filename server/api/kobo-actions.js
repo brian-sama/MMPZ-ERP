@@ -17,6 +17,21 @@ import {
     setAuditActor,
 } from './utils/rbac.js';
 import { createNotification } from './utils/notification-center.js';
+import { fetchKoboConfigFromCompass } from './kobo-config.js';
+
+const compassApiBaseUrl = () => {
+    const configured = (
+        process.env.ME_INTERNAL_API_URL ||
+        process.env.COMPASS_INTERNAL_API_URL ||
+        'https://monitoring.mmpzmne.co.zw/api'
+    ).replace(/\/+$/, '');
+    return configured.endsWith('/api') ? configured : `${configured}/api`;
+};
+
+const compassIntegrationToken = () =>
+    process.env.ME_INTEGRATION_TOKEN ||
+    process.env.ERP_INTEGRATION_TOKEN ||
+    '';
 
 const hasTable = async (tableName) => {
     const rows = await sql`
@@ -31,14 +46,37 @@ const hasTable = async (tableName) => {
 };
 
 const loadConfig = async () => {
+    // Try Compass first for a single shared credential
+    const compassConfig = await fetchKoboConfigFromCompass();
+    if (compassConfig) return compassConfig;
+
+    // Fall back to local kobo_config table
     if (!(await hasTable('kobo_config'))) {
         throw new HttpError('KoBo configuration storage is not available yet', 503);
     }
     const configs = await sql`SELECT * FROM kobo_config LIMIT 1`;
     if (configs.length === 0 || !configs[0].is_connected) {
-        throw new HttpError('KoboToolbox not connected', 400);
+        throw new HttpError('KoboToolbox not connected — configure it in Compass (Admin → Settings)', 400);
     }
     return configs[0];
+};
+
+// Notify Compass that a form→indicator link was created or deleted
+const notifyCompassFormLink = async ({ kobo_form_uid, indicator_id, indicator_title, action }) => {
+    const token = compassIntegrationToken();
+    if (!token) return;
+    try {
+        await fetch(`${compassApiBaseUrl()}/integration/kobo-form-link`, {
+            method: 'POST',
+            headers: {
+                'x-integration-token': token,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ kobo_form_uid, indicator_id, indicator_title, action }),
+        });
+    } catch {
+        // Non-fatal — Compass may be temporarily unavailable
+    }
 };
 
 const syncForm = async (link, config, actorId) => {
@@ -224,6 +262,16 @@ export const handler = async (event) => {
                     `;
                     return rows[0];
                 });
+
+                // Fetch indicator title for the Compass notification
+                const [ind] = await sql`SELECT title FROM indicators WHERE id = ${indicator_id} LIMIT 1`;
+                await notifyCompassFormLink({
+                    kobo_form_uid,
+                    indicator_id,
+                    indicator_title: ind?.title ?? null,
+                    action: 'link',
+                });
+
                 return successResponse(inserted);
             }
 
@@ -232,10 +280,19 @@ export const handler = async (event) => {
                 if (!(await hasTable('kobo_form_links'))) {
                     return successResponse({ message: 'Link storage is not available.' });
                 }
+                const [existing] = await sql`SELECT kobo_form_uid FROM kobo_form_links WHERE id = ${id} LIMIT 1`;
                 await sql.begin(async (tx) => {
                     await setAuditActor(tx, actor.id);
                     await tx`DELETE FROM kobo_form_links WHERE id = ${id}`;
                 });
+                if (existing?.kobo_form_uid) {
+                    await notifyCompassFormLink({
+                        kobo_form_uid: existing.kobo_form_uid,
+                        indicator_id: null,
+                        indicator_title: null,
+                        action: 'unlink',
+                    });
+                }
                 return successResponse({ message: 'Link deleted' });
             }
         }

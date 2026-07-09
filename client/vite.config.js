@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 const apiProxyTarget =
   process.env.VITE_API_PROXY_TARGET ||
-  `http://localhost:${process.env.API_PORT || process.env.PORT || 3000}`
+  `http://localhost:${process.env.API_PORT || process.env.PORT || 3001}`
 
 export default defineConfig({
   plugins: [
@@ -38,7 +38,8 @@ export default defineConfig({
     // })
   ],
   server: {
-    port: 5173,
+    port: 5174,
+    strictPort: true,
     host: '127.0.0.1',
     proxy: {
       '/api': {
