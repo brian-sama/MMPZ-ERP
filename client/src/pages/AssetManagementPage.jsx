@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
+import Pagination from '../components/Pagination';
 import { useAuth } from '../context/AuthContext';
 import {
     EmptyState,
@@ -66,6 +67,8 @@ export default function AssetManagementPage() {
     const [assetForm, setAssetForm] = useState(initialAsset);
     const [checkoutForm, setCheckoutForm] = useState(initialCheckout);
     const [submitting, setSubmitting] = useState(false);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
 
     const manager = canManageAssets(user);
 
@@ -102,6 +105,9 @@ export default function AssetManagementPage() {
     useEffect(() => {
         fetchAssets();
     }, []);
+
+    const totalPages = Math.ceil(data.assets.length / itemsPerPage);
+    const paginatedAssets = data.assets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const availableAssets = useMemo(
         () => data.assets.filter((asset) => asset.status === 'available'),
@@ -250,7 +256,7 @@ export default function AssetManagementPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.assets.slice(0, 16).map((asset) => (
+                                {paginatedAssets.map((asset) => (
                                     <tr key={asset.id}>
                                         <td>
                                             <div style={{ fontWeight: 700 }}>{asset.name}</div>
@@ -265,6 +271,11 @@ export default function AssetManagementPage() {
                                 ))}
                             </tbody>
                         </table>
+                        <Pagination 
+                            currentPage={currentPage} 
+                            totalPages={totalPages} 
+                            onPageChange={setCurrentPage} 
+                        />
                     </div>
                 )}
             </section>

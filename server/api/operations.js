@@ -265,7 +265,7 @@ const loadAssets = async () => {
             LEFT JOIN users holder ON holder.id = a.assigned_user_id
             LEFT JOIN vehicle_profiles vp ON vp.asset_id = a.id
             ORDER BY a.asset_code ASC
-            LIMIT 100
+            LIMIT 1000
         `,
         sql`
             SELECT
