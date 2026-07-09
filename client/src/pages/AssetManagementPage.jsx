@@ -8,6 +8,7 @@ import {
     QrCode,
     RefreshCw,
     RotateCcw,
+    Search,
     ShieldAlert,
     Wrench,
 } from 'lucide-react';
@@ -68,6 +69,7 @@ export default function AssetManagementPage() {
     const [checkoutForm, setCheckoutForm] = useState(initialCheckout);
     const [submitting, setSubmitting] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [searchQuery, setSearchQuery] = useState('');
     const itemsPerPage = 20;
 
     const manager = canManageAssets(user);
@@ -106,8 +108,24 @@ export default function AssetManagementPage() {
         fetchAssets();
     }, []);
 
-    const totalPages = Math.ceil(data.assets.length / itemsPerPage);
-    const paginatedAssets = data.assets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+    const filteredAssets = useMemo(() => {
+        if (!searchQuery.trim()) return data.assets;
+        const query = searchQuery.toLowerCase();
+        return data.assets.filter((asset) =>
+            (asset.name && asset.name.toLowerCase().includes(query)) ||
+            (asset.asset_code && asset.asset_code.toLowerCase().includes(query)) ||
+            (asset.serial_number && asset.serial_number.toLowerCase().includes(query)) ||
+            (asset.assigned_user_name && asset.assigned_user_name.toLowerCase().includes(query)) ||
+            (asset.current_location && asset.current_location.toLowerCase().includes(query))
+        );
+    }, [data.assets, searchQuery]);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery]);
+
+    const totalPages = Math.ceil(filteredAssets.length / itemsPerPage);
+    const paginatedAssets = filteredAssets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
     const availableAssets = useMemo(
         () => data.assets.filter((asset) => asset.status === 'available'),
@@ -234,13 +252,24 @@ export default function AssetManagementPage() {
             </div>
 
             <section className="panel">
-                <div className="panel-header">
+                <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h2 className="panel-title">Asset Register</h2>
                         <p className="panel-subtitle">Every asset carries a code, condition, current holder, and QR payload.</p>
                     </div>
+                    <div style={{ position: 'relative' }}>
+                        <Search size={16} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#666' }} />
+                        <input
+                            type="text"
+                            placeholder="Search assets..."
+                            className="form-input"
+                            style={{ paddingLeft: '32px', minWidth: '250px' }}
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
                 </div>
-                {data.assets.length === 0 ? (
+                {filteredAssets.length === 0 ? (
                     <EmptyState icon={Laptop} title="No assets registered" />
                 ) : (
                     <div className="data-table-wrap">
