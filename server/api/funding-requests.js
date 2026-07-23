@@ -24,6 +24,11 @@ const baseHeaders = {
 const formatCurrency = (value) =>
     `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Allowed categories must match DB CHECK constraint (lowercase)
+const ALLOWED_ITEM_CATEGORIES = new Set([
+    'personnel', 'materials', 'travel', 'training', 'equipment', 'procurement', 'logistics', 'other'
+]);
+
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
 
@@ -566,16 +571,34 @@ export const handler = async (event) => {
                 throw new HttpError('At least one budget line item is required', 400);
             }
 
-            // Calculate total requested
+            // Validate referenced entities (fail early with clear messages)
+            if (project_id) {
+                const [proj] = await sql`SELECT id FROM projects WHERE id = ${project_id} LIMIT 1`;
+                if (!proj) throw new HttpError('Project not found', 400);
+            }
+            if (program_id) {
+                const [prog] = await sql`SELECT id FROM programs WHERE id = ${program_id} LIMIT 1`;
+                if (!prog) throw new HttpError('Program not found', 400);
+            }
+            if (indicator_id) {
+                const [ind] = await sql`SELECT id FROM indicators WHERE id = ${indicator_id} LIMIT 1`;
+                if (!ind) throw new HttpError('Indicator not found', 400);
+            }
+
+            // Calculate total requested and normalize categories to avoid DB CHECK errors
             let totalAmount = 0;
             const parsedItems = items.map((item) => {
                 const qty = Number(item.quantity || 1);
                 const cost = Number(item.unit_cost || 0);
                 const total = Number((qty * cost).toFixed(2));
                 totalAmount += total;
+                let category = String(item.category || 'other').toLowerCase().trim();
+                if (!ALLOWED_ITEM_CATEGORIES.has(category)) {
+                    category = 'other';
+                }
                 return {
                     description: item.description || 'Budget Item',
-                    category: item.category || 'other',
+                    category,
                     quantity: qty,
                     unit_cost: cost,
                     total_cost: total,
@@ -720,16 +743,20 @@ export const handler = async (event) => {
                 throw new HttpError('You are not authorized to edit this request', 403);
             }
 
-            // Calculate total requested
+            // Calculate total requested and normalize categories to avoid DB CHECK errors
             let totalAmount = 0;
             const parsedItems = items.map((item) => {
                 const qty = Number(item.quantity || 1);
                 const cost = Number(item.unit_cost || 0);
                 const total = Number((qty * cost).toFixed(2));
                 totalAmount += total;
+                let category = String(item.category || 'other').toLowerCase().trim();
+                if (!ALLOWED_ITEM_CATEGORIES.has(category)) {
+                    category = 'other';
+                }
                 return {
                     description: item.description || 'Budget Item',
-                    category: item.category || 'other',
+                    category,
                     quantity: qty,
                     unit_cost: cost,
                     total_cost: total,
