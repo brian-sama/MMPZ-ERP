@@ -1,0 +1,31 @@
+/* Ensure modal content is scrollable on small screens and desktop */
+.modal, .modal-box {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  max-height: 85vh;
+}
+
+/* Make forms inside modal flexible but allow inner scrolling when needed */
+.modal-box form {
+  display: block !important;
+  overflow: visible !important;
+}
+
+/* If modal framework adds a .modal-body element, ensure it scrolls */
+.modal-body, .modal-content {
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  max-height: 75vh;
+}
+
+/* Tweak for very long content inside modal */
+.modal .long-content {
+  overflow-y: auto;
+  max-height: 70vh;
+}
+
+/* Prevent accidental page scroll when modal is open on mobile */
+body.modal-open {
+  position: fixed;
+  width: 100%;
+}
