@@ -18,6 +18,184 @@ const FINANCE_REVIEW_ROLES = [
 
 const isFinanceReviewer = (roleCode) => FINANCE_REVIEW_ROLES.includes(roleCode);
 
+const LEAVE_CATEGORY_OPTIONS = [
+    { value: 'vacation_annual', label: 'Vacation/Annual' },
+    { value: 'sick', label: 'Sick' },
+    { value: 'maternity', label: 'Maternity' },
+    { value: 'study', label: 'Study' },
+    { value: 'compassionate', label: 'Compassionate' },
+    { value: 'off_days', label: 'Off Days' },
+];
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const toNumber = (value, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+};
+
+const roundDays = (value) => Math.round(toNumber(value) * 100) / 100;
+
+const parseDateOnly = (value) => {
+    if (!value) return null;
+    const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+    const [, y, m, d] = match;
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const calculateLeaveDays = (startDate, endDate, basis = 'calendar') => {
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
+    if (!start || !end || end < start) return 0;
+
+    if (basis === 'business') {
+        let count = 0;
+        const cursor = new Date(start);
+        while (cursor <= end) {
+            const day = cursor.getDay();
+            if (day !== 0 && day !== 6) count += 1;
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        return count;
+    }
+
+    return Math.floor((end - start) / DAY_MS) + 1;
+};
+
+const normalizeLeaveType = (value) => {
+    const normalized = String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/\//g, '_')
+        .replace(/\s+/g, '_')
+        .replace(/-+/g, '_');
+
+    if (['annual', 'vacation', 'vacation_annual', 'vacation_and_annual'].includes(normalized)) {
+        return 'vacation_annual';
+    }
+    if (['off', 'offdays', 'off_days'].includes(normalized)) return 'off_days';
+    if (normalized === 'compassion') return 'compassionate';
+    return LEAVE_CATEGORY_OPTIONS.some((option) => option.value === normalized)
+        ? normalized
+        : 'vacation_annual';
+};
+
+const getLeaveTypeLabel = (value) => {
+    const normalized = normalizeLeaveType(value);
+    return LEAVE_CATEGORY_OPTIONS.find((option) => option.value === normalized)?.label || 'Vacation/Annual';
+};
+
+const roleLabel = (value) =>
+    String(value || '')
+        .split('_')
+        .filter(Boolean)
+        .map((part) => part.charAt(0) + part.slice(1).toLowerCase())
+        .join(' ');
+
+const getDefaultEmployeeNo = (user) =>
+    user?.employee_no ||
+    user?.employee_number ||
+    user?.staff_number ||
+    user?.staff_no ||
+    (user?.id ? `MMPZ-${String(user.id).padStart(4, '0')}` : '');
+
+const getLeaveBalanceForMetadata = async (userId) => {
+    let [balance] = await sql`
+        SELECT allocated_days, used_days, pending_days
+        FROM leave_balances
+        WHERE user_id = ${userId}
+        LIMIT 1
+    `;
+
+    if (!balance) {
+        [balance] = await sql`
+            INSERT INTO leave_balances (user_id)
+            VALUES (${userId})
+            ON CONFLICT (user_id) DO UPDATE SET updated_at = leave_balances.updated_at
+            RETURNING allocated_days, used_days, pending_days
+        `;
+    }
+
+    const allocated = toNumber(balance?.allocated_days);
+    const used = toNumber(balance?.used_days);
+    const pending = toNumber(balance?.pending_days);
+    return {
+        allocated,
+        used,
+        pending,
+        remaining: roundDays(allocated - used - pending),
+    };
+};
+
+const buildLeaveBreakdown = (metadata, balance) => {
+    const selectedType = normalizeLeaveType(metadata.leave_type);
+    const daysRequested = roundDays(metadata.days_requested);
+
+    return LEAVE_CATEGORY_OPTIONS.map((option) => {
+        const balanceBf = option.value === 'vacation_annual' ? balance.remaining : 0;
+        const daysTaken = option.value === selectedType ? daysRequested : 0;
+        return {
+            leave_type: option.value,
+            label: option.label,
+            balance_bf: balanceBf,
+            days_taken: daysTaken,
+            balance_remaining: roundDays(balanceBf - daysTaken),
+        };
+    });
+};
+
+const normalizeLeaveMetadata = async (metadata, userContext) => {
+    const source = metadata && typeof metadata === 'object' ? metadata : {};
+    const balance = await getLeaveBalanceForMetadata(userContext.id);
+    const leaveType = normalizeLeaveType(source.leave_type || source.leave_category);
+    const dayCountBasis = source.day_count_basis === 'business' ? 'business' : 'calendar';
+    const daysRequested = calculateLeaveDays(source.start_date, source.end_date, dayCountBasis);
+
+    if (!source.start_date || !source.end_date || daysRequested <= 0) {
+        throw new HttpError('A valid leave start date and end date are required', 400);
+    }
+
+    const normalized = {
+        employee_name: String(source.employee_name || userContext.name || '').trim(),
+        employee_no: String(source.employee_no || getDefaultEmployeeNo(userContext) || '').trim(),
+        position: String(source.position || userContext.job_title || roleLabel(userContext.role_code) || '').trim(),
+        contact_address: String(source.contact_address || '').trim(),
+        leave_type: leaveType,
+        leave_type_label: getLeaveTypeLabel(leaveType),
+        start_date: source.start_date,
+        end_date: source.end_date,
+        day_count_basis: dayCountBasis,
+        days_requested: daysRequested,
+        leave_balance_snapshot: balance,
+        employee_signature: source.employee_signature || {
+            name: String(source.employee_name || userContext.name || '').trim(),
+            timestamp: new Date().toISOString(),
+            method: 'web_form_submission',
+        },
+    };
+
+    if (!normalized.employee_name || !normalized.employee_no || !normalized.position) {
+        throw new HttpError('Employee name, employee number, and position are required', 400);
+    }
+
+    if (!normalized.contact_address) {
+        throw new HttpError('Contact address during leave period is required', 400);
+    }
+
+    normalized.leave_breakdown = buildLeaveBreakdown(normalized, balance);
+    return normalized;
+};
+
+const buildLeaveSubmissionTitle = (metadata) => {
+    const period = metadata.start_date && metadata.end_date
+        ? ` (${metadata.start_date} to ${metadata.end_date})`
+        : '';
+    return `${metadata.employee_name || 'Employee'} - ${metadata.leave_type_label || getLeaveTypeLabel(metadata.leave_type)} Leave${period}`;
+};
+
 export const handler = async (event) => {
     const method = event.httpMethod;
     const path = event.path;
@@ -40,9 +218,30 @@ export const handler = async (event) => {
                 mime_type,
                 related_entity_type,
                 related_entity_id,
+                metadata,
             } = body;
 
-            if (!submission_type || !title) {
+            if (!submission_type) {
+                throw new HttpError('Submission type is required', 400);
+            }
+
+            let submissionTitle = title;
+            let submissionDescription = description;
+            let submissionFilePath = file_path;
+            let submissionFileName = file_name;
+            let submissionMimeType = mime_type;
+            let submissionMetadata = metadata || {};
+
+            if (submission_type === 'leave_application') {
+                submissionMetadata = await normalizeLeaveMetadata(metadata, userContext);
+                submissionTitle = title || buildLeaveSubmissionTitle(submissionMetadata);
+                submissionDescription = description || '';
+                submissionFilePath = null;
+                submissionFileName = null;
+                submissionMimeType = null;
+            }
+
+            if (!submissionTitle) {
                 throw new HttpError('Submission type and title are required', 400);
             }
 
@@ -73,16 +272,16 @@ export const handler = async (event) => {
                     ${userId},
                     ${submission_type},
                     ${department_category},
-                    ${title},
-                    ${description},
-                    ${file_path},
-                    ${file_name},
-                    ${mime_type},
+                    ${submissionTitle},
+                    ${submissionDescription},
+                    ${submissionFilePath},
+                    ${submissionFileName},
+                    ${submissionMimeType},
                     ${current_handler_role},
                     'submitted',
                     ${related_entity_type},
                     ${related_entity_id},
-                    ${body.metadata || {}}
+                    ${sql.json(submissionMetadata)}
                 ) RETURNING *
             `;
 

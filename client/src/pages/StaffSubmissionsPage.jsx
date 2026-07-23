@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
     FileText,
-    Send,
     History,
     Plus,
     FilePlus,
@@ -14,13 +13,24 @@ import {
     UserCheck,
     CheckSquare,
     Stamp,
-    Download,
-    Eye
+    Eye,
+    Printer
 } from 'lucide-react';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import {
+    LEAVE_CATEGORY_OPTIONS,
+    buildLeaveBreakdownRows,
+    calculateLeaveDays,
+    formatDayNumber,
+    getDefaultEmployeeNo,
+    getDefaultPosition,
+    getLeaveTypeLabel,
+    openLeaveApplicationPrintWindow,
+    parseLeaveMetadata,
+} from '../components/LeaveApplicationPrintDoc';
 
 const SUBMISSION_TYPES = [
     { value: 'leave_application', label: 'Leave Application', icon: Calendar },
@@ -36,6 +46,25 @@ const FINANCE_REVIEW_ROLES = [
     'ADMIN_ASSISTANT',
     'LOGISTICS_ASSISTANT',
 ];
+
+const createDefaultLeaveMetadata = (user) => ({
+    employee_name: user?.name || '',
+    employee_no: getDefaultEmployeeNo(user),
+    position: getDefaultPosition(user),
+    leave_type: 'vacation_annual',
+    day_count_basis: 'calendar',
+    start_date: '',
+    end_date: '',
+    days_requested: 0,
+    contact_address: '',
+});
+
+const buildLeaveSubmissionTitle = (metadata) => {
+    const meta = parseLeaveMetadata(metadata);
+    const label = getLeaveTypeLabel(meta.leave_type);
+    const period = meta.start_date && meta.end_date ? ` (${meta.start_date} to ${meta.end_date})` : '';
+    return `${meta.employee_name || 'Employee'} - ${label} Leave${period}`;
+};
 
 export default function StaffSubmissionsPage() {
     const { user } = useAuth();
@@ -60,18 +89,13 @@ export default function StaffSubmissionsPage() {
     const [submittingLiq, setSubmittingLiq] = useState(false);
     const [liqComment, setLiqComment] = useState('');
     
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState(() => ({
         submission_type: 'leave_application',
         title: '',
         description: '',
         file: null,
-        metadata: {
-            leave_type: 'annual',
-            start_date: '',
-            end_date: '',
-            days_requested: 0
-        }
-    });
+        metadata: createDefaultLeaveMetadata(user),
+    }));
 
     const isFinanceReviewer = FINANCE_REVIEW_ROLES.includes(user?.role_code);
     const isManager = ['DIRECTOR', 'SYSTEM_ADMIN'].includes(user?.role_code) || isFinanceReviewer;
@@ -81,6 +105,23 @@ export default function StaffSubmissionsPage() {
         fetchLeaveBalance();
         if (isManager) fetchManagerQueue();
     }, [isManager]);
+
+    useEffect(() => {
+        setFormData((current) => {
+            if (current.submission_type !== 'leave_application') return current;
+            const defaults = createDefaultLeaveMetadata(user);
+            return {
+                ...current,
+                metadata: {
+                    ...defaults,
+                    ...current.metadata,
+                    employee_name: current.metadata?.employee_name || defaults.employee_name,
+                    employee_no: current.metadata?.employee_no || defaults.employee_no,
+                    position: current.metadata?.position || defaults.position,
+                },
+            };
+        });
+    }, [user]);
 
     useEffect(() => {
         if (selectedSub && selectedSub.submission_type === 'request_for_funds') {
@@ -161,15 +202,53 @@ export default function StaffSubmissionsPage() {
         e.preventDefault();
         setSubmitting(true);
         try {
-            const fileData = formData.file ? await fileToBase64(formData.file) : null;
+            const isLeaveApplication = formData.submission_type === 'leave_application';
+            const leaveMetadata = isLeaveApplication ? {
+                ...createDefaultLeaveMetadata(user),
+                ...formData.metadata,
+                employee_name: String(formData.metadata.employee_name || user?.name || '').trim(),
+                employee_no: String(formData.metadata.employee_no || getDefaultEmployeeNo(user) || '').trim(),
+                position: String(formData.metadata.position || getDefaultPosition(user) || '').trim(),
+                contact_address: String(formData.metadata.contact_address || '').trim(),
+            } : null;
+
+            if (isLeaveApplication) {
+                leaveMetadata.days_requested = calculateLeaveDays(
+                    leaveMetadata.start_date,
+                    leaveMetadata.end_date,
+                    leaveMetadata.day_count_basis,
+                );
+                leaveMetadata.leave_type_label = getLeaveTypeLabel(leaveMetadata.leave_type);
+                leaveMetadata.leave_breakdown = buildLeaveBreakdownRows(leaveMetadata, leaveBalance);
+                leaveMetadata.employee_signature = {
+                    name: leaveMetadata.employee_name,
+                    timestamp: new Date().toISOString(),
+                    method: 'web_form_submission',
+                };
+
+                if (!leaveMetadata.employee_name || !leaveMetadata.employee_no || !leaveMetadata.position) {
+                    alert('Employee name, employee number, and position are required.');
+                    return;
+                }
+                if (!leaveMetadata.contact_address) {
+                    alert('Contact address during leave period is required.');
+                    return;
+                }
+                if (!leaveMetadata.start_date || !leaveMetadata.end_date || leaveMetadata.days_requested <= 0) {
+                    alert('Please select a valid leave period.');
+                    return;
+                }
+            }
+
+            const fileData = !isLeaveApplication && formData.file ? await fileToBase64(formData.file) : null;
             await axios.post(`${API_BASE}/submissions`, {
                 submission_type: formData.submission_type,
-                title: formData.title,
+                title: isLeaveApplication ? buildLeaveSubmissionTitle(leaveMetadata) : formData.title,
                 description: formData.description,
                 file_path: fileData,
-                file_name: formData.file?.name,
-                mime_type: formData.file?.type,
-                metadata: formData.metadata
+                file_name: isLeaveApplication ? null : formData.file?.name,
+                mime_type: isLeaveApplication ? null : formData.file?.type,
+                metadata: isLeaveApplication ? leaveMetadata : formData.metadata
             });
             setShowModal(false);
             setFormData({ 
@@ -177,7 +256,7 @@ export default function StaffSubmissionsPage() {
                 title: '', 
                 description: '', 
                 file: null,
-                metadata: { leave_type: 'annual', start_date: '', end_date: '', days_requested: 0 }
+                metadata: createDefaultLeaveMetadata(user),
             });
             await fetchSubmissions();
             await fetchLeaveBalance();
@@ -212,21 +291,46 @@ export default function StaffSubmissionsPage() {
         }
     };
 
-    const calculateDays = (start, end) => {
-        if (!start || !end) return 0;
-        const s = new Date(start);
-        const e = new Date(end);
-        const diffTime = Math.abs(e - s);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-        return diffDays;
+    const updateLeaveMetadata = (updates) => {
+        setFormData((current) => {
+            const nextMeta = {
+                ...createDefaultLeaveMetadata(user),
+                ...current.metadata,
+                ...updates,
+            };
+            nextMeta.days_requested = calculateLeaveDays(
+                nextMeta.start_date,
+                nextMeta.end_date,
+                nextMeta.day_count_basis,
+            );
+            return {
+                ...current,
+                file: null,
+                metadata: nextMeta,
+            };
+        });
     };
 
-    const handleDateChange = (field, value) => {
-        const newMeta = { ...formData.metadata, [field]: value };
-        if (field === 'start_date' || field === 'end_date') {
-            newMeta.days_requested = calculateDays(newMeta.start_date, newMeta.end_date);
+    const handleSubmissionTypeChange = (submissionType) => {
+        setFormData((current) => ({
+            submission_type: submissionType,
+            title: submissionType === 'leave_application' ? '' : current.title,
+            description: current.description,
+            file: null,
+            metadata: submissionType === 'leave_application'
+                ? createDefaultLeaveMetadata(user)
+                : {},
+        }));
+    };
+
+    const handlePrintLeaveApplication = (submission) => {
+        const opened = openLeaveApplicationPrintWindow(submission, {
+            currentUser: user,
+            leaveBalance,
+        });
+        if (!opened) {
+            alert('Please allow pop-ups to print or download the leave application form.');
         }
-        setFormData({ ...formData, metadata: newMeta });
     };
 
     const getStatusColor = (status) => {
@@ -238,6 +342,15 @@ export default function StaffSubmissionsPage() {
             default: return 'secondary';
         }
     };
+
+    const leaveMetadata = parseLeaveMetadata(formData.metadata);
+    const leaveBreakdownPreview = buildLeaveBreakdownRows(leaveMetadata, leaveBalance);
+    const selectedLeaveMetadata = selectedSub?.submission_type === 'leave_application'
+        ? parseLeaveMetadata(selectedSub.metadata)
+        : null;
+    const selectedLeaveBreakdown = selectedLeaveMetadata
+        ? buildLeaveBreakdownRows(selectedLeaveMetadata, leaveBalance)
+        : [];
 
     if (loading) return <div className="page-loading"><div className="spinner" /></div>;
 
@@ -296,7 +409,14 @@ export default function StaffSubmissionsPage() {
                                                 {sub.metadata?.days_requested && ` · ${sub.metadata.days_requested} Days`}
                                             </div>
                                         </div>
-                                        <button className="btn btn-secondary btn-sm" onClick={() => setSelectedSub(sub)}>Details</button>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                            {sub.submission_type === 'leave_application' && (
+                                                <button className="btn btn-secondary btn-sm" onClick={() => handlePrintLeaveApplication(sub)}>
+                                                    <Printer size={14} /> Print / Download
+                                                </button>
+                                            )}
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedSub(sub)}>Details</button>
+                                        </div>
                                     </div>
                                 ))}
                                 {submissions.length === 0 && (
@@ -329,7 +449,14 @@ export default function StaffSubmissionsPage() {
                                                 {sub.metadata?.days_requested && ` · ${sub.metadata.days_requested} Days`}
                                             </div>
                                         </div>
-                                        <button className="btn btn-primary btn-sm" onClick={() => setSelectedSub(sub)}>Action</button>
+                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                            {sub.submission_type === 'leave_application' && (
+                                                <button className="btn btn-secondary btn-sm" onClick={() => handlePrintLeaveApplication(sub)}>
+                                                    <Printer size={14} /> Print / Download
+                                                </button>
+                                            )}
+                                            <button className="btn btn-primary btn-sm" onClick={() => setSelectedSub(sub)}>Action</button>
+                                        </div>
                                     </div>
                                 ))}
                                 {managerQueue.length === 0 && (
@@ -403,7 +530,7 @@ export default function StaffSubmissionsPage() {
                                     <select 
                                         className="form-input" 
                                         value={formData.submission_type}
-                                        onChange={e => setFormData({...formData, submission_type: e.target.value})}
+                                        onChange={e => handleSubmissionTypeChange(e.target.value)}
                                     >
                                         {SUBMISSION_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                                     </select>
@@ -420,26 +547,155 @@ export default function StaffSubmissionsPage() {
                                             Launch RFF Wizard
                                         </button>
                                     </div>
-                                ) : (
-                                    <>
-                                        {formData.submission_type === 'leave_application' && (
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', padding: '16px', background: 'var(--surface-muted)', borderRadius: '8px' }}>
-                                                <div className="form-group">
-                                                    <label className="form-label">Start Date</label>
-                                                    <input type="date" className="form-input" required value={formData.metadata.start_date} onChange={e => handleDateChange('start_date', e.target.value)} />
+                                ) : formData.submission_type === 'leave_application' ? (
+                                    <div className="leave-form-section">
+                                        <div className="leave-form-grid">
+                                            <div className="form-group">
+                                                <label className="form-label">Employee Name</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.employee_name || ''}
+                                                    onChange={e => updateLeaveMetadata({ employee_name: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Employee Number</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.employee_no || ''}
+                                                    onChange={e => updateLeaveMetadata({ employee_no: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Position / Role</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.position || ''}
+                                                    onChange={e => updateLeaveMetadata({ position: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Leave Category</label>
+                                                <select
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.leave_type || 'vacation_annual'}
+                                                    onChange={e => updateLeaveMetadata({ leave_type: e.target.value })}
+                                                >
+                                                    {LEAVE_CATEGORY_OPTIONS.map(option => (
+                                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Start Date</label>
+                                                <input
+                                                    type="date"
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.start_date || ''}
+                                                    onChange={e => updateLeaveMetadata({ start_date: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">End Date</label>
+                                                <input
+                                                    type="date"
+                                                    className="form-input"
+                                                    required
+                                                    value={leaveMetadata.end_date || ''}
+                                                    onChange={e => updateLeaveMetadata({ end_date: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className="form-group wide">
+                                                <label className="form-label">Contact Address During Leave Period</label>
+                                                <input
+                                                    type="text"
+                                                    className="form-input"
+                                                    required
+                                                    placeholder="Address and reachable contact while on leave"
+                                                    value={leaveMetadata.contact_address || ''}
+                                                    onChange={e => updateLeaveMetadata({ contact_address: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="form-label">Day Count Basis</label>
+                                            <div className="segmented-control">
+                                                {[
+                                                    { value: 'calendar', label: 'Calendar Days' },
+                                                    { value: 'business', label: 'Business Days' },
+                                                ].map(option => (
+                                                    <button
+                                                        key={option.value}
+                                                        type="button"
+                                                        className={`segmented-button ${(leaveMetadata.day_count_basis || 'calendar') === option.value ? 'active' : ''}`}
+                                                        onClick={() => updateLeaveMetadata({ day_count_basis: option.value })}
+                                                    >
+                                                        {option.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="leave-days-banner">
+                                            <div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                                                    Total Leave Days Requested
                                                 </div>
-                                                <div className="form-group">
-                                                    <label className="form-label">End Date</label>
-                                                    <input type="date" className="form-input" required value={formData.metadata.end_date} onChange={e => handleDateChange('end_date', e.target.value)} />
-                                                </div>
-                                                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--brand-primary)' }}>
-                                                        Total Days Requested: {formData.metadata.days_requested}
-                                                    </div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                    {getLeaveTypeLabel(leaveMetadata.leave_type)} leave, counted as {leaveMetadata.day_count_basis === 'business' ? 'business days' : 'calendar days'}.
                                                 </div>
                                             </div>
-                                        )}
+                                            <strong>{formatDayNumber(leaveMetadata.days_requested || 0)}</strong>
+                                        </div>
 
+                                        <div>
+                                            <div className="form-label">Leave Breakdown Preview</div>
+                                            <div className="data-table-wrap">
+                                                <table className="data-table leave-breakdown-table" style={{ fontSize: '12px' }}>
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Leave Type</th>
+                                                            <th style={{ textAlign: 'right' }}>Balance b/f</th>
+                                                            <th style={{ textAlign: 'right' }}>Days Requested</th>
+                                                            <th style={{ textAlign: 'right' }}>Balance Remaining</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {leaveBreakdownPreview.map(row => (
+                                                            <tr key={row.leave_type}>
+                                                                <td>{row.label}</td>
+                                                                <td style={{ textAlign: 'right' }}>{formatDayNumber(row.balance_bf)}</td>
+                                                                <td style={{ textAlign: 'right' }}>{formatDayNumber(row.days_taken)}</td>
+                                                                <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatDayNumber(row.balance_remaining)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+
+                                        <div className="form-group" style={{ marginBottom: 0 }}>
+                                            <label className="form-label">Additional Notes</label>
+                                            <textarea
+                                                className="form-input"
+                                                style={{ minHeight: '80px' }}
+                                                placeholder="Optional context for Finance & Administration or the Director"
+                                                value={formData.description}
+                                                onChange={e => setFormData({...formData, description: e.target.value})}
+                                            />
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
                                         <div className="form-group">
                                             <label className="form-label">Title / Reference</label>
                                             <input 
@@ -475,7 +731,11 @@ export default function StaffSubmissionsPage() {
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
                                 {formData.submission_type !== 'request_for_funds' && (
                                     <button type="submit" className="btn btn-primary" disabled={submitting}>
-                                        {submitting ? 'Submitting...' : 'Send Submission'}
+                                        {submitting
+                                            ? 'Submitting...'
+                                            : formData.submission_type === 'leave_application'
+                                                ? 'Submit Leave Application'
+                                                : 'Send Submission'}
                                     </button>
                                 )}
                             </div>
@@ -893,37 +1153,82 @@ export default function StaffSubmissionsPage() {
                                             </p>
                                         </div>
 
-                                        <div className="panel" style={{ padding: '16px', marginBottom: '20px' }}>
-                                            <h3 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Description</h3>
-                                            <div style={{ fontSize: '14px', lineHeight: 1.6 }}>{selectedSub.description || 'No description provided.'}</div>
-                                            
-                                            {selectedSub.metadata?.start_date && (
-                                                <div style={{ marginTop: '16px', padding: '12px', background: 'var(--surface-sunken)', borderRadius: '8px', display: 'flex', gap: '20px' }}>
-                                                    <div>
-                                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>START</div>
-                                                        <div style={{ fontWeight: 600 }}>{selectedSub.metadata.start_date}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>END</div>
-                                                        <div style={{ fontWeight: 600 }}>{selectedSub.metadata.end_date}</div>
-                                                    </div>
-                                                    <div>
-                                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>TOTAL DAYS</div>
-                                                        <div style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{selectedSub.metadata.days_requested}</div>
-                                                    </div>
+                                        {selectedSub.submission_type === 'leave_application' ? (
+                                            <>
+                                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '12px' }}>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => handlePrintLeaveApplication(selectedSub)}
+                                                    >
+                                                        <Printer size={14} /> Print / Download Form
+                                                    </button>
                                                 </div>
-                                            )}
-                                        </div>
 
-                                        {selectedSub.file_name && (
-                                            <div className="panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <FileText size={24} className="text-primary" />
-                                                <div style={{ flex: 1 }}>
-                                                    <div style={{ fontWeight: 600, fontSize: '14px' }}>{selectedSub.file_name}</div>
-                                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Click to view attachment</div>
+                                                <div className="panel" style={{ padding: '16px', marginBottom: '20px' }}>
+                                                    <h3 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '12px' }}>Leave Application Details</h3>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px', fontSize: '13px' }}>
+                                                        <div><strong>Employee Name:</strong> {selectedLeaveMetadata?.employee_name || selectedSub.submitter_name || 'N/A'}</div>
+                                                        <div><strong>Employee No:</strong> {selectedLeaveMetadata?.employee_no || 'N/A'}</div>
+                                                        <div><strong>Position:</strong> {selectedLeaveMetadata?.position || 'N/A'}</div>
+                                                        <div><strong>Leave Category:</strong> {selectedLeaveMetadata?.leave_type_label || getLeaveTypeLabel(selectedLeaveMetadata?.leave_type)}</div>
+                                                        <div><strong>Start Date:</strong> {selectedLeaveMetadata?.start_date || 'N/A'}</div>
+                                                        <div><strong>End Date:</strong> {selectedLeaveMetadata?.end_date || 'N/A'}</div>
+                                                        <div><strong>Total Days:</strong> <span style={{ color: 'var(--brand-primary)', fontWeight: 800 }}>{formatDayNumber(selectedLeaveMetadata?.days_requested || 0)}</span></div>
+                                                        <div><strong>Count Basis:</strong> {selectedLeaveMetadata?.day_count_basis === 'business' ? 'Business days' : 'Calendar days'}</div>
+                                                        <div style={{ gridColumn: '1 / -1' }}><strong>Contact Address:</strong> {selectedLeaveMetadata?.contact_address || 'N/A'}</div>
+                                                    </div>
+                                                    {selectedSub.description && (
+                                                        <div style={{ marginTop: '14px', fontSize: '13px', lineHeight: 1.6 }}>
+                                                            <strong>Notes:</strong> {selectedSub.description}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                                <button className="btn btn-ghost btn-sm"><Eye size={16} /> View</button>
-                                            </div>
+
+                                                <div className="panel" style={{ padding: '16px', marginBottom: '20px' }}>
+                                                    <h3 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Official Leave Breakdown</h3>
+                                                    <div className="data-table-wrap">
+                                                        <table className="data-table leave-breakdown-table" style={{ fontSize: '12px' }}>
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Leave Type</th>
+                                                                    <th style={{ textAlign: 'right' }}>Balance b/f</th>
+                                                                    <th style={{ textAlign: 'right' }}>Days Taken</th>
+                                                                    <th style={{ textAlign: 'right' }}>Balance Remaining</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {selectedLeaveBreakdown.map(row => (
+                                                                    <tr key={row.leave_type}>
+                                                                        <td>{row.label}</td>
+                                                                        <td style={{ textAlign: 'right' }}>{formatDayNumber(row.balance_bf)}</td>
+                                                                        <td style={{ textAlign: 'right' }}>{formatDayNumber(row.days_taken)}</td>
+                                                                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{formatDayNumber(row.balance_remaining)}</td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="panel" style={{ padding: '16px', marginBottom: '20px' }}>
+                                                    <h3 style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '10px' }}>Description</h3>
+                                                    <div style={{ fontSize: '14px', lineHeight: 1.6 }}>{selectedSub.description || 'No description provided.'}</div>
+                                                </div>
+
+                                                {selectedSub.file_name && (
+                                                    <div className="panel" style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                        <FileText size={24} className="text-primary" />
+                                                        <div style={{ flex: 1 }}>
+                                                            <div style={{ fontWeight: 600, fontSize: '14px' }}>{selectedSub.file_name}</div>
+                                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Click to view attachment</div>
+                                                        </div>
+                                                        <button className="btn btn-ghost btn-sm"><Eye size={16} /> View</button>
+                                                    </div>
+                                                )}
+                                            </>
                                         )}
                                     </div>
 
