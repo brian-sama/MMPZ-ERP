@@ -394,6 +394,7 @@ app.use("/api/governance/queue", functionToExpress(governanceHandler));
 app.use("/api/governance/action", functionToExpress(governanceHandler));
 
 // Dashboard
+app.use("/api/dashboard/summary", functionToExpress(dashboardHandler));
 app.use(
   "/api/dashboard/executive-summary",
   functionToExpress(dashboardHandler),
