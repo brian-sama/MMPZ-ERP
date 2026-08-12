@@ -534,6 +534,16 @@ export const handler = async (event) => {
                 return rows[0];
             });
 
+            const meApiBase = (process.env.ME_INTERNAL_API_URL ?? '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+            const meToken = process.env.ME_INTEGRATION_TOKEN;
+            if (meApiBase && meToken) {
+                fetch(`${meApiBase}/api/integration/users/push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${meToken}` },
+                    body: JSON.stringify({ action: 'upsert', users: [sanitizeUser(updated)] }),
+                }).catch(() => {});
+            }
+
             return successResponse({
                 message: 'User updated successfully',
                 user: sanitizeUser(updated),
