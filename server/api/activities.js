@@ -6,12 +6,13 @@ import {
     ensurePermission,
 } from './utils/rbac.js';
 import { successResponse, errorResponse } from './utils/response.js';
+import { resolvePlatformEnv, canonicalizePlatformEnv } from './utils/platform-env.js';
+
+canonicalizePlatformEnv();
 
 const compassApiBaseUrl = () => {
     const configured = (
-        process.env.ME_INTERNAL_API_URL ||
-        process.env.COMPASS_INTERNAL_API_URL ||
-        process.env.ME_API_URL ||
+        resolvePlatformEnv('MMPZ_ME_INTERNAL_API_URL', 'ME_INTERNAL_API_URL', 'COMPASS_INTERNAL_API_URL', 'ME_API_URL') ||
         'https://monitoring.mmpzmne.co.zw/api'
     ).replace(/\/+$/, '');
 
@@ -19,9 +20,7 @@ const compassApiBaseUrl = () => {
 };
 
 const compassIntegrationToken = () =>
-    process.env.ME_INTEGRATION_TOKEN ||
-    process.env.ERP_INTEGRATION_TOKEN ||
-    process.env.INTEGRATION_TOKEN ||
+    resolvePlatformEnv('MMPZ_ME_INTEGRATION_TOKEN', 'ME_INTEGRATION_TOKEN', 'MMPZ_INTEGRATION_TOKEN', 'ERP_INTEGRATION_TOKEN', 'INTEGRATION_TOKEN') ||
     '';
 
 const loadFieldActivityForCompass = async (activityId) => {
@@ -30,6 +29,7 @@ const loadFieldActivityForCompass = async (activityId) => {
             a.*,
             f.name AS facilitator_name,
             f.email AS facilitator_email,
+            planner.email AS planner_email,
             r.name AS reviewer_name,
             r.email AS reviewer_email,
             p.name AS project_name,
@@ -38,12 +38,13 @@ const loadFieldActivityForCompass = async (activityId) => {
             COALESCE(SUM(var.female_count), 0)::int AS female_count
         FROM field_activities a
         JOIN users f ON a.facilitator_id = f.id
+        LEFT JOIN users planner ON a.planner_id = planner.id
         LEFT JOIN users r ON a.assigned_reviewer_id = r.id
         LEFT JOIN projects p ON a.project_id = p.id
         LEFT JOIN indicators i ON a.indicator_id = i.id
         LEFT JOIN volunteer_activity_reports var ON var.field_activity_id = a.id
         WHERE a.id = ${activityId}
-        GROUP BY a.id, f.name, f.email, r.name, r.email, p.name, i.title
+        GROUP BY a.id, f.name, f.email, planner.email, r.name, r.email, p.name, i.title
         LIMIT 1
     `;
 
@@ -74,15 +75,20 @@ const pushFieldActivityToCompass = async (activityId) => {
             activities: [
                 {
                     id: activity.id,
+                    erpActivityId: activity.id,
                     activityDate: activity.activity_date,
                     description: activity.description,
                     erpIndicatorId: activity.indicator_id,
                     erpProjectId: activity.project_id,
                     facilitatorEmail: activity.facilitator_email,
                     facilitatorName: activity.facilitator_name,
+                    plannerEmail: activity.planner_email,
+                    erpPlanId: activity.plan_submission_id,
                     femaleParticipants: activity.female_count,
                     indicatorTitle: activity.indicator_title,
                     location: activity.location,
+                    latitude: activity.latitude,
+                    longitude: activity.longitude,
                     maleParticipants: activity.male_count,
                     name: activity.description || `ERP field activity ${activity.id}`,
                     projectName: activity.project_name,
@@ -109,12 +115,39 @@ const pushFieldActivityToCompass = async (activityId) => {
 };
 
 const tryPushFieldActivityToCompass = async (activityId) => {
+    const attemptAt = new Date();
+    await sql`
+        UPDATE field_activities
+        SET compass_sync_status = 'SYNCING',
+            compass_sync_attempts = compass_sync_attempts + 1,
+            compass_last_attempt_at = ${attemptAt},
+            compass_last_error = NULL
+        WHERE id = ${activityId}
+    `;
     try {
-        return await pushFieldActivityToCompass(activityId);
+        const result = await pushFieldActivityToCompass(activityId);
+        const resultActivityId = result?.accepted?.[0]?.localActivityId || null;
+        await sql`
+            UPDATE field_activities
+            SET compass_sync_status = 'SYNCED',
+                compass_activity_id = COALESCE(${resultActivityId}, compass_activity_id),
+                compass_next_retry_at = NULL,
+                compass_last_error = NULL
+            WHERE id = ${activityId}
+        `;
+        return result;
     } catch (error) {
         console.error('Compass field activity sync error:', error);
+        const message = error instanceof Error ? error.message : 'Compass sync failed';
+        await sql`
+            UPDATE field_activities
+            SET compass_sync_status = 'FAILED',
+                compass_last_error = ${message},
+                compass_next_retry_at = CURRENT_TIMESTAMP + INTERVAL '5 minutes'
+            WHERE id = ${activityId}
+        `;
         return {
-            error: error instanceof Error ? error.message : 'Compass sync failed',
+            error: message,
             ok: false,
         };
     }
@@ -139,6 +172,9 @@ export const handler = async (event) => {
                 location,
                 description,
                 assigned_reviewer_id,
+                planner_id,
+                latitude,
+                longitude,
                 plan_submission_id,
             } = body;
 
@@ -165,6 +201,9 @@ export const handler = async (event) => {
                     ${location},
                     ${description},
                     ${assigned_reviewer_id},
+                    ${body.planner_id || userId},
+                    ${body.latitude ?? null},
+                    ${body.longitude ?? null},
                     ${plan_submission_id},
                     'draft'
                 ) RETURNING *
@@ -346,6 +385,21 @@ export const handler = async (event) => {
 
             const compassSync = await tryPushFieldActivityToCompass(activityId);
             return successResponse({ activityId, compassSync, submissionId: submission.id });
+        }
+
+        const retryMatch = path.match(/\/api\/activities\/([^\/]+)\/retry-compass$/);
+        if (method === 'POST' && retryMatch) {
+            await ensurePermission(userContext, 'activity.update');
+            const activityId = retryMatch[1];
+            const [activity] = await sql`
+                SELECT id FROM field_activities
+                WHERE id = ${activityId}
+                  AND (facilitator_id = ${userId} OR assigned_reviewer_id = ${userId})
+                LIMIT 1
+            `;
+            if (!activity) throw new HttpError('Activity not found or not assigned to this user', 404);
+            const compassSync = await tryPushFieldActivityToCompass(activityId);
+            return successResponse({ activityId, compassSync });
         }
 
         throw new HttpError('Route not found', 404);

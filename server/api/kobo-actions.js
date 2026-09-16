@@ -18,19 +18,20 @@ import {
 } from './utils/rbac.js';
 import { createNotification } from './utils/notification-center.js';
 import { fetchKoboConfigFromCompass } from './kobo-config.js';
+import { resolvePlatformEnv, canonicalizePlatformEnv } from './utils/platform-env.js';
+
+canonicalizePlatformEnv();
 
 const compassApiBaseUrl = () => {
     const configured = (
-        process.env.ME_INTERNAL_API_URL ||
-        process.env.COMPASS_INTERNAL_API_URL ||
+        resolvePlatformEnv('MMPZ_ME_INTERNAL_API_URL', 'ME_INTERNAL_API_URL', 'COMPASS_INTERNAL_API_URL') ||
         'https://monitoring.mmpzmne.co.zw/api'
     ).replace(/\/+$/, '');
     return configured.endsWith('/api') ? configured : `${configured}/api`;
 };
 
 const compassIntegrationToken = () =>
-    process.env.ME_INTEGRATION_TOKEN ||
-    process.env.ERP_INTEGRATION_TOKEN ||
+    resolvePlatformEnv('MMPZ_ME_INTEGRATION_TOKEN', 'ME_INTEGRATION_TOKEN', 'MMPZ_INTEGRATION_TOKEN', 'ERP_INTEGRATION_TOKEN') ||
     '';
 
 const hasTable = async (tableName) => {

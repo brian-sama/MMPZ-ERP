@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS field_activities (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
 -- 4. Update Existing Tables to link to Field Activities
 ALTER TABLE volunteer_activity_reports ADD COLUMN IF NOT EXISTS field_activity_id UUID REFERENCES field_activities(id) ON DELETE CASCADE;
 ALTER TABLE volunteer_submissions ADD COLUMN IF NOT EXISTS field_activity_id UUID REFERENCES field_activities(id) ON DELETE CASCADE;

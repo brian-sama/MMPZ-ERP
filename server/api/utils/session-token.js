@@ -1,7 +1,23 @@
 import crypto from 'crypto';
 
+function resolvePlatformEnv(...names) {
+    for (const name of names) {
+        const value = process.env[name];
+        if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+    }
+    return undefined;
+}
+
+const SHARED_AUTH_SECRET = resolvePlatformEnv('MMPZ_AUTH_SECRET', 'AUTH_SECRET', 'SESSION_SECRET');
+if (SHARED_AUTH_SECRET) {
+    process.env.MMPZ_AUTH_SECRET ??= SHARED_AUTH_SECRET;
+    process.env.AUTH_SECRET ??= SHARED_AUTH_SECRET;
+    process.env.SESSION_SECRET ??= SHARED_AUTH_SECRET;
+}
+
 const DEFAULT_TTL_SECONDS = 60 * 60 * 12;
 const TOKEN_SECRET =
+    resolvePlatformEnv('MMPZ_AUTH_SECRET', 'AUTH_SECRET', 'SESSION_SECRET') ||
     process.env.MMPZ_AUTH_SECRET ||
     process.env.AUTH_SECRET ||
     process.env.SESSION_SECRET;

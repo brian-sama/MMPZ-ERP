@@ -91,6 +91,40 @@ setInterval(() => {
 // ERP signs with ERP_INTEGRATION_TOKEN; M&E verifies with the same key (and vice versa).
 const HANDOFF_TTL_MS = 60_000;
 
+function resolvePlatformEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
+const platformAuthSecret = resolvePlatformEnv('MMPZ_AUTH_SECRET', 'AUTH_SECRET', 'SESSION_SECRET');
+if (platformAuthSecret) {
+  process.env.MMPZ_AUTH_SECRET ??= platformAuthSecret;
+  process.env.AUTH_SECRET ??= platformAuthSecret;
+  process.env.SESSION_SECRET ??= platformAuthSecret;
+}
+
+const platformErpToken = resolvePlatformEnv('MMPZ_INTEGRATION_TOKEN', 'ERP_INTEGRATION_TOKEN');
+if (platformErpToken) {
+  process.env.MMPZ_INTEGRATION_TOKEN ??= platformErpToken;
+  process.env.ERP_INTEGRATION_TOKEN ??= platformErpToken;
+}
+
+const platformMeToken = resolvePlatformEnv('MMPZ_ME_INTEGRATION_TOKEN', 'ME_INTEGRATION_TOKEN');
+if (platformMeToken) {
+  process.env.MMPZ_ME_INTEGRATION_TOKEN ??= platformMeToken;
+  process.env.ME_INTEGRATION_TOKEN ??= platformMeToken;
+}
+
+const platformPublicUrl = resolvePlatformEnv('MMPZ_PUBLIC_URL', 'ME_PUBLIC_URL', 'ERP_PUBLIC_URL');
+if (platformPublicUrl) {
+  process.env.MMPZ_PUBLIC_URL ??= platformPublicUrl;
+  process.env.ME_PUBLIC_URL ??= platformPublicUrl;
+  process.env.ERP_PUBLIC_URL ??= platformPublicUrl;
+}
+
 function createHandoffToken(email, signingKey) {
   const payload = Buffer.from(
     JSON.stringify({ email, exp: Date.now() + HANDOFF_TTL_MS }),
