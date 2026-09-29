@@ -162,7 +162,7 @@ function handoffErrorHtml(message) {
 
 import { sql } from "./server/api/utils/db.js";
 import { buildIdentity } from "./server/api/utils/identity.js";
-import { resolveSystemRole, toLegacyRole } from "./server/api/utils/rbac.js";
+import { getUserContext, resolveSystemRole, toLegacyRole } from "./server/api/utils/rbac.js";
 import { startCalendarReminderScheduler } from "./server/jobs/calendar-reminders.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -531,6 +531,81 @@ app.get("/api/me/session", async (req, res) => {
     },
   });
 });
+
+app.post("/api/auth/platform-session", async (req, res) => {
+  const token = getBearerTokenFromHeaders(req.headers);
+  const session = verifySessionToken(token);
+  if (!session?.userId) {
+    res.status(401).json({ error: "Authentication required" });
+    return;
+  }
+
+  const sharedSecret = process.env.MMPZ_AUTH_SECRET || process.env.AUTH_SECRET || process.env.SESSION_SECRET;
+  if (!sharedSecret || sharedSecret.trim().length < 32) {
+    res.status(503).json({ error: "Shared platform authentication is not configured." });
+    return;
+  }
+
+  try {
+    const actor = await getUserContext(session.userId);
+    if (actor.require_password_reset) {
+      res.status(403).json({ error: "This account must be active and complete its password reset." });
+      return;
+    }
+    if (actor.is_pending_reassignment) {
+      res.status(403).json({ error: "Role assignment must be confirmed before using shared platform services." });
+      return;
+    }
+
+    const erpPermissions = actor.permissions;
+    const platformPermissions = new Set();
+    const hasAny = (...permissions) => permissions.some((permission) => erpPermissions.has(permission));
+
+    if (hasAny("indicator.read_all", "indicator.read_assigned")) {
+      platformPermissions.add("indicator:read");
+    }
+    if (hasAny("indicator.create", "indicator.update")) {
+      platformPermissions.add("indicator:manage");
+    }
+    if (hasAny("activity.read", "activity.read:approved", "activity.read:own")) {
+      platformPermissions.add("activity:read");
+    }
+    if (hasAny("activity.create", "activity.submit", "volunteer.submit")) {
+      platformPermissions.add("activity:create");
+    }
+    if (actor.system_role === "SUPER_ADMIN") {
+      for (const permission of ["indicator:read", "indicator:manage", "activity:read", "activity:create"]) {
+        platformPermissions.add(permission);
+      }
+    }
+    if (platformPermissions.size === 0) {
+      res.status(403).json({ error: "This account has no permissions for shared platform services." });
+      return;
+    }
+
+    const expiresAt = Date.now() + 15 * 60 * 1000;
+    const payload = Buffer.from(JSON.stringify({
+      userId: String(actor.id),
+      email: actor.email,
+      expiresAt,
+      permissions: [...platformPermissions],
+      role: actor.role_code,
+      roles: [actor.role_code, actor.system_role].filter(Boolean)
+    })).toString("base64url");
+    const signature = crypto.createHmac("sha256", sharedSecret.trim()).update(payload).digest("base64url");
+
+    res.json({
+      token: `${payload}.${signature}`,
+      expiresAt,
+      user: { id: String(actor.id), email: actor.email, role: actor.role_code }
+    });
+  } catch (error) {
+    const status = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+    if (status >= 500) console.error("ERP platform session exchange failed:", error);
+    res.status(status).json({ error: status >= 500 ? "Could not exchange the platform session." : error.message });
+  }
+});
+
 // Issues a 60-second handoff token the M&E server can verify to establish a Compass session.
 app.post("/api/auth/handoff", async (req, res) => {
   const token = getBearerTokenFromHeaders(req.headers);

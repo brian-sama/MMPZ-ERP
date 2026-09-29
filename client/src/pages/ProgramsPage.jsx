@@ -12,6 +12,7 @@ import {
     UserRound,
 } from 'lucide-react';
 import API_BASE from '../apiConfig';
+import { fetchSharedPlatformIndicators } from '../platformApi';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 
@@ -71,12 +72,13 @@ export default function ProgramsPage() {
 
     const fetchSupportData = async () => {
         try {
-            const [userRes, indicatorRes] = await Promise.all([
+            const [userRes, sharedIndicators] = await Promise.all([
                 axios.get(`${API_BASE}/users`),
-                axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
+                fetchSharedPlatformIndicators(),
             ]);
+            const indicators = sharedIndicators ?? (await axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } })).data;
             setUsers(userRes.data || []);
-            setIndicators(indicatorRes.data || []);
+            setIndicators(Array.isArray(indicators) ? indicators : []);
         } catch (error) {
             console.error('Failed to fetch program support data', error);
         }
@@ -154,7 +156,9 @@ export default function ProgramsPage() {
     };
 
     const projectIndicators = useMemo(
-        () => indicators.filter((indicator) => indicator.project_id === selectedProject?.id),
+        () => indicators.filter((indicator) =>
+            indicator.project_id === selectedProject?.id || indicator.erp?.projectId === selectedProject?.id
+        ),
         [indicators, selectedProject?.id]
     );
 
