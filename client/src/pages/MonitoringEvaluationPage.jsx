@@ -340,14 +340,26 @@ export default function MonitoringEvaluationPage() {
                                     )}
                                     <div className="control-stack compact">
                                         {koboLinks.slice(0, 5).map(link => (
-                                            <div key={link.id} className="control-row static" style={{ alignItems: 'center' }}>
-                                                <div>
-                                                    <div className="control-title">{link.kobo_form_name}</div>
-                                                    <div className="control-copy">
+                                            <div
+                                                key={link.id}
+                                                className="control-row static"
+                                                style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    flexWrap: 'wrap',
+                                                    width: '100%',
+                                                    boxSizing: 'border-box',
+                                                }}
+                                            >
+                                                <div style={{ minWidth: 0, flex: '1 1 180px' }}>
+                                                    <div className="control-title" style={{ fontSize: '13px', fontWeight: 600 }}>{link.kobo_form_name}</div>
+                                                    <div className="control-copy" style={{ fontSize: '11px', opacity: 0.75 }}>
                                                         {link.indicator_title} · {link.submissions_count || 0} submissions
                                                     </div>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
                                                     <button className="btn btn-ghost btn-sm" onClick={() => handleSync(link.id)} disabled={syncing}>
                                                         <RefreshCw size={12} /> Sync
                                                     </button>
@@ -371,25 +383,45 @@ export default function MonitoringEvaluationPage() {
                                                 {koboForms.slice(0, 6).map((form) => {
                                                     const isLinked = linkedFormUids.has(form.uid);
                                                     return (
-                                                        <div key={form.uid} className="control-row static" style={{ alignItems: 'center' }}>
+                                                        <div
+                                                            key={form.uid}
+                                                            className="control-row static"
+                                                            style={{
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'stretch',
+                                                                gap: '12px',
+                                                                width: '100%',
+                                                                boxSizing: 'border-box',
+                                                            }}
+                                                        >
                                                             <div style={{ minWidth: 0 }}>
-                                                                <div className="control-title">{form.name}</div>
-                                                                <div className="control-copy">{form.uid}</div>
+                                                                <div className="control-title" style={{ fontSize: '13px', fontWeight: 700, wordBreak: 'break-word' }}>
+                                                                    {form.name}
+                                                                </div>
+                                                                <div className="control-copy" style={{ fontSize: '11px', opacity: 0.7, wordBreak: 'break-all' }}>
+                                                                    {form.uid}
+                                                                </div>
                                                                 {koboFields[form.uid]?.length > 0 && (
-                                                                    <div className="form-hint" style={{ marginTop: '6px' }}>
+                                                                    <div className="form-hint" style={{ marginTop: '6px', fontSize: '11px' }}>
                                                                         Fields: {koboFields[form.uid].slice(0, 6).join(', ')}
                                                                         {koboFields[form.uid].length > 6 ? '...' : ''}
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                            <div style={{ display: 'grid', gap: '8px', minWidth: '220px' }}>
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
                                                                 {isLinked ? (
-                                                                    <span className="badge badge-success">Linked</span>
+                                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                        <span className="badge badge-success">Linked</span>
+                                                                        <button className="btn btn-ghost btn-sm" onClick={() => handleInspectFields(form.uid)} disabled={inspectingForm === form.uid}>
+                                                                            <Eye size={12} /> {inspectingForm === form.uid ? 'Inspecting...' : 'Inspect Fields'}
+                                                                        </button>
+                                                                    </div>
                                                                 ) : (
                                                                     <>
                                                                         <select
                                                                             className="form-input"
-                                                                            style={{ height: '34px', fontSize: '12px', margin: 0 }}
+                                                                            style={{ height: '34px', fontSize: '12px', margin: 0, width: '100%' }}
                                                                             value={koboLinkSelections[form.uid] || ''}
                                                                             onChange={(event) =>
                                                                                 setKoboLinkSelections((current) => ({
@@ -403,14 +435,16 @@ export default function MonitoringEvaluationPage() {
                                                                                 <option key={indicator.id} value={indicator.id}>{indicator.title}</option>
                                                                             ))}
                                                                         </select>
-                                                                        <button className="btn btn-primary btn-sm" onClick={() => handleLinkForm(form)}>
-                                                                            <LinkIcon size={12} /> Link Form
-                                                                        </button>
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                                            <button className="btn btn-primary btn-sm" onClick={() => handleLinkForm(form)}>
+                                                                                <LinkIcon size={12} /> Link Form
+                                                                            </button>
+                                                                            <button className="btn btn-ghost btn-sm" onClick={() => handleInspectFields(form.uid)} disabled={inspectingForm === form.uid}>
+                                                                                <Eye size={12} /> {inspectingForm === form.uid ? 'Inspecting...' : 'Inspect'}
+                                                                            </button>
+                                                                        </div>
                                                                     </>
                                                                 )}
-                                                                <button className="btn btn-ghost btn-sm" onClick={() => handleInspectFields(form.uid)} disabled={inspectingForm === form.uid}>
-                                                                    <Eye size={12} /> {inspectingForm === form.uid ? 'Inspecting...' : 'Inspect Fields'}
-                                                                </button>
                                                             </div>
                                                         </div>
                                                     );
