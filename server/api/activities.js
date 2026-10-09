@@ -63,6 +63,12 @@ const pushFieldActivityToCompass = async (activityId) => {
         return { skipped: true, reason: 'activity-not-found' };
     }
 
+    const evidenceRows = await sql`
+        SELECT id, file_name, file_path, mime_type, file_size, notes, created_at
+        FROM volunteer_submissions
+        WHERE field_activity_id = ${activityId}
+    `;
+
     const response = await fetch(`${compassApiBaseUrl()}/integrations/erp/field-activities`, {
         method: 'POST',
         headers: {
@@ -94,6 +100,16 @@ const pushFieldActivityToCompass = async (activityId) => {
                     projectName: activity.project_name,
                     reviewerEmail: activity.reviewer_email,
                     reviewerName: activity.reviewer_name,
+                    evidenceFiles: evidenceRows.map((e) => ({
+                        id: e.id,
+                        fileName: e.file_name,
+                        filePath: e.file_path,
+                        mimeType: e.mime_type,
+                        fileSize: e.file_size,
+                        notes: e.notes,
+                        createdAt: e.created_at,
+                    })),
+                    evidenceCount: evidenceRows.length,
                     source: 'ERP My Portal',
                     status: activity.status,
                     type: 'ERP_FIELD_ACTIVITY',

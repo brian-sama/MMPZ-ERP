@@ -318,8 +318,8 @@ try {
   );
 }
 app.use(
-  "/uploads/avatars",
-  express.static(path.join(__dirname, "uploads", "avatars")),
+  "/uploads",
+  express.static(path.join(__dirname, "uploads")),
 );
 
 // Health

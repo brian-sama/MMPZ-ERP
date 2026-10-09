@@ -68,6 +68,7 @@ export const handler = async (event) => {
       budgetLines,
       procurementRequests,
       expenseRequests,
+      indicators,
     ] = await Promise.all([
       loadIfPresent(
         "roles",
@@ -205,6 +206,25 @@ export const handler = async (event) => {
                 LIMIT 500
             `,
       ),
+      loadIfPresent(
+        "indicators",
+        () => sql`
+                SELECT
+                    id,
+                    project_id,
+                    title,
+                    target_value,
+                    current_value,
+                    total_budget,
+                    current_budget_balance,
+                    priority,
+                    status,
+                    created_at,
+                    updated_at
+                FROM indicators
+                ORDER BY id ASC
+            `,
+      ),
     ]);
 
     return successResponse({
@@ -214,6 +234,7 @@ export const handler = async (event) => {
       expenseRequests,
       generatedAt: new Date().toISOString(),
       grants,
+      indicators,
       procurementRequests,
       programs,
       projects,

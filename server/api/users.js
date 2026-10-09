@@ -555,10 +555,22 @@ export const handler = async (event) => {
             if (!id) return errorResponse('User ID is required', 400);
             ensurePermission(actor, 'user.delete');
 
+            const existingUsers = await sql`SELECT id, email, name FROM users WHERE id = ${id}`;
+
             await sql.begin(async (tx) => {
                 await setAuditActor(tx, actor.id);
                 await tx`DELETE FROM users WHERE id = ${id}`;
             });
+
+            const meApiBase = (process.env.ME_INTERNAL_API_URL ?? '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+            const meToken = process.env.ME_INTEGRATION_TOKEN;
+            if (meApiBase && meToken && existingUsers.length > 0) {
+                fetch(`${meApiBase}/api/integration/users/push`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${meToken}` },
+                    body: JSON.stringify({ action: 'deactivate', users: existingUsers }),
+                }).catch(() => {});
+            }
 
             return successResponse({ message: 'User deleted successfully' });
         }
