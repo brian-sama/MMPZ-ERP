@@ -7,6 +7,8 @@ import {
     ensureAnyPermission,
     canSeeOrganizationFinance,
 } from './utils/rbac.js';
+import { triggerCompassMasterDataSync } from './utils/compass-sync.js';
+import { emitRealtimeEvent } from './utils/notification-center.js';
 
 const FINANCE_READ_PERMISSIONS = [
     'expense.read',
@@ -120,6 +122,10 @@ export const handler = async (event) => {
                 VALUES (${budgetId}, ${code.trim()}, ${description.trim()}, ${amount}, 0)
                 RETURNING *
             `;
+
+            triggerCompassMasterDataSync();
+            emitRealtimeEvent({ kind: 'data_refresh', entity: 'budget_lines' });
+
             return successResponse(created, 201);
         }
 

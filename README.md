@@ -222,7 +222,7 @@ The compiled assets will be created in the `dist/` or `build/` directory.
 
 ### Deployment Options
 
-1. **Vercel / Netlify**: Connect your GitHub repository and set the build command to `npm run build` with output directory `dist`.
+1. **Production Hosting**: Connect your GitHub repository and set the build command to `npm run build` with output directory `dist`.
 2. **Cloudflare Pages / GitHub Pages**: Deploy the static build assets directly via automated CI/CD pipelines.
 3. **Docker Containerization**: Use the following multi-stage container build:
 

@@ -7,8 +7,11 @@ import {
     ensureAnyPermission,
     ensurePermission,
     canSeeOrganizationIndicators,
+    canSeeOrganizationFinance,
     setAuditActor,
 } from './utils/rbac.js';
+import { triggerCompassMasterDataSync } from './utils/compass-sync.js';
+import { emitRealtimeEvent } from './utils/notification-center.js';
 
 export const handler = async (event) => {
     if (event.httpMethod === 'OPTIONS') return corsResponse();
@@ -27,7 +30,14 @@ export const handler = async (event) => {
 
             let rows;
             if (!id) {
-                if (canSeeOrganizationIndicators(actor)) {
+                if (
+                    canSeeOrganizationIndicators(actor) ||
+                    canSeeOrganizationFinance(actor) ||
+                    actor?.role_code === 'SYSTEM_ADMIN' ||
+                    actor?.system_role === 'SUPER_ADMIN' ||
+                    query.all === 'true' ||
+                    query.select === 'true'
+                ) {
                     rows = await sql`
                         SELECT p.*, pr.name AS program_name, u.name AS owner_name
                         FROM projects p
@@ -112,6 +122,8 @@ export const handler = async (event) => {
                 return rows[0];
             });
 
+            triggerCompassMasterDataSync();
+            emitRealtimeEvent({ kind: 'data_refresh', entity: 'projects' });
             return successResponse({ message: 'Project created successfully', project: inserted });
         }
 
@@ -137,6 +149,8 @@ export const handler = async (event) => {
                 `;
             });
 
+            triggerCompassMasterDataSync();
+            emitRealtimeEvent({ kind: 'data_refresh', entity: 'projects' });
             return successResponse({ message: 'Project updated successfully' });
         }
 

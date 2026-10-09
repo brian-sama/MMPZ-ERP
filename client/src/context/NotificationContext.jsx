@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import axios from 'axios';
 import API_BASE from '../apiConfig';
 import { useAuth } from './AuthContext';
+import { publishSyncEvent } from '../utils/realtimeSync';
 
 const NotificationContext = createContext(null);
 
@@ -207,6 +208,10 @@ export function NotificationProvider({ children }) {
             source.onmessage = (event) => {
                 try {
                     const payload = JSON.parse(event.data);
+                    if (payload.kind === 'data_refresh' || payload.kind === 'entity_changed' || payload.kind === 'sync') {
+                        publishSyncEvent(payload.entity || '*', payload);
+                        return;
+                    }
                     if (payload.kind !== 'notification' || !payload.notification) return;
                     setNotifications((current) => {
                         const withoutExisting = current.filter((item) => item.id !== payload.notification.id);

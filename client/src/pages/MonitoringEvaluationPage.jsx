@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
+import { useRealtimeSync, publishSyncEvent } from '../utils/realtimeSync';
 import {
     BarChart3, Target, TrendingUp, Filter, Search,
     ExternalLink, Clock, Plus, Download, AlertCircle,
@@ -48,6 +49,10 @@ export default function MonitoringEvaluationPage() {
     const [reportValue, setReportValue] = useState('');
     const [reportNotes, setReportNotes] = useState('');
     const hasPerformanceData = performance.length > 0;
+
+    useRealtimeSync(['indicators', 'activities', 'projects'], () => {
+        fetchMEData();
+    });
 
     useEffect(() => {
         fetchMEData();

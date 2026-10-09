@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
     AlertCircle,
@@ -15,6 +15,7 @@ import API_BASE from '../apiConfig';
 import { fetchSharedPlatformIndicators } from '../platformApi';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
+import { useRealtimeSync, publishSyncEvent } from '../utils/realtimeSync';
 
 const PROGRAM_STATUS_OPTIONS = ['active', 'paused', 'completed', 'archived'];
 const PROJECT_STATUS_OPTIONS = ['planning', 'active', 'paused', 'completed', 'archived'];
@@ -205,6 +206,10 @@ export default function ProgramsPage() {
         return '';
     };
 
+    useRealtimeSync(['programs', 'projects', 'activities'], () => {
+        refreshCurrentView();
+    });
+
     const submitForm = async (event) => {
         event.preventDefault();
         const validationError = validateForm();
@@ -223,6 +228,7 @@ export default function ProgramsPage() {
                     description: formData.description,
                     status: formData.status,
                 });
+                publishSyncEvent('programs');
             }
 
             if (formType === 'project') {
@@ -237,6 +243,7 @@ export default function ProgramsPage() {
                     status: formData.status,
                     owner_user_id: formData.owner_user_id || user.id,
                 });
+                publishSyncEvent('projects');
             }
 
             if (formType === 'activity') {
@@ -251,6 +258,7 @@ export default function ProgramsPage() {
                     evidence_url: formData.evidence_url || null,
                     activity_output: formData.activity_output || null,
                 });
+                publishSyncEvent('activities');
             }
 
             closeForm();

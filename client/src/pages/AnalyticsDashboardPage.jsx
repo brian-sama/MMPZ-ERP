@@ -24,6 +24,7 @@ import {
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
+import { useRealtimeSync } from '../utils/realtimeSync';
 
 export default function AnalyticsDashboardPage() {
     const { user } = useAuth();
@@ -38,39 +39,43 @@ export default function AnalyticsDashboardPage() {
     const [riskSummary, setRiskSummary] = useState(null);
     const [multiYear, setMultiYear] = useState([]);
 
+    const loadAnalytics = async ({ silent = false } = {}) => {
+        if (!silent) setLoading(true);
+        setError('');
+        const results = await Promise.allSettled([
+            axios.get(`${API_BASE}/dashboard/executive-summary`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/programs`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/governance/queue`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
+            axios.get(`${API_BASE}/analytics/multi-year`, { params: { userId: user.id } }),
+        ]);
+
+        const [summaryRes, perfRes, programRes, projectRes, indicatorRes, governanceRes, riskRes, multiYearRes] = results;
+
+        if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value.data);
+        if (perfRes.status === 'fulfilled') setPerformance(perfRes.value.data || []);
+        if (programRes.status === 'fulfilled') setPrograms(programRes.value.data || []);
+        if (projectRes.status === 'fulfilled') setProjects(projectRes.value.data || []);
+        if (indicatorRes.status === 'fulfilled') setIndicators(indicatorRes.value.data || []);
+        if (governanceRes.status === 'fulfilled') setGovernanceItems(governanceRes.value.data || []);
+        if (riskRes.status === 'fulfilled') setRiskSummary(riskRes.value.data || null);
+        if (multiYearRes.status === 'fulfilled') setMultiYear(multiYearRes.value.data || []);
+
+        const failed = results.every((result) => result.status === 'rejected');
+        if (failed) {
+            setError('Unable to load analytics right now.');
+        }
+        setLoading(false);
+    };
+
+    useRealtimeSync(['*'], () => {
+        loadAnalytics({ silent: true });
+    });
+
     useEffect(() => {
-        const loadAnalytics = async () => {
-            setLoading(true);
-            setError('');
-            const results = await Promise.allSettled([
-                axios.get(`${API_BASE}/dashboard/executive-summary`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/programs`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/governance/queue`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
-                axios.get(`${API_BASE}/analytics/multi-year`, { params: { userId: user.id } }),
-            ]);
-
-            const [summaryRes, perfRes, programRes, projectRes, indicatorRes, governanceRes, riskRes, multiYearRes] = results;
-
-            if (summaryRes.status === 'fulfilled') setSummary(summaryRes.value.data);
-            if (perfRes.status === 'fulfilled') setPerformance(perfRes.value.data || []);
-            if (programRes.status === 'fulfilled') setPrograms(programRes.value.data || []);
-            if (projectRes.status === 'fulfilled') setProjects(projectRes.value.data || []);
-            if (indicatorRes.status === 'fulfilled') setIndicators(indicatorRes.value.data || []);
-            if (governanceRes.status === 'fulfilled') setGovernanceItems(governanceRes.value.data || []);
-            if (riskRes.status === 'fulfilled') setRiskSummary(riskRes.value.data || null);
-            if (multiYearRes.status === 'fulfilled') setMultiYear(multiYearRes.value.data || []);
-
-            const failed = results.every((result) => result.status === 'rejected');
-            if (failed) {
-                setError('Unable to load analytics right now.');
-            }
-            setLoading(false);
-        };
-
         loadAnalytics();
     }, [user.id]);
 

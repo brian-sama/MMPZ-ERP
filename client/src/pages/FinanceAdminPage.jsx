@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../context/AuthContext';
 import API_BASE from '../apiConfig';
 import PageHeader from '../components/PageHeader';
+import { useRealtimeSync, publishSyncEvent } from '../utils/realtimeSync';
 
 const formatCurrency = (value) =>
     new Intl.NumberFormat('en-US', {
@@ -163,6 +164,16 @@ export default function FinanceAdminPage() {
         }
     };
 
+    const openBudgetLineModal = async () => {
+        try {
+            const res = await axios.get(`${API_BASE}/projects`, { params: { userId: user.id, all: 'true' } });
+            setProjects(res.data || []);
+        } catch (e) {
+            console.error('Failed to load projects', e);
+        }
+        setShowBudgetLineModal(true);
+    };
+
     const handleCreateBudgetLine = async (e) => {
         e.preventDefault();
         setSavingBudgetLine(true);
@@ -174,6 +185,7 @@ export default function FinanceAdminPage() {
             setMessage({ type: 'success', text: `Budget line "${newBudgetLine.code}" created successfully.` });
             setShowBudgetLineModal(false);
             setNewBudgetLine({ project_id: '', code: '', description: '', allocated_amount: '' });
+            publishSyncEvent('budget_lines', { code: newBudgetLine.code });
             fetchFinanceData({ silent: true });
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to create budget line.');
@@ -181,6 +193,10 @@ export default function FinanceAdminPage() {
             setSavingBudgetLine(false);
         }
     };
+
+    useRealtimeSync(['projects', 'budget_lines', 'finance'], () => {
+        fetchFinanceData({ silent: true });
+    });
 
     useEffect(() => {
         fetchFinanceData();
@@ -788,7 +804,7 @@ export default function FinanceAdminPage() {
                             </div>
                             <button
                                 className="btn btn-primary btn-sm"
-                                onClick={() => setShowBudgetLineModal(true)}
+                                onClick={openBudgetLineModal}
                                 style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
                             >
                                 <Plus size={14} /> Add Budget Line

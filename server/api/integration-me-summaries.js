@@ -5,6 +5,7 @@ import {
   parseBody,
   successResponse,
 } from "./utils/response.js";
+import { emitRealtimeEvent } from "./utils/notification-center.js";
 
 const integrationToken = () =>
   process.env.ERP_INTEGRATION_TOKEN || process.env.INTEGRATION_TOKEN || "";
@@ -213,6 +214,13 @@ export const handler = async (event) => {
       Promise.all(indicators.filter((indicator) => indicator?.id).map(upsertIndicator)),
       Promise.all(activities.filter((activity) => activity?.id).map(upsertActivity)),
     ]);
+
+    if (indicators.length > 0) {
+      emitRealtimeEvent({ kind: 'data_refresh', entity: 'indicators' });
+    }
+    if (activities.length > 0) {
+      emitRealtimeEvent({ kind: 'data_refresh', entity: 'activities' });
+    }
 
     return successResponse({
       activities: activityResults,
