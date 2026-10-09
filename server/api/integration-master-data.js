@@ -220,7 +220,7 @@ export const handler = async (event) => {
                     priority,
                     status,
                     created_at,
-                    updated_at
+                    COALESCE(last_updated, created_at, NOW()) AS updated_at
                 FROM indicators
                 ORDER BY id ASC
             `,
