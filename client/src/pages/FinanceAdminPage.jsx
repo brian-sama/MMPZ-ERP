@@ -107,11 +107,20 @@ export default function FinanceAdminPage() {
     const [grants, setGrants] = useState([]);
     const [procurement, setProcurement] = useState([]);
     const [budgetLines, setBudgetLines] = useState([]);
+    const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState('');
     const [message, setMessage] = useState(null);
     const [showRequisitionModal, setShowRequisitionModal] = useState(false);
+    const [showBudgetLineModal, setShowBudgetLineModal] = useState(false);
+    const [newBudgetLine, setNewBudgetLine] = useState({
+        project_id: '',
+        code: '',
+        description: '',
+        allocated_amount: '',
+    });
+    const [savingBudgetLine, setSavingBudgetLine] = useState(false);
     const [selectedProcurement, setSelectedProcurement] = useState(null);
     const [submitting, setSubmitting] = useState(false);
     const [analysisSaving, setAnalysisSaving] = useState(false);
@@ -133,22 +142,43 @@ export default function FinanceAdminPage() {
         setError('');
         try {
             const params = { userId: user.id };
-            const [summaryRes, grantsRes, procurementRes, budgetLineRes] = await Promise.all([
+            const [summaryRes, grantsRes, procurementRes, budgetLineRes, projectRes] = await Promise.all([
                 axios.get(`${API_BASE}/finance/summary`, { params }),
                 axios.get(`${API_BASE}/finance/grants`, { params }),
                 axios.get(`${API_BASE}/procurement`, { params }),
                 axios.get(`${API_BASE}/finance/budget-lines`, { params }),
+                axios.get(`${API_BASE}/projects`, { params }),
             ]);
 
             setSummary(summaryRes.data);
             setGrants(grantsRes.data);
             setProcurement(procurementRes.data);
             setBudgetLines(budgetLineRes.data);
+            setProjects(projectRes.data || []);
         } catch (err) {
             setError(err.response?.data?.error || 'Unable to load finance controls.');
         } finally {
             setLoading(false);
             setRefreshing(false);
+        }
+    };
+
+    const handleCreateBudgetLine = async (e) => {
+        e.preventDefault();
+        setSavingBudgetLine(true);
+        try {
+            await axios.post(`${API_BASE}/finance/budget-lines`, {
+                userId: user.id,
+                ...newBudgetLine,
+            });
+            setMessage({ type: 'success', text: `Budget line "${newBudgetLine.code}" created successfully.` });
+            setShowBudgetLineModal(false);
+            setNewBudgetLine({ project_id: '', code: '', description: '', allocated_amount: '' });
+            fetchFinanceData({ silent: true });
+        } catch (err) {
+            alert(err.response?.data?.error || 'Failed to create budget line.');
+        } finally {
+            setSavingBudgetLine(false);
         }
     };
 
@@ -751,11 +781,18 @@ export default function FinanceAdminPage() {
                     </div>
 
                     <div className="panel">
-                        <div className="panel-header">
+                        <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
                                 <h2 className="panel-title">Budget Lines Ready for Commitment</h2>
                                 <div className="panel-subtitle">Use lines with positive available balance after pending and approved commitments.</div>
                             </div>
+                            <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => setShowBudgetLineModal(true)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                            >
+                                <Plus size={14} /> Add Budget Line
+                            </button>
                         </div>
                         <div className="control-stack compact">
                             {budgetLines.slice(0, 8).map((line) => (
@@ -1118,6 +1155,77 @@ export default function FinanceAdminPage() {
                                 Close
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showBudgetLineModal && (
+                <div className="modal-overlay" onClick={() => setShowBudgetLineModal(false)}>
+                    <div className="modal-box" onClick={(event) => event.stopPropagation()} style={{ maxWidth: '500px' }}>
+                        <div className="modal-header">
+                            <div className="modal-title">Create Budget Line</div>
+                            <button className="modal-close" onClick={() => setShowBudgetLineModal(false)}>&times;</button>
+                        </div>
+                        <form onSubmit={handleCreateBudgetLine}>
+                            <div className="modal-body" style={{ display: 'grid', gap: '16px' }}>
+                                <div className="form-group">
+                                    <label className="form-label">Linked Project</label>
+                                    <select
+                                        className="form-select"
+                                        value={newBudgetLine.project_id}
+                                        onChange={(event) => setNewBudgetLine((current) => ({ ...current, project_id: event.target.value }))}
+                                        required
+                                    >
+                                        <option value="">Select project</option>
+                                        {projects.map((project) => (
+                                            <option key={project.id} value={project.id}>{project.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Budget Line Code</label>
+                                        <input
+                                            className="form-input"
+                                            placeholder="e.g. BL-TR-01"
+                                            value={newBudgetLine.code}
+                                            onChange={(event) => setNewBudgetLine((current) => ({ ...current, code: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                    <div className="form-group">
+                                        <label className="form-label">Allocated Amount ($)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            className="form-input"
+                                            placeholder="e.g. 5000.00"
+                                            value={newBudgetLine.allocated_amount}
+                                            onChange={(event) => setNewBudgetLine((current) => ({ ...current, allocated_amount: event.target.value }))}
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Description</label>
+                                    <textarea
+                                        className="form-input"
+                                        style={{ height: '80px', padding: '10px' }}
+                                        placeholder="e.g. Field volunteer travel, transport reimbursements, and refreshments"
+                                        value={newBudgetLine.description}
+                                        onChange={(event) => setNewBudgetLine((current) => ({ ...current, description: event.target.value }))}
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn btn-secondary" onClick={() => setShowBudgetLineModal(false)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={savingBudgetLine}>
+                                    {savingBudgetLine ? 'Saving...' : 'Save Budget Line'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

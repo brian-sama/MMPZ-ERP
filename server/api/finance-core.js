@@ -73,6 +73,56 @@ export const handler = async (event) => {
         const query = getQueryParams(event);
         const actor = await getUserContext(getRequestUserId(event, body) || query.userId);
 
+        if (method === 'POST' && event.path.includes('/budget-lines')) {
+            assertFinanceAccess(actor);
+            const { project_id, code, description, allocated_amount } = body;
+            if (!project_id || !code || !description || allocated_amount == null) {
+                return errorResponse('project_id, code, description, and allocated_amount are required', 400);
+            }
+
+            const amount = Number.parseFloat(allocated_amount);
+            if (Number.isNaN(amount) || amount < 0) {
+                return errorResponse('allocated_amount must be a non-negative number', 400);
+            }
+
+            // Find or create budget for the project
+            let budgetRows = await sql`
+                SELECT id FROM budgets WHERE project_id = ${project_id} LIMIT 1
+            `;
+            let budgetId = budgetRows[0]?.id;
+            if (!budgetId) {
+                const projectRows = await sql`SELECT name, donor FROM projects WHERE id = ${project_id} LIMIT 1`;
+                const projectName = projectRows[0]?.name || 'Project';
+
+                let grantRows = await sql`SELECT id FROM grants LIMIT 1`;
+                let grantId = grantRows[0]?.id;
+                if (!grantId) {
+                    let donorRows = await sql`SELECT id FROM donors LIMIT 1`;
+                    let donorId = donorRows[0]?.id;
+                    if (!donorId) {
+                        const newDonor = await sql`INSERT INTO donors (name, code) VALUES ('General Funding', 'GEN') RETURNING id`;
+                        donorId = newDonor[0].id;
+                    }
+                    const newGrant = await sql`INSERT INTO grants (donor_id, name) VALUES (${donorId}, ${projectName + ' Grant'}) RETURNING id`;
+                    grantId = newGrant[0].id;
+                }
+
+                const newBudget = await sql`
+                    INSERT INTO budgets (grant_id, project_id, name, total_amount)
+                    VALUES (${grantId}, ${project_id}, ${projectName + ' Budget'}, ${amount})
+                    RETURNING id
+                `;
+                budgetId = newBudget[0].id;
+            }
+
+            const [created] = await sql`
+                INSERT INTO budget_lines (budget_id, code, description, allocated_amount, used_amount)
+                VALUES (${budgetId}, ${code.trim()}, ${description.trim()}, ${amount}, 0)
+                RETURNING *
+            `;
+            return successResponse(created, 201);
+        }
+
         if (method !== 'GET') {
             return errorResponse('Method or Path not allowed', 405);
         }
