@@ -450,6 +450,7 @@ app.use("/api/budget/programs", functionToExpress(budgetHandler));
 app.use("/api/budget/indicators", functionToExpress(budgetHandler));
 app.use("/api/budget/activities", functionToExpress(budgetHandler));
 app.use("/api/procurement/:id", functionToExpress(procurementHandler));
+app.use("/api/procurement", functionToExpress(procurementHandler));
 app.use("/api/program-lifecycle", functionToExpress(programLifecycleHandler));
 app.use("/api/operations", functionToExpress(operationsHandler));
 // Programs/projects/expenses/governance
