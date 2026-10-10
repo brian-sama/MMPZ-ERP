@@ -306,10 +306,10 @@ export default function ProgramsPage() {
                 title={view === 'programs' ? 'Programs' : view === 'projects' ? 'Projects' : 'Activities'}
                 subtitle={
                     view === 'programs'
-                        ? 'Organizational strategic clusters.'
+                        ? 'Strategic Umbrella Frameworks: multi-year thematic clusters driving long-term organizational impact.'
                         : view === 'projects'
-                            ? `Strategic initiatives under ${selectedProgram?.name}.`
-                            : `Field activities for ${selectedProject?.name}.`
+                            ? `Tactical Interventions: time-bound grant projects under ${selectedProgram?.name}.`
+                            : `Field implementation and outputs for ${selectedProject?.name}.`
                 }
                 actions={
                     canCreate ? (

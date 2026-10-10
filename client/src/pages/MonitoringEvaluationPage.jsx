@@ -25,10 +25,12 @@ export default function MonitoringEvaluationPage() {
     const [showReportForm, setShowReportForm] = useState(false);
     const [showIndicatorForm, setShowIndicatorForm] = useState(false);
     const [projects, setProjects] = useState([]);
+    const [programs, setPrograms] = useState([]);
     const [indicatorSearch, setIndicatorSearch] = useState('');
     const [creatingIndicator, setCreatingIndicator] = useState(false);
     const [newIndicator, setNewIndicator] = useState({
         title: '',
+        program_id: '',
         project_id: '',
         target_value: '',
         total_budget: '',
@@ -147,11 +149,12 @@ export default function MonitoringEvaluationPage() {
     const fetchMEData = async () => {
         setLoading(true);
         try {
-            const [indRes, compassIndRes, perfRes, projectRes, riskRes] = await Promise.all([
+            const [indRes, compassIndRes, perfRes, projectRes, progRes, riskRes] = await Promise.all([
                 axios.get(`${API_BASE}/indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/me/compass-indicators`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/me/summary`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/projects`, { params: { userId: user.id } }),
+                axios.get(`${API_BASE}/programs`, { params: { userId: user.id } }),
                 axios.get(`${API_BASE}/analytics/risk-summary`, { params: { userId: user.id } }),
             ]);
             const riskById = new Map((riskRes.data?.indicators || []).map((item) => [item.id, item]));
@@ -167,6 +170,7 @@ export default function MonitoringEvaluationPage() {
             setIndicators([...compassIndicators, ...localIndicators]);
             setPerformance(perfRes.data.reverse());
             setProjects(projectRes.data || []);
+            setPrograms(progRes.data || []);
             setRiskSummary(riskRes.data || null);
         } catch (err) {
             console.error('Failed to fetch M&E data', err);
@@ -205,6 +209,7 @@ export default function MonitoringEvaluationPage() {
             setShowIndicatorForm(false);
             setNewIndicator({
                 title: '',
+                program_id: '',
                 project_id: '',
                 target_value: '',
                 total_budget: '',
@@ -498,24 +503,41 @@ export default function MonitoringEvaluationPage() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredIndicators.map(ind => (
-                                    <tr key={ind.id} onClick={() => setSelectedInd(ind)} style={{ cursor: 'pointer' }} className={selectedInd?.id === ind.id ? 'active-row' : ''}>
-                                        <td>
-                                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{ind.title}</div>
-                                            {ind.isCompassSynced && (
-                                                <span className="badge badge-success" style={{ fontSize: '9px', padding: '2px 6px', marginRight: '6px' }}>
-                                                    COMPASS SYNCED
-                                                </span>
-                                            )}
-                                            <span className={`badge badge-${ind.priority === 'critical' ? 'danger' : ind.priority === 'high' ? 'warning' : 'primary'}`} style={{ fontSize: '9px', padding: '2px 6px' }}>
-                                                {ind.priority.toUpperCase()}
-                                            </span>
-                                            {ind.risk_level && (
-                                                <span className={`badge badge-${ind.risk_level === 'high' ? 'danger' : ind.risk_level === 'medium' ? 'warning' : 'success'}`} style={{ fontSize: '9px', padding: '2px 6px', marginLeft: '6px' }}>
-                                                    {ind.risk_level.toUpperCase()} RISK
-                                                </span>
-                                            )}
-                                        </td>
+                                {filteredIndicators.map((ind) => {
+                                    const associatedProj = projects.find((p) => String(p.id) === String(ind.project_id || ind.erp?.projectId));
+                                    const progId = ind.program_id || ind.erp?.programId || associatedProj?.program_id;
+                                    const associatedProg = programs.find((pr) => String(pr.id) === String(progId));
+
+                                    return (
+                                        <tr key={ind.id} onClick={() => setSelectedInd(ind)} style={{ cursor: 'pointer' }} className={selectedInd?.id === ind.id ? 'active-row' : ''}>
+                                            <td>
+                                                <div style={{ fontWeight: 600, fontSize: '13px' }}>{ind.title}</div>
+                                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '4px', alignItems: 'center' }}>
+                                                    {ind.isCompassSynced && (
+                                                        <span className="badge badge-success" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                                            COMPASS SYNCED
+                                                        </span>
+                                                    )}
+                                                    <span className={`badge badge-${ind.priority === 'critical' ? 'danger' : ind.priority === 'high' ? 'warning' : 'primary'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                                        {ind.priority.toUpperCase()}
+                                                    </span>
+                                                    {ind.risk_level && (
+                                                        <span className={`badge badge-${ind.risk_level === 'high' ? 'danger' : ind.risk_level === 'medium' ? 'warning' : 'success'}`} style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                                            {ind.risk_level.toUpperCase()} RISK
+                                                        </span>
+                                                    )}
+                                                    {associatedProg && (
+                                                        <span className="badge badge-info" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                                            🏛️ {associatedProg.name}
+                                                        </span>
+                                                    )}
+                                                    {associatedProj && (
+                                                        <span className="badge badge-secondary" style={{ fontSize: '9px', padding: '1px 5px' }}>
+                                                            🎯 {associatedProj.name}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
                                         <td>
                                             <div style={{ fontSize: '14px', fontWeight: 700 }}>{ind.current_value.toLocaleString()}</div>
                                             <div className="form-hint">of {ind.target_value.toLocaleString()} targeted</div>
@@ -554,7 +576,8 @@ export default function MonitoringEvaluationPage() {
                                             </div>
                                         </td>
                                     </tr>
-                                ))}
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>
@@ -627,17 +650,68 @@ export default function MonitoringEvaluationPage() {
                                         required
                                     />
                                 </div>
+                                <div style={{ background: 'var(--bg-card, #f8f9fa)', border: '1px solid var(--border-color, #e9ecef)', borderRadius: '6px', padding: '10px', fontSize: '12px' }}>
+                                    <div style={{ fontWeight: 700, marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                        <span>💡 NGO Logframe Distinction</span>
+                                    </div>
+                                    <div style={{ opacity: 0.85, lineHeight: 1.4 }}>
+                                        <strong>🏛️ Programme:</strong> Strategic multi-year umbrella driving systemic impact.<br />
+                                        <strong>🎯 Project:</strong> Tactical time-bound grant intervention delivering localized outputs.
+                                    </div>
+                                </div>
                                 <div className="form-group">
-                                    <label className="form-label">Project</label>
+                                    <label className="form-label">🏛️ Strategic Programme (Umbrella)</label>
+                                    <select
+                                        className="form-input"
+                                        value={newIndicator.program_id}
+                                        onChange={(event) => {
+                                            const progId = event.target.value;
+                                            setNewIndicator((current) => {
+                                                const currentProj = projects.find((p) => String(p.id) === String(current.project_id));
+                                                const resetProject = currentProj && progId && String(currentProj.program_id) !== String(progId);
+                                                return {
+                                                    ...current,
+                                                    program_id: progId,
+                                                    project_id: resetProject ? '' : current.project_id,
+                                                };
+                                            });
+                                        }}
+                                    >
+                                        <option value="">Select Strategic Programme...</option>
+                                        {programs.map((program) => (
+                                            <option key={program.id} value={program.id}>
+                                                🏛️ [Programme] {program.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">🎯 Operational Project (Grant Intervention)</label>
                                     <select
                                         className="form-input"
                                         value={newIndicator.project_id}
-                                        onChange={(event) => setNewIndicator((current) => ({ ...current, project_id: event.target.value }))}
+                                        onChange={(event) => {
+                                            const projId = event.target.value;
+                                            const selectedProj = projects.find((p) => String(p.id) === String(projId));
+                                            setNewIndicator((current) => ({
+                                                ...current,
+                                                project_id: projId,
+                                                program_id: selectedProj?.program_id ? String(selectedProj.program_id) : current.program_id,
+                                            }));
+                                        }}
                                     >
-                                        <option value="">Unassigned</option>
-                                        {projects.map((project) => (
-                                            <option key={project.id} value={project.id}>{project.name}</option>
-                                        ))}
+                                        <option value="">
+                                            {newIndicator.program_id
+                                                ? `Select Project Intervention (${projects.filter((p) => String(p.program_id) === String(newIndicator.program_id)).length} available)...`
+                                                : 'Unassigned (Standalone Indicator)'}
+                                        </option>
+                                        {projects
+                                            .filter((project) => !newIndicator.program_id || String(project.program_id) === String(newIndicator.program_id))
+                                            .map((project) => (
+                                                <option key={project.id} value={project.id}>
+                                                    🎯 [Project] {project.name}{project.donor ? ` (${project.donor})` : ''}
+                                                </option>
+                                            ))}
                                     </select>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '16px' }}>

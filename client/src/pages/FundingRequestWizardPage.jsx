@@ -299,20 +299,49 @@ export default function FundingRequestWizardPage() {
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                         <div className="form-group">
-                            <label className="form-label"><Layers size={14} style={{ marginRight: '4px' }} /> Project Name</label>
-                            <select className="form-input" value={project_id} onChange={e => handleProjectChange(e.target.value)}>
-                                <option value="">Select Associated Project...</option>
-                                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            <label className="form-label"><Layers size={14} style={{ marginRight: '4px' }} /> 🏛️ Strategic Programme (Umbrella)</label>
+                            <select
+                                className="form-input"
+                                value={program_id}
+                                onChange={(e) => {
+                                    const nextProgId = e.target.value;
+                                    setProgramId(nextProgId);
+                                    const currentProj = projects.find((p) => String(p.id) === String(project_id));
+                                    if (currentProj && nextProgId && String(currentProj.program_id) !== String(nextProgId)) {
+                                        setProjectId('');
+                                        setIndicatorId('');
+                                    }
+                                }}
+                            >
+                                <option value="">Select Programme Umbrella...</option>
+                                {programs.map((p) => (
+                                    <option key={p.id} value={p.id}>🏛️ [Programme] {p.name}</option>
+                                ))}
                             </select>
+                            <p className="form-hint">Long-term strategic framework</p>
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label"><Layers size={14} style={{ marginRight: '4px' }} /> Program Context</label>
-                            <select className="form-input" value={program_id} onChange={e => setProgramId(e.target.value)} disabled={!!project_id}>
-                                <option value="">Select Associated Program...</option>
-                                {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                            <label className="form-label"><Layers size={14} style={{ marginRight: '4px' }} /> 🎯 Operational Project (Grant Intervention)</label>
+                            <select
+                                className="form-input"
+                                value={project_id}
+                                onChange={(e) => handleProjectChange(e.target.value)}
+                            >
+                                <option value="">
+                                    {program_id
+                                        ? `Select Project (${projects.filter((p) => String(p.program_id) === String(program_id)).length} under this Programme)...`
+                                        : 'Select Associated Project...'}
+                                </option>
+                                {projects
+                                    .filter((p) => !program_id || String(p.program_id) === String(program_id))
+                                    .map((p) => (
+                                        <option key={p.id} value={p.id}>
+                                            🎯 [Project] {p.name}{p.donor ? ` (${p.donor})` : ''}
+                                        </option>
+                                    ))}
                             </select>
-                            <p className="form-hint">Automatically selected based on project scope</p>
+                            <p className="form-hint">Time-bound grant delivering localized outputs</p>
                         </div>
 
                         <div className="form-group" style={{ gridColumn: 'span 2' }}>
