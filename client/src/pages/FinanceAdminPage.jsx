@@ -81,6 +81,31 @@ const createBlankItem = () => ({
     estimated_unit_cost: 0,
 });
 
+const getProjectPrefix = (name) => {
+    if (!name) return 'PRJ';
+    const clean = name.trim();
+    const words = clean.split(/\s+/).filter((w) => !['and', '&', 'the', 'of', 'in', 'for', 'to'].includes(w.toLowerCase()));
+    if (words.length >= 2) {
+        return words.slice(0, 3).map((w) => w[0].toUpperCase()).join('');
+    }
+    return clean.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PRJ';
+};
+
+const generateNextBudgetLineCode = (projectId, projectList, existingLines) => {
+    if (!projectId) return '';
+    const project = (projectList || []).find((p) => String(p.id) === String(projectId));
+    const prefix = getProjectPrefix(project?.name);
+    const forProj = (existingLines || []).filter((bl) => String(bl.project_id) === String(projectId));
+    const existingCodes = new Set((existingLines || []).map((bl) => bl.code));
+    let seq = forProj.length + 1;
+    let candidate = `BL-${prefix}-${String(seq).padStart(2, '0')}`;
+    while (existingCodes.has(candidate)) {
+        seq++;
+        candidate = `BL-${prefix}-${String(seq).padStart(2, '0')}`;
+    }
+    return candidate;
+};
+
 export default function FinanceAdminPage() {
     const { user } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -178,14 +203,15 @@ export default function FinanceAdminPage() {
         e.preventDefault();
         setSavingBudgetLine(true);
         try {
-            await axios.post(`${API_BASE}/finance/budget-lines`, {
+            const res = await axios.post(`${API_BASE}/finance/budget-lines`, {
                 userId: user.id,
                 ...newBudgetLine,
             });
-            setMessage({ type: 'success', text: `Budget line "${newBudgetLine.code}" created successfully.` });
+            const createdCode = res.data?.code || newBudgetLine.code;
+            setMessage({ type: 'success', text: `Budget line "${createdCode}" created successfully.` });
             setShowBudgetLineModal(false);
             setNewBudgetLine({ project_id: '', code: '', description: '', allocated_amount: '' });
-            publishSyncEvent('budget_lines', { code: newBudgetLine.code });
+            publishSyncEvent('budget_lines', { code: createdCode });
             fetchFinanceData({ silent: true });
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to create budget line.');
@@ -1189,7 +1215,15 @@ export default function FinanceAdminPage() {
                                     <select
                                         className="form-select"
                                         value={newBudgetLine.project_id}
-                                        onChange={(event) => setNewBudgetLine((current) => ({ ...current, project_id: event.target.value }))}
+                                        onChange={(event) => {
+                                            const pid = event.target.value;
+                                            const autoCode = generateNextBudgetLineCode(pid, projects, budgetLines);
+                                            setNewBudgetLine((current) => ({
+                                                ...current,
+                                                project_id: pid,
+                                                code: autoCode,
+                                            }));
+                                        }}
                                         required
                                     >
                                         <option value="">Select project</option>
@@ -1200,14 +1234,20 @@ export default function FinanceAdminPage() {
                                 </div>
                                 <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                     <div className="form-group">
-                                        <label className="form-label">Budget Line Code</label>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                            <label className="form-label" style={{ margin: 0 }}>Budget Line Code</label>
+                                            <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: '600' }}>⚡ System Generated</span>
+                                        </div>
                                         <input
                                             className="form-input"
-                                            placeholder="e.g. BL-TR-01"
+                                            placeholder="Auto-generated on project selection"
                                             value={newBudgetLine.code}
-                                            onChange={(event) => setNewBudgetLine((current) => ({ ...current, code: event.target.value }))}
-                                            required
+                                            readOnly
+                                            style={{ backgroundColor: '#f9fafb', color: '#111827', fontWeight: '500' }}
                                         />
+                                        <div className="form-hint" style={{ fontSize: '11px', marginTop: '4px', color: '#6b7280' }}>
+                                            {newBudgetLine.code ? `Unique code generated for this project.` : `Select a project to generate code.`}
+                                        </div>
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label">Allocated Amount ($)</label>

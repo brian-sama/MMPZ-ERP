@@ -78,8 +78,8 @@ export const handler = async (event) => {
         if (method === 'POST' && event.path.includes('/budget-lines')) {
             assertFinanceAccess(actor);
             const { project_id, code, description, allocated_amount } = body;
-            if (!project_id || !code || !description || allocated_amount == null) {
-                return errorResponse('project_id, code, description, and allocated_amount are required', 400);
+            if (!project_id || !description || allocated_amount == null) {
+                return errorResponse('project_id, description, and allocated_amount are required', 400);
             }
 
             const amount = Number.parseFloat(allocated_amount);
@@ -92,10 +92,10 @@ export const handler = async (event) => {
                 SELECT id FROM budgets WHERE project_id = ${project_id} LIMIT 1
             `;
             let budgetId = budgetRows[0]?.id;
-            if (!budgetId) {
-                const projectRows = await sql`SELECT name, donor FROM projects WHERE id = ${project_id} LIMIT 1`;
-                const projectName = projectRows[0]?.name || 'Project';
+            const projectRows = await sql`SELECT name, donor FROM projects WHERE id = ${project_id} LIMIT 1`;
+            const projectName = projectRows[0]?.name || 'Project';
 
+            if (!budgetId) {
                 let grantRows = await sql`SELECT id FROM grants LIMIT 1`;
                 let grantId = grantRows[0]?.id;
                 if (!grantId) {
@@ -117,9 +117,33 @@ export const handler = async (event) => {
                 budgetId = newBudget[0].id;
             }
 
+            let finalCode = (code && typeof code === 'string') ? code.trim() : '';
+            if (!finalCode) {
+                // Auto-generate budget line code based on project
+                const words = projectName.trim().split(/\s+/).filter(w => !['and', '&', 'the', 'of', 'in', 'for', 'to'].includes(w.toLowerCase()));
+                const prefix = words.length >= 2
+                    ? words.slice(0, 3).map(w => w[0].toUpperCase()).join('')
+                    : projectName.replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase() || 'PRJ';
+
+                const existingLines = await sql`
+                    SELECT bl.code 
+                    FROM budget_lines bl 
+                    JOIN budgets b ON bl.budget_id = b.id 
+                    WHERE b.project_id = ${project_id}
+                `;
+                const existingCodes = new Set(existingLines.map(r => r.code));
+                let seq = existingLines.length + 1;
+                let candidate = `BL-${prefix}-${String(seq).padStart(2, '0')}`;
+                while (existingCodes.has(candidate)) {
+                    seq++;
+                    candidate = `BL-${prefix}-${String(seq).padStart(2, '0')}`;
+                }
+                finalCode = candidate;
+            }
+
             const [created] = await sql`
                 INSERT INTO budget_lines (budget_id, code, description, allocated_amount, used_amount)
-                VALUES (${budgetId}, ${code.trim()}, ${description.trim()}, ${amount}, 0)
+                VALUES (${budgetId}, ${finalCode}, ${description.trim()}, ${amount}, 0)
                 RETURNING *
             `;
 

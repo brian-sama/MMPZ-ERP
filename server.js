@@ -52,6 +52,7 @@ import { handler as fundingRequestsHandler } from "./server/api/funding-requests
 import { handler as leaveHandler } from "./server/api/leave.js";
 import { handler as integrationMasterDataHandler } from "./server/api/integration-master-data.js";
 import { handler as integrationMeSummariesHandler } from "./server/api/integration-me-summaries.js";
+import { handler as integrationLeaveHandler } from "./server/api/integration-leave.js";
 import { handler as operationsHandler } from "./server/api/operations.js";
 import { subscribeRealtime } from "./server/api/utils/notification-center.js";
 import crypto from "crypto";
@@ -333,6 +334,10 @@ app.use(
 app.use(
   "/api/integration/me/approved-summaries",
   functionToExpress(integrationMeSummariesHandler),
+);
+app.use(
+  "/api/integration/leave-submission",
+  functionToExpress(integrationLeaveHandler),
 );
 
 // Auth
