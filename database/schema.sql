@@ -564,14 +564,13 @@ CREATE TABLE IF NOT EXISTS kobo_form_links (
     id SERIAL PRIMARY KEY,
     kobo_form_uid VARCHAR(100) NOT NULL,
     kobo_form_name VARCHAR(255),
-    indicator_id INT NOT NULL,
+    indicator_id VARCHAR(100) NOT NULL,
     sync_enabled BOOLEAN DEFAULT TRUE,
     last_synced_submission_id VARCHAR(100),
     submissions_count INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'approved',
     requested_by INT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (indicator_id) REFERENCES indicators(id) ON DELETE CASCADE,
     FOREIGN KEY (requested_by) REFERENCES users(id) ON DELETE SET NULL
 );
 

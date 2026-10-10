@@ -16,7 +16,7 @@ import {
     ensurePermission,
     setAuditActor,
 } from './utils/rbac.js';
-import { createNotification } from './utils/notification-center.js';
+import { createNotification, emitRealtimeEvent } from './utils/notification-center.js';
 import { fetchKoboConfigFromCompass } from './kobo-config.js';
 import { resolvePlatformEnv, canonicalizePlatformEnv } from './utils/platform-env.js';
 
@@ -177,8 +177,17 @@ const syncForm = async (link, config, actorId) => {
                 SET
                     current_value = COALESCE(current_value, 0) + ${newCount},
                     last_updated = ${new Date().toISOString()}
-                WHERE id = ${link.indicator_id}
+                WHERE id::text = ${String(link.indicator_id)}
             `;
+            await tx`
+                UPDATE me_indicator_summaries
+                SET
+                    reached_value = COALESCE(reached_value, 0) + ${newCount},
+                    participant_total = COALESCE(participant_total, 0) + ${newCount},
+                    updated_at = NOW()
+                WHERE id::text = ${String(link.indicator_id)} OR me_indicator_id = ${String(link.indicator_id)}
+            `;
+            emitRealtimeEvent({ kind: 'data_refresh', entity: 'indicators' });
         }
     });
 
@@ -221,9 +230,13 @@ export const handler = async (event) => {
                     return successResponse([]);
                 }
                 const data = await sql`
-                    SELECT kfl.*, i.title AS indicator_title
+                    SELECT 
+                        kfl.*,
+                        COALESCE(mis.title, i.title, kfl.kobo_form_name) AS indicator_title,
+                        COALESCE(mis.code, i.code) AS indicator_code
                     FROM kobo_form_links kfl
-                    LEFT JOIN indicators i ON kfl.indicator_id = i.id
+                    LEFT JOIN indicators i ON kfl.indicator_id::text = i.id::text
+                    LEFT JOIN me_indicator_summaries mis ON kfl.indicator_id::text = mis.id::text OR kfl.indicator_id::text = mis.me_indicator_id
                     ORDER BY kfl.id DESC
                 `;
                 return successResponse(data);
@@ -242,8 +255,23 @@ export const handler = async (event) => {
                     return errorResponse('kobo_form_uid and indicator_id are required', 400);
                 }
 
+                // Fetch indicator title from either table
+                let indTitle = null;
+                const misRows = await sql`
+                    SELECT title FROM me_indicator_summaries 
+                    WHERE id::text = ${String(indicator_id)} OR me_indicator_id = ${String(indicator_id)}
+                    LIMIT 1
+                `;
+                if (misRows.length > 0) {
+                    indTitle = misRows[0].title;
+                } else {
+                    const indRows = await sql`SELECT title FROM indicators WHERE id::text = ${String(indicator_id)} LIMIT 1`;
+                    if (indRows.length > 0) indTitle = indRows[0].title;
+                }
+
                 const inserted = await sql.begin(async (tx) => {
                     await setAuditActor(tx, actor.id);
+                    await tx`DELETE FROM kobo_form_links WHERE kobo_form_uid = ${kobo_form_uid}`;
                     const rows = await tx`
                         INSERT INTO kobo_form_links (
                             kobo_form_uid,
@@ -255,7 +283,7 @@ export const handler = async (event) => {
                         VALUES (
                             ${kobo_form_uid},
                             ${kobo_form_name || null},
-                            ${indicator_id},
+                            ${String(indicator_id)},
                             'approved',
                             ${actor.id}
                         )
@@ -264,15 +292,14 @@ export const handler = async (event) => {
                     return rows[0];
                 });
 
-                // Fetch indicator title for the Compass notification
-                const [ind] = await sql`SELECT title FROM indicators WHERE id = ${indicator_id} LIMIT 1`;
                 await notifyCompassFormLink({
                     kobo_form_uid,
-                    indicator_id,
-                    indicator_title: ind?.title ?? null,
+                    indicator_id: String(indicator_id),
+                    indicator_title: indTitle,
                     action: 'link',
                 });
 
+                emitRealtimeEvent({ kind: 'data_refresh', entity: 'indicators' });
                 return successResponse(inserted);
             }
 

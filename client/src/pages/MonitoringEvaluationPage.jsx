@@ -88,8 +88,9 @@ export default function MonitoringEvaluationPage() {
             const endpoint = linkId ? `${API_BASE}/kobo/sync/${linkId}` : `${API_BASE}/kobo/sync-all`;
             const res = await axios.post(endpoint, { userId: user.id });
             alert(res.data.message || 'Sync successful');
-            fetchMEData();
-            fetchKoboWorkspace();
+            await fetchMEData();
+            await fetchKoboWorkspace();
+            publishSyncEvent('indicators');
         } catch (err) {
             alert('Sync failed: ' + (err.response?.data?.message || err.message));
         } finally {
@@ -113,6 +114,8 @@ export default function MonitoringEvaluationPage() {
             });
             setKoboLinkSelections((current) => ({ ...current, [form.uid]: '' }));
             await fetchKoboWorkspace();
+            await fetchMEData();
+            publishSyncEvent('indicators');
         } catch (err) {
             alert(err.response?.data?.error || 'Failed to link Kobo form.');
         }
@@ -324,9 +327,9 @@ export default function MonitoringEvaluationPage() {
                             <button
                                 className="btn btn-secondary btn-sm"
                                 onClick={() => handleSync()}
-                                disabled={syncing || hasCompassSync || !koboConfig?.is_connected || koboLinks.length === 0}
+                                disabled={syncing || !koboConfig?.is_connected || koboLinks.length === 0}
                             >
-                                {syncing ? 'Syncing...' : hasCompassSync ? 'Compass Managed' : 'Sync All'}
+                                {syncing ? 'Syncing...' : 'Sync All'}
                             </button>
                         </div>
                         <div style={{ padding: '20px', display: 'grid', gap: '16px' }}>
