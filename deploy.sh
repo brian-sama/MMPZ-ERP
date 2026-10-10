@@ -3,7 +3,6 @@ set -euo pipefail
 
 APP_CONTAINER="mmpz_erp_app"
 DB_CONTAINER="mmpz_erp_db"
-STREAMLIT_CONTAINER="mmpz_erp_streamlit"
 
 log() {
   printf '[deploy] %s\n' "$1"
@@ -78,8 +77,8 @@ git pull --ff-only origin main
 log "Ensuring required host directories exist."
 mkdir -p uploads/avatars uploads/documents uploads/volunteer-submissions
 
-log "Building application and analytics images."
-$DC_CMD build app streamlit
+log "Building application image."
+$DC_CMD build app
 
 log "Starting database first."
 $DC_CMD up -d db
@@ -88,10 +87,9 @@ wait_for_health "$DB_CONTAINER" 120
 log "Running controlled database migration step."
 $DC_CMD run --rm -e RUN_DB_MIGRATIONS_ON_STARTUP=false -e SKIP_MIGRATION_CHECKSUM_VALIDATION="${SKIP_MIGRATION_CHECKSUM_VALIDATION:-false}" app npm run db:migrate:all
 
-log "Starting application and analytics services."
-$DC_CMD up -d --remove-orphans app streamlit
+log "Starting application service."
+$DC_CMD up -d --remove-orphans app
 wait_for_health "$APP_CONTAINER" 240
-wait_for_health "$STREAMLIT_CONTAINER" 180
 
 log "Current compose status:"
 $DC_CMD ps
