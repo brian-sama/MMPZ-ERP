@@ -100,6 +100,7 @@ export const handler = async (event) => {
                     u.role_code,
                     u.system_role,
                     u.job_title,
+                    u.profile_picture_url,
                     u.role_assignment_status,
                     u.created_at,
                     u.updated_at

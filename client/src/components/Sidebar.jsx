@@ -204,11 +204,11 @@ export default function Sidebar({ pendingCount, mobileOpen = false, onNavigate }
                     onClick={handleAvatarClick}
                     style={{ cursor: updating ? 'wait' : 'pointer' }}
                 >
-                    {user?.profile_picture_url ? (
+                    {(user?.profile_picture_url || user?.avatarUrl) ? (
                         <div className="sidebar-avatar-container">
                             <img 
-                                src={user.profile_picture_url} 
-                                alt={user.name} 
+                                src={(user.profile_picture_url || user.avatarUrl).startsWith('http') ? (user.profile_picture_url || user.avatarUrl) : `${(user.profile_picture_url || user.avatarUrl).startsWith('/') ? '' : '/'}${user.profile_picture_url || user.avatarUrl}`} 
+                                alt={user?.name || 'User'} 
                                 className="sidebar-user-avatar" 
                             />
                             <div className="sidebar-avatar-overlay">Edit</div>

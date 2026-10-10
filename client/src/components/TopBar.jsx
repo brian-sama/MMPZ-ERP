@@ -263,8 +263,17 @@ export default function TopBar({ title, onToggleMenu, mobileMenuOpen }) {
                     onClick={doLogout}
                     title="Sign out"
                     className="topbar-avatar-btn"
+                    style={{ padding: 0, overflow: 'hidden' }}
                 >
-                    {(user?.name || 'U')[0].toUpperCase()}
+                    {(user?.profile_picture_url || user?.avatarUrl) ? (
+                        <img
+                            src={(user?.profile_picture_url || user?.avatarUrl).startsWith('http') ? (user?.profile_picture_url || user?.avatarUrl) : `${(user?.profile_picture_url || user?.avatarUrl).startsWith('/') ? '' : '/'}${user?.profile_picture_url || user?.avatarUrl}`}
+                            alt={user?.name || 'User'}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
+                        />
+                    ) : (
+                        (user?.name || 'U')[0].toUpperCase()
+                    )}
                 </button>
             </div>
         </header>

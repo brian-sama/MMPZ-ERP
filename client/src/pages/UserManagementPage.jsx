@@ -152,7 +152,15 @@ export default function UserManagementPage() {
                                 <tr key={u.id}>
                                     <td>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div className="sidebar-user-avatar" style={{ width: '32px', height: '32px' }}>{u.name[0]}</div>
+                                            {(u.profile_picture_url || u.avatarUrl) ? (
+                                                <img
+                                                    src={(u.profile_picture_url || u.avatarUrl).startsWith('http') ? (u.profile_picture_url || u.avatarUrl) : `${(u.profile_picture_url || u.avatarUrl).startsWith('/') ? '' : '/'}${u.profile_picture_url || u.avatarUrl}`}
+                                                    alt={u.name}
+                                                    style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                                />
+                                            ) : (
+                                                <div className="sidebar-user-avatar" style={{ width: '32px', height: '32px' }}>{u.name[0]}</div>
+                                            )}
                                             <div>
                                                 <div style={{ fontWeight: 600, fontSize: '13px' }}>{u.name}</div>
                                                 <div className="form-hint">{u.email}</div>

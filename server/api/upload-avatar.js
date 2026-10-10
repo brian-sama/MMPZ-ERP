@@ -85,6 +85,25 @@ export const handler = (req, res) => {
                 WHERE id = ${targetUserId}
             `;
 
+            // Fire-and-forget push to M&E / Compass so profile photo updates immediately across platforms
+            const meApiBase = (process.env.ME_INTERNAL_API_URL ?? '').replace(/\/api\/?$/, '').replace(/\/+$/, '');
+            const meToken = process.env.ME_INTEGRATION_TOKEN || process.env.ERP_INTEGRATION_TOKEN;
+            if (meApiBase && meToken) {
+                fetch(`${meApiBase}/api/integration/user-avatar`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${meToken}`,
+                        'X-Integration-Token': meToken,
+                    },
+                    body: JSON.stringify({
+                        email: actor.email,
+                        erpUserId: targetUserId,
+                        avatarUrl,
+                    }),
+                }).catch(() => {});
+            }
+
             res.status(200).json({ 
                 message: 'Avatar uploaded successfully',
                 url: avatarUrl,

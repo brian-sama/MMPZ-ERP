@@ -76,10 +76,12 @@ export default function StaffDirectoryPage() {
     );
 
     const renderAvatar = (person, size = 140) => {
-        if (person.profile_picture_url) {
+        const photoUrl = person.profile_picture_url || person.avatarUrl;
+        if (photoUrl) {
+            const resolved = photoUrl.startsWith('http') ? photoUrl : `${photoUrl.startsWith('/') ? '' : '/'}${photoUrl}`;
             return (
                 <img
-                    src={person.profile_picture_url}
+                    src={resolved}
                     alt={person.name}
                     style={{
                         width: '100%',

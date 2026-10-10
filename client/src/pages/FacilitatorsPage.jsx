@@ -204,7 +204,15 @@ export default function FacilitatorsPage() {
                                     >
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                <div className="sidebar-user-avatar" style={{ width: '32px', height: '32px' }}>{fac.name[0]}</div>
+                                                {(fac.profile_picture_url || fac.avatarUrl) ? (
+                                                    <img
+                                                        src={(fac.profile_picture_url || fac.avatarUrl).startsWith('http') ? (fac.profile_picture_url || fac.avatarUrl) : `${(fac.profile_picture_url || fac.avatarUrl).startsWith('/') ? '' : '/'}${fac.profile_picture_url || fac.avatarUrl}`}
+                                                        alt={fac.name}
+                                                        style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }}
+                                                    />
+                                                ) : (
+                                                    <div className="sidebar-user-avatar" style={{ width: '32px', height: '32px' }}>{fac.name[0]}</div>
+                                                )}
                                                 <div>
                                                     <div style={{ fontWeight: 600, fontSize: '13px' }}>{fac.name}</div>
                                                     <div className="form-hint">{fac.email}</div>
@@ -243,9 +251,17 @@ export default function FacilitatorsPage() {
                         <div className="panel-header">
                             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                    <div className="kpi-icon-wrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
-                                        <UserCheck size={20} />
-                                    </div>
+                                    {(selectedFacilitator.profile_picture_url || selectedFacilitator.avatarUrl) ? (
+                                        <img
+                                            src={(selectedFacilitator.profile_picture_url || selectedFacilitator.avatarUrl).startsWith('http') ? (selectedFacilitator.profile_picture_url || selectedFacilitator.avatarUrl) : `${(selectedFacilitator.profile_picture_url || selectedFacilitator.avatarUrl).startsWith('/') ? '' : '/'}${selectedFacilitator.profile_picture_url || selectedFacilitator.avatarUrl}`}
+                                            alt={selectedFacilitator.name}
+                                            style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <div className="kpi-icon-wrap" style={{ background: 'var(--brand-primary-light)', color: 'var(--brand-primary)' }}>
+                                            <UserCheck size={20} />
+                                        </div>
+                                    )}
                                     <div>
                                         <h2 className="panel-title">{selectedFacilitator.name}</h2>
                                         <p className="panel-subtitle">Facilitator Profile Details</p>
