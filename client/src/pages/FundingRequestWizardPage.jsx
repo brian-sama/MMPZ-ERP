@@ -357,18 +357,18 @@ export default function FundingRequestWizardPage() {
                             <input
                                 type="text"
                                 className="form-input"
-                                placeholder="e.g. Conduct Youth Peer Educator Refresher Workshop in Harare South"
+                                placeholder="e.g. Conduct Youth Peer Educator Refresher Workshop in Bulawayo Peri-Urban (Umguza / Cowdray Park)"
                                 value={activity_name}
                                 onChange={e => setActivityName(e.target.value)}
                             />
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label"><MapPin size={14} style={{ marginRight: '4px' }} /> District Name</label>
+                            <label className="form-label"><MapPin size={14} style={{ marginRight: '4px' }} /> District / Peri-Urban Area</label>
                             <input
                                 type="text"
                                 className="form-input"
-                                placeholder="e.g. Harare South"
+                                placeholder="e.g. Bulawayo Urban / Umguza Peri-Urban"
                                 value={district_name}
                                 onChange={e => setDistrictName(e.target.value)}
                             />

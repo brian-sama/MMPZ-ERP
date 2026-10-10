@@ -54,7 +54,7 @@ export default function ExecutiveDashboardPage() {
     const activityFeed = [
         { icon: FolderKanban, color: 'var(--brand-primary)', tint: 'rgba(47, 93, 80, 0.12)', text: 'Program "Community Digital Literacy" was created', time: '2 hours ago' },
         { icon: CheckCircle2, color: 'var(--brand-success)', tint: 'rgba(63, 125, 74, 0.12)', text: 'Expense request #1042 was approved', time: '4 hours ago' },
-        { icon: Users, color: 'var(--brand-success)', tint: 'rgba(63, 125, 74, 0.12)', text: 'T. Moyo was assigned to Harare District', time: '6 hours ago' },
+        { icon: Users, color: 'var(--brand-success)', tint: 'rgba(63, 125, 74, 0.12)', text: 'T. Moyo was assigned to Bulawayo Peri-Urban District', time: '6 hours ago' },
         { icon: FileText, color: 'var(--text-muted)', tint: 'var(--bg-elevated)', text: 'Quarterly report submitted', time: 'Yesterday' },
         { icon: AlertCircle, color: 'var(--brand-warning)', tint: 'rgba(183, 121, 31, 0.12)', text: 'Office supplies procurement is pending approval', time: 'Yesterday' },
     ];

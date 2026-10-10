@@ -508,7 +508,7 @@ export default function ProgramsPage() {
                                             <input
                                                 className="form-input"
                                                 value={formData.name}
-                                                placeholder={formType === 'program' ? 'e.g. Youth Resilience and Rights' : 'e.g. Harare South Community Outreach'}
+                                                placeholder={formType === 'program' ? 'e.g. Youth Resilience and Rights' : 'e.g. Bulawayo Peri-Urban Community Outreach'}
                                                 onChange={(event) => setFormData({ ...formData, name: event.target.value })}
                                                 required
                                             />
