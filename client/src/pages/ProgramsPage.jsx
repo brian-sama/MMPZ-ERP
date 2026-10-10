@@ -16,6 +16,7 @@ import { fetchSharedPlatformIndicators } from '../platformApi';
 import PageHeader from '../components/PageHeader';
 import { useAuth } from '../context/AuthContext';
 import { useRealtimeSync, publishSyncEvent } from '../utils/realtimeSync';
+import { MMPZ_CORE_PILLARS } from '../constants/mmpzActivities';
 
 const PROGRAM_STATUS_OPTIONS = ['active', 'paused', 'completed', 'archived'];
 const PROJECT_STATUS_OPTIONS = ['planning', 'active', 'paused', 'completed', 'archived'];
@@ -576,6 +577,36 @@ export default function ProgramsPage() {
 
                                 {formType === 'activity' && (
                                     <>
+                                        <div className="form-group">
+                                            <label className="form-label">Core Activity / Intervention Template</label>
+                                            <select
+                                                className="form-input"
+                                                defaultValue=""
+                                                onChange={(event) => {
+                                                    const val = event.target.value;
+                                                    if (!val) return;
+                                                    let cat = 'other';
+                                                    if (val.toLowerCase().includes('training') || val.toLowerCase().includes('skills') || val.toLowerCase().includes('course')) cat = 'training';
+                                                    else if (val.toLowerCase().includes('meeting') || val.toLowerCase().includes('dialogue')) cat = 'meeting';
+                                                    else if (val.toLowerCase().includes('visit') || val.toLowerCase().includes('outreach') || val.toLowerCase().includes('tracing')) cat = 'field_visit';
+                                                    setFormData((prev) => ({
+                                                        ...prev,
+                                                        description: prev.description?.trim() ? prev.description : val,
+                                                        activity_output: prev.activity_output?.trim() ? prev.activity_output : `Conducted ${val}`,
+                                                        category: cat,
+                                                    }));
+                                                }}
+                                            >
+                                                <option value="">Select core MMPZ activity intervention template…</option>
+                                                {MMPZ_CORE_PILLARS.map((p) => (
+                                                    <optgroup key={p.title} label={p.title}>
+                                                        {p.activities.map((act) => (
+                                                            <option key={act} value={act}>{act}</option>
+                                                        ))}
+                                                    </optgroup>
+                                                ))}
+                                            </select>
+                                        </div>
                                         <div className="form-group">
                                             <label className="form-label">Activity Description</label>
                                             <textarea
