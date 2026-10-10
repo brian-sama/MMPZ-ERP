@@ -322,6 +322,18 @@ try {
 app.use(
   "/uploads",
   express.static(path.join(__dirname, "uploads")),
+  (req, res, next) => {
+    // If not found locally in ERP uploads, fallback/redirect to M&E Monitoring
+    const meBaseUrl = (
+      process.env.ME_PUBLIC_URL ||
+      process.env.MMPZ_ME_PUBLIC_URL ||
+      "https://monitoring.mmpzmne.co.zw"
+    ).replace(/\/+$/, "");
+    if (meBaseUrl && req.path) {
+      return res.redirect(`${meBaseUrl}/uploads${req.path}`);
+    }
+    res.status(404).send("File not found");
+  },
 );
 
 // Health

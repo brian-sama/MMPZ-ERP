@@ -43,21 +43,30 @@ export const handler = async (event) => {
       return errorResponse("Missing required fields (avatarUrl and email/erpUserId)", 400);
     }
 
-    if (erpUserId) {
+    const meBaseUrl = (
+      process.env.ME_PUBLIC_URL ||
+      process.env.MMPZ_ME_PUBLIC_URL ||
+      "https://monitoring.mmpzmne.co.zw"
+    ).replace(/\/+$/, "");
+    const resolvedAvatarUrl = avatarUrl.startsWith("http")
+      ? avatarUrl
+      : `${meBaseUrl}${avatarUrl.startsWith("/") ? "" : "/"}${avatarUrl}`;
+
+    if (erpUserId && !isNaN(Number(erpUserId))) {
       await sql`
         UPDATE users
-        SET profile_picture_url = ${avatarUrl}, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ${Number(erpUserId)}
+        SET profile_picture_url = ${resolvedAvatarUrl}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ${Number(erpUserId)} OR (email IS NOT NULL AND LOWER(email) = LOWER(${email ? email.trim() : ''}))
       `;
     } else if (email) {
       await sql`
         UPDATE users
-        SET profile_picture_url = ${avatarUrl}, updated_at = CURRENT_TIMESTAMP
+        SET profile_picture_url = ${resolvedAvatarUrl}, updated_at = CURRENT_TIMESTAMP
         WHERE LOWER(email) = LOWER(${email.trim()})
       `;
     }
 
-    return successResponse({ success: true, avatarUrl });
+    return successResponse({ success: true, avatarUrl: resolvedAvatarUrl });
   } catch (err) {
     console.error("integration-avatar error:", err);
     return errorResponse("Internal server error", 500, err.message);
