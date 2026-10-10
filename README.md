@@ -79,6 +79,22 @@ MMPZ-ERP/
 
 ## ⚙️ Data Architecture & Backend Services
 
+### Training data reset
+
+To clear operational records, notifications, activities, audit history, and all
+non-admin user accounts while retaining the administrator account, run from
+`MMPZ-ERP`:
+
+```sh
+npm run db:wipe:training
+```
+
+The script uses `DATABASE_URL`, renames `brianmagagula5@gmail.com` to
+`briandmagagula@gmail.com`, and retains roles, permissions, system settings,
+Kobo configuration, and migration history. It aborts without changing data if
+it cannot identify exactly one administrator account. This operation is
+irreversible; verify `DATABASE_URL` before running it.
+
 ### 🗄️ Database Schemas & Migrations
 - `database\migrations\20260405_initial_fixes.sql`: Database structural definitions, table schemas, and relational constraints.
 - `database\migrations\20260429_procurement_bid_analysis.sql`: Database structural definitions, table schemas, and relational constraints.
