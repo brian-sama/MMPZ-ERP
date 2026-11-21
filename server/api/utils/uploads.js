@@ -10,9 +10,42 @@ const MIME_EXTENSION_MAP = {
     'application/vnd.ms-excel': '.xls',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
     'text/plain': '.txt',
+    'text/csv': '.csv',
     'image/jpeg': '.jpg',
     'image/png': '.png',
     'image/webp': '.webp',
+};
+
+// Only these extensions may ever be written to disk (blocks .html/.svg/.js/.exe etc.).
+const ALLOWED_EXTENSIONS = new Set([
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.txt', '.jpg', '.jpeg', '.png', '.webp',
+]);
+
+// Light content sniffing for binary formats so a mislabelled payload is rejected.
+const hasValidSignature = (extension, buffer) => {
+    const startsWith = (...bytes) => bytes.every((byte, index) => buffer[index] === byte);
+    switch (extension) {
+        case '.pdf': return startsWith(0x25, 0x50, 0x44, 0x46); // %PDF
+        case '.png': return startsWith(0x89, 0x50, 0x4e, 0x47);
+        case '.jpg':
+        case '.jpeg': return startsWith(0xff, 0xd8, 0xff);
+        case '.webp': return buffer.length > 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+        case '.docx':
+        case '.xlsx': return startsWith(0x50, 0x4b); // zip container
+        default: return true; // .doc/.xls (legacy, often mislabelled exports), .csv, .txt
+    }
+};
+
+// Resolve a stored "/uploads/..." path to an absolute path, refusing anything outside UPLOADS_ROOT.
+const toSafeAbsolutePath = (publicPath) => {
+    const relativePath = String(publicPath || '').replace(/^\/?uploads[\\/]/, '');
+    if (!relativePath || relativePath.includes('\0')) return null;
+    const absolutePath = path.resolve(UPLOADS_ROOT, relativePath);
+    const relative = path.relative(UPLOADS_ROOT, absolutePath);
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+        return null;
+    }
+    return absolutePath;
 };
 
 const normalizeFileName = (value) =>
@@ -74,8 +107,14 @@ export const writeBase64Upload = ({
     }
 
     const sanitizedName = normalizeFileName(fileName);
-    const requestedExtension = path.extname(sanitizedName);
+    const requestedExtension = path.extname(sanitizedName).toLowerCase();
     const extension = requestedExtension || MIME_EXTENSION_MAP[effectiveMimeType] || '';
+    if (!ALLOWED_EXTENSIONS.has(extension)) {
+        throw new Error('Unsupported file type');
+    }
+    if (!hasValidSignature(extension, buffer)) {
+        throw new Error('File content does not match its type');
+    }
     const safePrefix = normalizeFileName(prefix || 'upload');
     const timestamp = Date.now();
     const randomValue = Math.round(Math.random() * 1e9);
@@ -97,18 +136,16 @@ export const writeBase64Upload = ({
 
 export const removeUploadedFile = (publicPath) => {
     if (!publicPath) return;
-    const relativePath = String(publicPath).replace(/^\/?uploads[\\/]/, '');
-    const absolutePath = path.join(UPLOADS_ROOT, relativePath);
-    if (fs.existsSync(absolutePath)) {
+    const absolutePath = toSafeAbsolutePath(publicPath);
+    if (absolutePath && fs.existsSync(absolutePath)) {
         fs.unlinkSync(absolutePath);
     }
 };
 
 export const resolveUploadedFilePath = (publicPath) => {
     if (!publicPath) return null;
-    const relativePath = String(publicPath).replace(/^\/?uploads[\\/]/, '');
-    const absolutePath = path.join(UPLOADS_ROOT, relativePath);
-    return fs.existsSync(absolutePath) ? absolutePath : null;
+    const absolutePath = toSafeAbsolutePath(publicPath);
+    return absolutePath && fs.existsSync(absolutePath) ? absolutePath : null;
 };
 
 export const readUploadedFileAsDataUrl = (publicPath, mimeType = 'application/octet-stream') => {
@@ -124,6 +161,7 @@ export const DOCUMENT_MIME_TYPES = [
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
     'text/plain',
 ];
 

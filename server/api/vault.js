@@ -30,14 +30,15 @@ const VAULT_ROLES = new Set([
     'SYSTEM_ADMIN',
 ]);
 
+export const canAccessFinanceVault = (actor) =>
+    actor?.system_role === 'SUPER_ADMIN' || VAULT_ROLES.has(actor?.role_code);
+
 const assertVaultAccess = (actor) => {
-    if (actor.system_role === 'SUPER_ADMIN') return;
-    if (!VAULT_ROLES.has(actor.role_code)) {
-        throw new HttpError(
-            'Access to the Finance Vault is restricted to finance and administration roles.',
-            403,
-        );
-    }
+    if (canAccessFinanceVault(actor)) return;
+    throw new HttpError(
+        'Access to the Finance Vault is restricted to finance and administration roles.',
+        403,
+    );
 };
 
 export const handler = async (event) => {

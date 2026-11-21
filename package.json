@@ -5,6 +5,7 @@
     "type": "module",
     "scripts": {
         "start": "node server.js",
+        "test:uploads": "node --test tests/",
         "api": "node server.js",
         "client": "cd client && npm run dev",
         "build": "cd client && npm run build",

@@ -48,6 +48,7 @@ export const handler = async (event) => {
                         d.mime_type
                     FROM document_library_files d
                     WHERE d.id = ${documentId}
+                      AND d.category IS DISTINCT FROM 'Finance Vault'
                     LIMIT 1
                 `;
                 if (rows.length === 0) return errorResponse('Document not found', 404);
@@ -74,6 +75,7 @@ export const handler = async (event) => {
                     FROM document_library_files d
                     LEFT JOIN users u ON d.uploaded_by_user_id = u.id
                     WHERE d.id = ${id}
+                      AND d.category IS DISTINCT FROM 'Finance Vault'
                     LIMIT 1
                 `;
                 if (rows.length === 0) return errorResponse('Document not found', 404);

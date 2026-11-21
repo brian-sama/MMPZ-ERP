@@ -11,6 +11,9 @@ const __dirname = path.dirname(__filename);
 const MAX_AVATAR_BYTES = 10 * 1024 * 1024;
 
 // Configure multer storage
+const AVATAR_MIME_EXT = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
+const AVATAR_EXTS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         const dir = path.join(process.cwd(), 'uploads', 'avatars');
@@ -21,7 +24,8 @@ const storage = multer.diskStorage({
     },
     filename: function (req, file, cb) {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
+        const originalExt = path.extname(file.originalname).toLowerCase();
+        const ext = AVATAR_MIME_EXT[file.mimetype] || (AVATAR_EXTS.has(originalExt) ? originalExt : '.jpg');
         cb(null, 'avatar-' + uniqueSuffix + ext);
     }
 });
@@ -30,8 +34,9 @@ const upload = multer({
     storage: storage,
     limits: { fileSize: MAX_AVATAR_BYTES },
     fileFilter: (req, file, cb) => {
-        const allowedTypes = /jpeg|jpg|png|webp/;
-        const isAllowed = allowedTypes.test(file.mimetype) || allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const isAllowed =
+            Boolean(AVATAR_MIME_EXT[file.mimetype]) ||
+            AVATAR_EXTS.has(path.extname(file.originalname).toLowerCase());
         if (isAllowed) return cb(null, true);
         cb(new Error('Only images (JPEG/PNG/WEBP) are allowed'));
     }

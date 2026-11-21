@@ -6,6 +6,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
 import { functionToExpress } from "./server/function-adapter.js";
+import { createErpObservabilityMiddleware } from "./server/api/utils/request-logger.js";
 
 // API handlers
 import { handler as healthHandler } from "./server/api/health.js";
@@ -163,6 +164,15 @@ function handoffErrorHtml(message) {
 }
 
 import { sql } from "./server/api/utils/db.js";
+import {
+  createUploadsRouter,
+  createIntegrationFileHandler,
+} from "./server/api/utils/uploads-serve.js";
+import {
+  authenticateUpload,
+  authorizeUploadAccess,
+  verifyIntegrationToken,
+} from "./server/api/utils/upload-access.js";
 import { buildIdentity } from "./server/api/utils/identity.js";
 import { getUserContext, resolveSystemRole, toLegacyRole } from "./server/api/utils/rbac.js";
 import { startCalendarReminderScheduler } from "./server/jobs/calendar-reminders.js";
@@ -281,6 +291,7 @@ app.use(
   "/api",
   createRateLimiter({ label: "erp-api", max: 900, windowMs: 15 * 60 * 1000 }),
 );
+app.use(createErpObservabilityMiddleware("mmpz-erp-api"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
@@ -319,21 +330,27 @@ try {
     dirError.message,
   );
 }
+// Uploads: only /uploads/avatars/<image> is public. Everything else requires a valid
+// bearer session plus per-file authorization (see utils/upload-access.js). A miss is a
+// plain 404 - there is no redirect to the Monitoring app any more (audit X-2).
+const uploadsRoot = path.join(__dirname, "uploads");
 app.use(
   "/uploads",
-  express.static(path.join(__dirname, "uploads")),
-  (req, res, next) => {
-    // If not found locally in ERP uploads, fallback/redirect to M&E Monitoring
-    const meBaseUrl = (
-      process.env.ME_PUBLIC_URL ||
-      process.env.MMPZ_ME_PUBLIC_URL ||
-      "https://monitoring.mmpzmne.co.zw"
-    ).replace(/\/+$/, "");
-    if (meBaseUrl && req.path) {
-      return res.redirect(`${meBaseUrl}/uploads${req.path}`);
-    }
-    res.status(404).send("File not found");
-  },
+  createUploadsRouter({
+    uploadsRoot,
+    authenticate: authenticateUpload,
+    authorize: authorizeUploadAccess,
+  }),
+);
+// Server-to-server file fetch for Monitoring (replaces the former cross-app redirect).
+// Integration-token protected and limited to non-vault upload folders.
+app.get(
+  "/api/integration/files",
+  createIntegrationFileHandler({
+    uploadsRoot,
+    allowedDirs: ["volunteer-submissions", "documents"],
+    verifyToken: verifyIntegrationToken,
+  }),
 );
 
 // Health
